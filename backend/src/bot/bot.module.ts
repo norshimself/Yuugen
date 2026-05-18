@@ -24,6 +24,11 @@ import { DailyCommand } from './commands/economy/daily.command';
 import { LeaderboardCommand } from './commands/economy/leaderboard.command';
 import { BalanceCommand } from './commands/economy/balance.command';
 import { GambleCommand } from './commands/economy/gamble.command';
+import { WorkCommand } from './commands/economy/work.command';
+import { CrimeCommand } from './commands/economy/crime.command';
+import { RobCommand } from './commands/economy/rob.command';
+import { ShopCommand } from './commands/economy/shop.command';
+import { BuyCommand } from './commands/economy/buy.command';
 import { StatusService } from '../shared/status.service';
 
 @Module({
@@ -52,6 +57,11 @@ import { StatusService } from '../shared/status.service';
     LeaderboardCommand,
     BalanceCommand,
     GambleCommand,
+    WorkCommand,
+    CrimeCommand,
+    RobCommand,
+    ShopCommand,
+    BuyCommand,
     StatusService,
   ],
 })

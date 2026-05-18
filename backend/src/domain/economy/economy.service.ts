@@ -92,4 +92,145 @@ export class EconomyService {
     
     return { success: true, won, newBalance: profile.coins, amount };
   }
+
+  async work(userId: string): Promise<{ success: boolean; amount: number; nextClaim?: Date; job?: string }> {
+    const profile = await this.getProfile(userId);
+    const now = new Date();
+    
+    if (profile.lastWork) {
+      const oneHour = 60 * 60 * 1000;
+      const timePassed = now.getTime() - profile.lastWork.getTime();
+      
+      if (timePassed < oneHour) {
+        const nextClaim = new Date(profile.lastWork.getTime() + oneHour);
+        return { success: false, amount: 0, nextClaim };
+      }
+    }
+    
+    const amount = Math.floor(Math.random() * (100 - 50 + 1)) + 50; // 50-100
+    const jobs = [
+      'Developer', 'Designer', 'Chef', 'Streamer', 'Gamer',
+      'Doctor', 'Lawyer', 'Astronaut', 'Musician', 'Artist'
+    ];
+    const job = jobs[Math.floor(Math.random() * jobs.length)];
+    
+    profile.coins += amount;
+    profile.lastWork = now;
+    await this.userProfileRepository.save(profile);
+    
+    return { success: true, amount, job };
+  }
+
+  async crime(userId: string): Promise<{ success: boolean; won: boolean; amount: number; nextClaim?: Date; crime?: string }> {
+    const profile = await this.getProfile(userId);
+    const now = new Date();
+    
+    if (profile.lastCrime) {
+      const twoHours = 2 * 60 * 60 * 1000;
+      const timePassed = now.getTime() - profile.lastCrime.getTime();
+      
+      if (timePassed < twoHours) {
+        const nextClaim = new Date(profile.lastCrime.getTime() + twoHours);
+        return { success: false, won: false, amount: 0, nextClaim };
+      }
+    }
+    
+    const won = Math.random() < 0.5;
+    const amount = won 
+      ? Math.floor(Math.random() * (500 - 200 + 1)) + 200 // 200-500
+      : Math.floor(Math.random() * (200 - 100 + 1)) + 100; // 100-200 fine
+      
+    const crimes = [
+      'robbed a bank', 'stole a candy', 'hacked the Pentagon',
+      'jaywalked', 'stole a car', 'pirated a movie'
+    ];
+    const crime = crimes[Math.floor(Math.random() * crimes.length)];
+    
+    if (won) {
+      profile.coins += amount;
+    } else {
+      profile.coins = Math.max(0, profile.coins - amount); // Don't go below 0
+    }
+    
+    profile.lastCrime = now;
+    await this.userProfileRepository.save(profile);
+    
+    return { success: true, won, amount, crime };
+  }
+
+  async rob(userId: string, targetId: string): Promise<{ success: boolean; won: boolean; amount: number; nextClaim?: Date; isTooPoor?: boolean }> {
+    const profile = await this.getProfile(userId);
+    const targetProfile = await this.getProfile(targetId);
+    const now = new Date();
+    
+    if (profile.lastRob) {
+      const fourHours = 4 * 60 * 60 * 1000;
+      const timePassed = now.getTime() - profile.lastRob.getTime();
+      
+      if (timePassed < fourHours) {
+        const nextClaim = new Date(profile.lastRob.getTime() + fourHours);
+        return { success: false, won: false, amount: 0, nextClaim };
+      }
+    }
+    
+    if (targetProfile.coins < 50) {
+      return { success: false, won: false, amount: 0, isTooPoor: true };
+    }
+    
+    const won = Math.random() < 0.4; // 40% success rate
+    
+    // Rob up to 30% of target's coins
+    const maxRob = Math.floor(targetProfile.coins * 0.3);
+    const amount = Math.floor(Math.random() * (maxRob - 10 + 1)) + 10;
+    
+    if (won) {
+      profile.coins += amount;
+      targetProfile.coins -= amount;
+    } else {
+      // Pay fine to victim
+      const fine = Math.floor(amount * 0.5); // Fine is 50% of intended rob amount
+      profile.coins = Math.max(0, profile.coins - fine);
+      targetProfile.coins += fine;
+    }
+    
+    profile.lastRob = now;
+    await this.userProfileRepository.save(profile);
+    await this.userProfileRepository.save(targetProfile);
+    
+    return { success: true, won, amount };
+  }
+
+  getShopItems() {
+    return [
+      { id: 'vip_role', name: 'VIP Role', price: 1000, description: 'Get the shiny VIP role in the server!' },
+      { id: 'custom_color', name: 'Custom Color', price: 500, description: 'Change your name color!' },
+      { id: 'profile_badge', name: 'Profile Badge', price: 250, description: 'A cool badge on your profile!' },
+    ];
+  }
+
+  async buyItem(userId: string, itemId: string): Promise<{ success: boolean; message: string; newBalance?: number }> {
+    const profile = await this.getProfile(userId);
+    const item = this.getShopItems().find(i => i.id === itemId);
+    
+    if (!item) {
+      return { success: false, message: 'Item not found in shop!' };
+    }
+    
+    if (profile.coins < item.price) {
+      return { success: false, message: `You don't have enough coins! You need **${item.price}** coins.` };
+    }
+    
+    // Check if already owned
+    const inventory = profile.inventory || [];
+    if (inventory.includes(itemId)) {
+      return { success: false, message: 'You already own this item!' };
+    }
+    
+    profile.coins -= item.price;
+    profile.inventory = [...inventory, itemId];
+    
+    await this.userProfileRepository.save(profile);
+    
+    return { success: true, message: `Successfully purchased **${item.name}**!`, newBalance: profile.coins };
+  }
 }

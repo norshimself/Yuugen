@@ -19,4 +19,16 @@ export class UserProfile {
 
   @Column({ type: 'timestamp', nullable: true })
   lastDaily: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastWork: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastCrime: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastRob: Date;
+
+  @Column('simple-array', { default: '' })
+  inventory: string[];
 }
