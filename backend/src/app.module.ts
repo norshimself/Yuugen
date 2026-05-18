@@ -11,6 +11,7 @@ import { PlayerModule } from './api/player/player.module';
 import { BotModule } from './bot/bot.module';
 import { StatusService } from './shared/status.service';
 import { EconomyModule } from './domain/economy/economy.module';
+import { EconomyApiModule } from './api/economy/economy.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { EconomyModule } from './domain/economy/economy.module';
     PlayerModule,
     BotModule,
     EconomyModule,
+    EconomyApiModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
