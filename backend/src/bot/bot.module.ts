@@ -31,6 +31,7 @@ import { ShopCommand } from './commands/economy/shop.command';
 import { BuyCommand } from './commands/economy/buy.command';
 import { TriviaCommand } from './commands/economy/trivia.command';
 import { RpsCommand } from './commands/economy/rps.command';
+import { WelcomeListener } from './listeners/welcome.listener';
 import { StatusService } from '../shared/status.service';
 
 @Module({
@@ -66,6 +67,7 @@ import { StatusService } from '../shared/status.service';
     BuyCommand,
     TriviaCommand,
     RpsCommand,
+    WelcomeListener,
     StatusService,
   ],
 })
