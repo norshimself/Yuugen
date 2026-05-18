@@ -8,39 +8,28 @@ import { EconomyService } from '../../../domain/economy/economy.service';
 export class TriviaCommand {
   constructor(private readonly economyService: EconomyService) {}
 
-  // Store active games: userId -> { correctIndex: number, reward: number }
-  private activeGames = new Map<string, { correctIndex: number; reward: number }>();
-
-  private questions = [
-    { q: 'What is the capital of France?', options: ['Paris', 'London', 'Berlin', 'Madrid'], correct: 0 },
-    { q: 'What is 2 + 2?', options: ['3', '4', '5', '6'], correct: 1 },
-    { q: 'What is the largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], correct: 3 },
-    { q: 'Who wrote "Romeo and Juliet"?', options: ['Charles Dickens', 'William Shakespeare', 'Mark Twain', 'Jane Austen'], correct: 1 },
-    { q: 'What is the chemical symbol for gold?', options: ['Gd', 'Go', 'Ag', 'Au'], correct: 3 },
-  ];
-
   @SlashCommand({
     name: 'trivia',
     description: 'Answer a trivia question to win coins!',
   })
   public async onTrivia(@Context() [interaction]: SlashCommandContext) {
-    if (this.activeGames.has(interaction.user.id)) {
+    const activeSession = await this.economyService.getTriviaSession(interaction.user.id);
+    if (activeSession) {
       return interaction.reply({
         content: 'You already have an active trivia game! Answer it first.',
         ephemeral: true,
       });
     }
 
-    const randomIdx = Math.floor(Math.random() * this.questions.length);
-    const question = this.questions[randomIdx];
+    const question = await this.economyService.getRandomTriviaQuestion();
     const reward = 50;
 
-    this.activeGames.set(interaction.user.id, { correctIndex: question.correct, reward });
+    await this.economyService.startTriviaSession(interaction.user.id, question.correctIndex, reward);
 
     const embed = new EmbedBuilder()
       .setColor('#3498db')
       .setTitle('🧠 Trivia Time!')
-      .setDescription(question.q)
+      .setDescription(question.question)
       .setFooter({ text: `Reward: ${reward} coins` })
       .setTimestamp();
 
@@ -79,7 +68,7 @@ export class TriviaCommand {
   }
 
   private async handleAnswer(interaction: any, answerIndex: number) {
-    const game = this.activeGames.get(interaction.user.id);
+    const game = await this.economyService.getTriviaSession(interaction.user.id);
 
     if (!game) {
       return interaction.reply({
@@ -88,7 +77,7 @@ export class TriviaCommand {
       });
     }
 
-    this.activeGames.delete(interaction.user.id);
+    await this.economyService.deleteTriviaSession(interaction.user.id);
 
     const isCorrect = answerIndex === game.correctIndex;
 

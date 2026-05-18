@@ -13,7 +13,7 @@ export class ShopCommand {
     description: 'View items available for purchase in the shop!',
   })
   public async onShop(@Context() [interaction]: SlashCommandContext) {
-    const items = this.economyService.getShopItems();
+    const items = await this.economyService.getShopItems();
 
     const embed = new EmbedBuilder()
       .setColor('#9b59b6')

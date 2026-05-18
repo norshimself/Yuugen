@@ -1,21 +1,13 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { EconomyService } from '../../domain/economy/economy.service';
 import { RpsDto, TriviaAnswerDto } from './games.dto';
+import { UserIdDto } from '../economy/economy.dto';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('games')
+@UseGuards(ApiKeyGuard)
 export class GamesController {
   constructor(private readonly economyService: EconomyService) {}
-
-  // Store active trivia games for API users
-  private activeTriviaGames = new Map<string, { correctIndex: number; reward: number }>();
-
-  private questions = [
-    { q: 'What is the capital of France?', options: ['Paris', 'London', 'Berlin', 'Madrid'], correct: 0 },
-    { q: 'What is 2 + 2?', options: ['3', '4', '5', '6'], correct: 1 },
-    { q: 'What is the largest ocean?', options: ['Atlantic', 'Indian', 'Arctic', 'Pacific'], correct: 3 },
-    { q: 'Who wrote "Romeo and Juliet"?', options: ['Charles Dickens', 'William Shakespeare', 'Mark Twain', 'Jane Austen'], correct: 1 },
-    { q: 'What is the chemical symbol for gold?', options: ['Gd', 'Go', 'Ag', 'Au'], correct: 3 },
-  ];
 
   @Post('rps')
   async playRps(@Body() dto: RpsDto) {
@@ -59,23 +51,24 @@ export class GamesController {
   }
 
   @Get('trivia/question')
-  getTriviaQuestion(@Query('userId') userId: string) {
-    if (this.activeTriviaGames.has(userId)) {
+  async getTriviaQuestion(@Query() query: UserIdDto) {
+    const userId = query.userId;
+    const activeSession = await this.economyService.getTriviaSession(userId);
+    if (activeSession) {
       return {
         success: false,
         message: 'You already have an active trivia game!',
       };
     }
 
-    const randomIdx = Math.floor(Math.random() * this.questions.length);
-    const question = this.questions[randomIdx];
+    const question = await this.economyService.getRandomTriviaQuestion();
     const reward = 50;
 
-    this.activeTriviaGames.set(userId, { correctIndex: question.correct, reward });
+    await this.economyService.startTriviaSession(userId, question.correctIndex, reward);
 
     return {
       success: true,
-      question: question.q,
+      question: question.question,
       options: question.options,
       reward,
     };
@@ -83,7 +76,7 @@ export class GamesController {
 
   @Post('trivia/answer')
   async answerTrivia(@Body() dto: TriviaAnswerDto) {
-    const game = this.activeTriviaGames.get(dto.userId);
+    const game = await this.economyService.getTriviaSession(dto.userId);
 
     if (!game) {
       return {
@@ -92,7 +85,7 @@ export class GamesController {
       };
     }
 
-    this.activeTriviaGames.delete(dto.userId);
+    await this.economyService.deleteTriviaSession(dto.userId);
 
     const isCorrect = dto.answerIndex === game.correctIndex;
     let newBalance = undefined;

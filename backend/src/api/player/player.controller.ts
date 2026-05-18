@@ -1,8 +1,10 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { PlayerService } from '../../domain/player/player.service';
 import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto } from './player.dto';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('player')
+@UseGuards(ApiKeyGuard)
 export class PlayerController {
   constructor(private readonly playerService: PlayerService) {}
 
@@ -37,8 +39,8 @@ export class PlayerController {
   }
 
   @Get('queue')
-  async getQueue(@Query('guildId') guildId: string) {
-    return this.playerService.getQueue(guildId);
+  async getQueue(@Query() query: GuildOnlyDto) {
+    return this.playerService.getQueue(query.guildId);
   }
 
   @Post('shuffle')
@@ -72,7 +74,7 @@ export class PlayerController {
   }
 
   @Get('nowplaying')
-  async getNowPlaying(@Query('guildId') guildId: string) {
-    return this.playerService.getNowPlaying(guildId);
+  async getNowPlaying(@Query() query: GuildOnlyDto) {
+    return this.playerService.getNowPlaying(query.guildId);
   }
 }

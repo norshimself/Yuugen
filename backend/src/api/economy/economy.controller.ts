@@ -1,14 +1,16 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { EconomyService } from '../../domain/economy/economy.service';
 import { UserIdDto, GambleDto, RobDto, BuyDto } from './economy.dto';
+import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('economy')
+@UseGuards(ApiKeyGuard)
 export class EconomyController {
   constructor(private readonly economyService: EconomyService) {}
 
   @Get('profile')
-  async getProfile(@Query('userId') userId: string) {
-    return this.economyService.getProfile(userId);
+  async getProfile(@Query() query: UserIdDto) {
+    return this.economyService.getProfile(query.userId);
   }
 
   @Post('daily')
@@ -42,7 +44,7 @@ export class EconomyController {
   }
 
   @Get('shop')
-  getShop() {
+  async getShop() {
     return this.economyService.getShopItems();
   }
 
