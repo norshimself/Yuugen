@@ -24,6 +24,7 @@ import { DailyCommand } from './commands/economy/daily.command';
 import { LeaderboardCommand } from './commands/economy/leaderboard.command';
 import { BalanceCommand } from './commands/economy/balance.command';
 import { GambleCommand } from './commands/economy/gamble.command';
+import { StatusService } from '../shared/status.service';
 
 @Module({
   imports: [EconomyModule],
@@ -51,6 +52,7 @@ import { GambleCommand } from './commands/economy/gamble.command';
     LeaderboardCommand,
     BalanceCommand,
     GambleCommand,
+    StatusService,
   ],
 })
 export class BotModule {}
