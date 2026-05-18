@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 @Injectable()
 export class LyricsCommand {
@@ -12,17 +13,11 @@ export class LyricsCommand {
     name: 'lyrics',
     description: 'Get lyrics for the current song',
   })
+  @UseGuards(PlayerGuard)
   public async onLyrics(@Context() [interaction]: SlashCommandContext) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player || !player.queue.current) {
+    if (!player.queue.current) {
       return interaction.reply({
         content: 'No music is playing!',
         ephemeral: true,

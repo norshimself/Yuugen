@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand, Button } from 'necord';
 import type { SlashCommandContext, ButtonContext } from 'necord';
 import { LavalinkManager, Player } from 'lavalink-client';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 @Injectable()
+@UseGuards(PlayerGuard)
 export class NowPlayingCommand {
   constructor(private readonly lavalinkManager: LavalinkManager) {}
 
@@ -13,16 +15,9 @@ export class NowPlayingCommand {
     description: 'Show details about the current playing song',
   })
   public async onNowPlaying(@Context() [interaction]: SlashCommandContext) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player || !player.queue.current) {
+    if (!player.queue.current) {
       return interaction.reply({
         content: 'No music is playing!',
         ephemeral: true,
@@ -37,10 +32,7 @@ export class NowPlayingCommand {
 
   @Button('np-pause')
   public async onPause(@Context() [interaction]: ButtonContext) {
-    if (!interaction.guildId) return;
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-    if (!player) return interaction.reply({ content: 'No player found!', ephemeral: true });
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     if (player.paused) {
       await player.resume();
@@ -54,14 +46,10 @@ export class NowPlayingCommand {
 
   @Button('np-skip')
   public async onSkip(@Context() [interaction]: ButtonContext) {
-    if (!interaction.guildId) return;
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-    if (!player) return interaction.reply({ content: 'No player found!', ephemeral: true });
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     await player.skip();
     
-    // Wait a bit for the player to update the current track
     setTimeout(async () => {
       if (!player.queue.current) {
         return interaction.update({ content: 'Queue ended.', embeds: [], components: [] });
@@ -73,10 +61,7 @@ export class NowPlayingCommand {
 
   @Button('np-stop')
   public async onStop(@Context() [interaction]: ButtonContext) {
-    if (!interaction.guildId) return;
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-    if (!player) return interaction.reply({ content: 'No player found!', ephemeral: true });
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     await player.destroy();
     return interaction.update({ content: '🛑 Playback stopped and left the channel.', embeds: [], components: [] });
@@ -96,7 +81,7 @@ export class NowPlayingCommand {
         { name: 'Progress', value: track.info.isStream ? '🔴 LIVE' : `\`${this.formatDuration(position)}\` / \`${this.formatDuration(duration)}\``, inline: true },
         { name: 'Progress Bar', value: track.info.isStream ? '▬'.repeat(14) + '🔴' : this.createProgressBar(position, duration), inline: false }
       )
-      .setColor('#2B2D31'); // Fancy borderless color
+      .setColor('#2B2D31');
   }
 
   private createNowPlayingButtons(): ActionRowBuilder<ButtonBuilder> {
@@ -141,5 +126,3 @@ export class NowPlayingCommand {
     return bar;
   }
 }
-
-

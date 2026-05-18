@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand, Options, StringOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 class FilterOptions {
   @StringOption({
@@ -31,25 +32,12 @@ export class FilterCommand {
     name: 'filter',
     description: 'Apply premium audio filters to the music',
   })
+  @UseGuards(PlayerGuard)
   public async onFilter(
     @Context() [interaction]: SlashCommandContext,
     @Options() { type }: FilterOptions,
   ) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player) {
-      return interaction.reply({
-        content: 'No music is playing!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     await interaction.deferReply();
 
@@ -84,7 +72,7 @@ export class FilterCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Audio Filter Applied')
       .setDescription(type === 'clear' ? 'All filters have been cleared.' : `Toggled the **${type}** filter!`)
-      .setColor('#2B2D31') // Sleek dark theme
+      .setColor('#2B2D31')
       .setFooter({ text: 'Note: Filters may take a few seconds to apply.' });
 
     return interaction.editReply({ embeds: [embed] });

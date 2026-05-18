@@ -1,24 +1,32 @@
 import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
 import { PingCommand } from './commands/ping.command';
-import { PlayCommand } from './commands/player_commands/play.command';
-import { QueueCommand } from './commands/player_commands/queue.command';
-import { SkipCommand } from './commands/player_commands/skip.command';
-import { StopCommand } from './commands/player_commands/stop.command';
-import { PauseCommand } from './commands/player_commands/pause.command';
-import { VolumeCommand } from './commands/player_commands/volume.command';
-import { ResumeCommand } from './commands/player_commands/resume.command';
-import { ShuffleCommand } from './commands/player_commands/shuffle.command';
-import { ClearCommand } from './commands/player_commands/clear.command';
-import { RemoveCommand } from './commands/player_commands/remove.command';
-import { SeekCommand } from './commands/player_commands/seek.command';
-import { LoopCommand } from './commands/player_commands/loop.command';
-import { NowPlayingCommand } from './commands/player_commands/nowplaying.command';
-import { LyricsCommand } from './commands/player_commands/lyrics.command';
-import { RadioCommand } from './commands/player_commands/radio.command';
-import { FilterCommand } from './commands/player_commands/filter.command';
+import { PlayCommand } from './commands/player/play.command';
+import { QueueCommand } from './commands/player/queue.command';
+import { SkipCommand } from './commands/player/skip.command';
+import { StopCommand } from './commands/player/stop.command';
+import { PauseCommand } from './commands/player/pause.command';
+import { VolumeCommand } from './commands/player/volume.command';
+import { ResumeCommand } from './commands/player/resume.command';
+import { ShuffleCommand } from './commands/player/shuffle.command';
+import { ClearCommand } from './commands/player/clear.command';
+import { RemoveCommand } from './commands/player/remove.command';
+import { SeekCommand } from './commands/player/seek.command';
+import { LoopCommand } from './commands/player/loop.command';
+import { NowPlayingCommand } from './commands/player/nowplaying.command';
+import { LyricsCommand } from './commands/player/lyrics.command';
+import { RadioCommand } from './commands/player/radio.command';
+import { FilterCommand } from './commands/player/filter.command';
+
+import { EconomyModule } from '../domain/economy/economy.module';
+import { RankCommand } from './commands/economy/rank.command';
+import { DailyCommand } from './commands/economy/daily.command';
+import { LeaderboardCommand } from './commands/economy/leaderboard.command';
+import { BalanceCommand } from './commands/economy/balance.command';
+import { GambleCommand } from './commands/economy/gamble.command';
 
 @Module({
+  imports: [EconomyModule],
   providers: [
     BotGateway,
     PingCommand,
@@ -38,6 +46,11 @@ import { FilterCommand } from './commands/player_commands/filter.command';
     LyricsCommand,
     RadioCommand,
     FilterCommand,
+    RankCommand,
+    DailyCommand,
+    LeaderboardCommand,
+    BalanceCommand,
+    GambleCommand,
   ],
 })
 export class BotModule {}

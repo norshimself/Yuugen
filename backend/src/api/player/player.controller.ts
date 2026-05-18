@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Get, Query } from '@nestjs/common';
-import { PlayerService } from './player.service';
+import { PlayerService } from '../../domain/player/player.service';
 import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto } from './player.dto';
 
 @Controller('player')

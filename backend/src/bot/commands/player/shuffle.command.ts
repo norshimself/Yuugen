@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 @Injectable()
 export class ShuffleCommand {
@@ -12,22 +13,9 @@ export class ShuffleCommand {
     name: 'shuffle',
     description: 'Shuffle the queue',
   })
+  @UseGuards(PlayerGuard)
   public async onShuffle(@Context() [interaction]: SlashCommandContext) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player) {
-      return interaction.reply({
-        content: 'No music is playing!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     const queueLength = player.queue.tracks.length;
     await player.queue.shuffle();
@@ -46,4 +34,3 @@ export class ShuffleCommand {
     return interaction.reply({ embeds: [embed] });
   }
 }
-

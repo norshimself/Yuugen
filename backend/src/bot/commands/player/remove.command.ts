@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand, Options, IntegerOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 class RemoveOptions {
   @IntegerOption({
@@ -21,25 +22,12 @@ export class RemoveCommand {
     name: 'remove',
     description: 'Remove a specific song from the queue',
   })
+  @UseGuards(PlayerGuard)
   public async onRemove(
     @Context() [interaction]: SlashCommandContext,
     @Options() { index }: RemoveOptions,
   ) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player) {
-      return interaction.reply({
-        content: 'No music is playing!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     const tracks = player.queue.tracks;
 
@@ -67,4 +55,3 @@ export class RemoveCommand {
     return interaction.reply({ embeds: [embed] });
   }
 }
-

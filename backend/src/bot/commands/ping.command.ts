@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Context, SlashCommand } from 'necord';
 import type { SlashCommandContext } from 'necord';
-import { StatusService } from '../../common/status.service';
+import { StatusService } from '../../shared/status.service';
 
 @Injectable()
 export class PingCommand {

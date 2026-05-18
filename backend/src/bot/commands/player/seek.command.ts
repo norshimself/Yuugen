@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand, Options, IntegerOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 class SeekOptions {
   @IntegerOption({
@@ -21,25 +22,12 @@ export class SeekCommand {
     name: 'seek',
     description: 'Seek to a specific position in the current song',
   })
+  @UseGuards(PlayerGuard)
   public async onSeek(
     @Context() [interaction]: SlashCommandContext,
     @Options() { seconds }: SeekOptions,
   ) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player) {
-      return interaction.reply({
-        content: 'No music is playing!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     const currentTrack = player.queue.current;
 
@@ -73,4 +61,3 @@ export class SeekCommand {
     return interaction.reply({ embeds: [embed] });
   }
 }
-

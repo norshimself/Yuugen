@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Context, SlashCommand, Options, IntegerOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { PlayerGuard } from '../../../shared/guards/player.guard';
 
 class VolumeOptions {
   @IntegerOption({
@@ -21,25 +22,12 @@ export class VolumeCommand {
     name: 'volume',
     description: 'Set the volume of the playback',
   })
+  @UseGuards(PlayerGuard)
   public async onVolume(
     @Context() [interaction]: SlashCommandContext,
     @Options() { level }: VolumeOptions,
   ) {
-    if (!interaction.guildId) {
-      return interaction.reply({
-        content: 'This command can only be used in a guild!',
-        ephemeral: true,
-      });
-    }
-
-    const player = this.lavalinkManager.players.get(interaction.guildId);
-
-    if (!player) {
-      return interaction.reply({
-        content: 'No music is playing!',
-        ephemeral: true,
-      });
-    }
+    const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     if (level < 0 || level > 100) {
       return interaction.reply({
@@ -76,4 +64,3 @@ export class VolumeCommand {
     return `\`[${progressText}${emptyProgressText}]\``;
   }
 }
-
