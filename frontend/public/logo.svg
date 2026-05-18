@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Gradient with more weight on the left color -->
+    <linearGradient id="main-grad" x1="80" y1="256" x2="432" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#1e6075" />
+      <stop offset="40%" stop-color="#1e6075" />
+      <stop offset="100%" stop-color="#c9b09a" />
+    </linearGradient>
+  </defs>
+
+  <!-- Shapes (No Background Rect) -->
+  <g>
+    <!-- Left Circle -->
+    <circle cx="200" cy="256" r="120" fill="url(#main-grad)" opacity="0.85" />
+
+    <!-- Right Circle -->
+    <circle cx="312" cy="256" r="120" fill="url(#main-grad)" opacity="0.85" />
+
+    <!-- Lens Shape (Overlap) Outline -->
+    <!-- Intersection points calculated for centers (200,256) and (312,256) with r=120 -->
+    <path d="M 256 149.87 A 120 120 0 0 1 256 362.13 A 120 120 0 0 1 256 149.87" 
+          fill="none" 
+          stroke="#091118" 
+          stroke-width="10" 
+          stroke-linejoin="round" />
+  </g>
+</svg>
