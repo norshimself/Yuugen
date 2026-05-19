@@ -36,8 +36,8 @@ export const musicService = {
   /**
    * Fetch current playing track detail
    */
-  async getNowPlaying(guildId: string): Promise<{ success: boolean; playing: boolean; track?: any }> {
-    return apiClient<{ success: boolean; playing: boolean; track?: any }>(
+  async getNowPlaying(guildId: string): Promise<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; track?: any }> {
+    return apiClient<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; track?: any }>(
       `/player/nowplaying?guildId=${guildId}`,
       { method: "GET" }
     );

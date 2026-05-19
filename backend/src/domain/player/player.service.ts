@@ -28,6 +28,8 @@ export class PlayerService {
       const queue = await this.getQueue(guildId);
       
       this.playerGateway.broadcastPlayerState(guildId, {
+        isConnected: current.success && (current as any).connected,
+        voiceChannelId: current.success ? (current as any).voiceChannelId : null,
         isPlaying: current.success && current.playing,
         currentTrack: (current.success && current.playing && current.track) ? {
           title: current.track.title,
@@ -254,14 +256,16 @@ export class PlayerService {
 
   async getNowPlaying(guildId: string) {
     const player = this.lavalinkManager.players.get(guildId);
-    if (!player) return { success: false, message: 'No player found.' };
+    if (!player) return { success: false, message: 'No player found.', connected: false };
     
     const current = player.queue.current;
-    if (!current) return { success: true, playing: false };
+    if (!current) return { success: true, playing: false, connected: player.connected, voiceChannelId: player.voiceChannelId };
     
     return {
       success: true,
       playing: true,
+      connected: player.connected,
+      voiceChannelId: player.voiceChannelId,
       track: {
         title: current.info.title,
         uri: current.info.uri,

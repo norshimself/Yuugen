@@ -9,6 +9,7 @@ export function usePlayer(guildId: string | undefined) {
   const [bassBoost, setBassBoost] = useState<boolean>(false);
   const [reverb, setReverb] = useState<boolean>(false);
   const [isMuted, setIsMuted] = useState<boolean>(false);
+  const [isConnected, setIsConnected] = useState<boolean>(false);
   
   // Bridge inputs
   const [voiceChannelId, setVoiceChannelId] = useState<string>("1123389644764090544"); // Default sample channel ID
@@ -60,15 +61,26 @@ export function usePlayer(guildId: string | undefined) {
     try {
       // 1. Fetch currently playing track
       const npRes = await musicService.getNowPlaying(guildId);
-      if (npRes.success && npRes.playing && npRes.track) {
-        setCurrentTrack({
-          title: npRes.track.title,
-          uri: npRes.track.uri,
-          duration: npRes.track.duration,
-          artist: "Discord Voice Stream"
-        });
-        setIsPlaying(true);
+      if (npRes.success) {
+        setIsConnected(!!npRes.connected);
+        if (npRes.voiceChannelId) {
+          setVoiceChannelId(npRes.voiceChannelId);
+        }
+        
+        if (npRes.playing && npRes.track) {
+          setCurrentTrack({
+            title: npRes.track.title,
+            uri: npRes.track.uri,
+            duration: npRes.track.duration,
+            artist: "Discord Voice Stream"
+          });
+          setIsPlaying(true);
+        } else {
+          setCurrentTrack(null);
+          setIsPlaying(false);
+        }
       } else {
+        setIsConnected(false);
         setCurrentTrack(null);
         setIsPlaying(false);
       }
@@ -109,6 +121,8 @@ export function usePlayer(guildId: string | undefined) {
             const msg = JSON.parse(event.data);
             if (msg.event === "playerUpdate" && msg.guildId === guildId) {
               const payload = msg.data;
+              if (payload.isConnected !== undefined) setIsConnected(payload.isConnected);
+              if (payload.voiceChannelId !== undefined) setVoiceChannelId(payload.voiceChannelId);
               if (payload.isPlaying !== undefined) setIsPlaying(payload.isPlaying);
               if (payload.currentTrack !== undefined) setCurrentTrack(payload.currentTrack);
               if (payload.serverQueue !== undefined) setServerQueue(payload.serverQueue);
@@ -168,6 +182,7 @@ export function usePlayer(guildId: string | undefined) {
     if (data && data.success) {
       setPlayerStatusMessage({ text: `Synced: ${data.message || 'Track queued successfully!'}`, success: true });
       setIsPlaying(true);
+      setIsConnected(true);
       await fetchQueue();
     } else {
       setPlayerStatusMessage({ 
@@ -184,6 +199,7 @@ export function usePlayer(guildId: string | undefined) {
     if (data && data.success) {
       setPlayerStatusMessage({ text: `Joined voice channel successfully!`, success: true });
       setVoiceChannelId(channelId);
+      setIsConnected(true);
     } else {
       setPlayerStatusMessage({ 
         text: `Failed to join channel: ${data?.message || 'Unknown error'}`, 
@@ -205,8 +221,9 @@ export function usePlayer(guildId: string | undefined) {
   const stopTrack = useCallback(async () => {
     const data = await sendPlayerRequest("/stop");
     if (data && data.success) {
-      setPlayerStatusMessage({ text: "Stopped music player.", success: true });
+      setPlayerStatusMessage({ text: "Stopped music player and disconnected.", success: true });
       setIsPlaying(false);
+      setIsConnected(false);
       setCurrentTrack(null);
       setServerQueue([]);
     } else {
@@ -304,6 +321,9 @@ export function usePlayer(guildId: string | undefined) {
     toggleMute,
     applyFilter,
     setLoopMode,
+    // Connection status
+    isConnected,
+    disconnectBot: stopTrack,
     // Dynamic Server Queue states
     serverQueue,
     currentTrack,

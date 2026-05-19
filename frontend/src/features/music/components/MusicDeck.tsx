@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Pause, SkipForward, Volume2,
-  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, AlertCircle, Trash2, Search, Square, Settings2, X, Activity
+  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, AlertCircle, Trash2, Search, Square, Settings2, X, Activity, Link2Off
 } from "lucide-react";
 import { usePlayer } from "../hooks/usePlayer";
 import { musicService } from "../services/musicService";
@@ -47,6 +47,8 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     joinVoiceChannel,
     playerStatusMessage,
     setPlayerStatusMessage,
+    isConnected,
+    disconnectBot,
   } = usePlayer(selectedGuild?.id);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -176,19 +178,34 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
-              className="w-full bg-white/5 border border-brand-secondary/10 hover:border-brand-secondary/35 rounded-xl px-3 py-2.5 text-[10px] font-light text-white focus:outline-none transition flex justify-between items-center group cursor-pointer"
-            >
-              <div className="flex items-center gap-2 truncate">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />
-                <span className={`truncate ${voiceChannelId ? "text-white font-medium" : "text-brand-secondary/50"}`}>
-                  {selectedChannelName}
-                </span>
-              </div>
-              <ChevronRight className={`w-3.5 h-3.5 text-brand-secondary/50 transition-transform ${isChannelDropdownOpen ? "rotate-90" : ""}`} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsChannelDropdownOpen(!isChannelDropdownOpen)}
+                className={`flex-grow bg-white/5 border border-brand-secondary/10 hover:border-brand-secondary/35 rounded-xl px-3 py-2.5 text-[10px] font-light text-white focus:outline-none transition flex justify-between items-center group cursor-pointer truncate ${
+                  isConnected ? "w-[calc(100%-46px)]" : "w-full"
+                }`}
+              >
+                <div className="flex items-center gap-2 truncate">
+                  <div className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isConnected ? "bg-emerald-400 animate-pulse" : "bg-red-400"}`} />
+                  <span className={`truncate ${voiceChannelId ? "text-white font-medium" : "text-brand-secondary/50"}`}>
+                    {selectedChannelName}
+                  </span>
+                </div>
+                <ChevronRight className={`w-3.5 h-3.5 text-brand-secondary/50 transition-transform flex-shrink-0 ${isChannelDropdownOpen ? "rotate-90" : ""}`} />
+              </button>
+
+              {isConnected && (
+                <button
+                  type="button"
+                  onClick={disconnectBot}
+                  className="flex-shrink-0 w-[38px] h-[38px] rounded-xl bg-red-500/10 border border-red-500/25 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition cursor-pointer hover:border-red-500/50"
+                  title="Disconnect Bot"
+                >
+                  <Link2Off className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
             {/* Dropdown Popover */}
             <AnimatePresence>
