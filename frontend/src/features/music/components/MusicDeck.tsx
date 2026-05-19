@@ -5,7 +5,7 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Pause, SkipForward, Volume2,
-  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, AlertCircle, Trash2, Search, Square, Settings2, X, Activity, Link2Off, Sparkles
+  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, ChevronDown, AlertCircle, Trash2, Search, Square, Settings2, X, Activity, Link2Off, Sparkles
 } from "lucide-react";
 import { usePlayer } from "../hooks/usePlayer";
 import { musicService } from "../services/musicService";
@@ -81,6 +81,13 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
   const [isChannelsLoading, setIsChannelsLoading] = useState(false);
 
+  // Radio Countries States
+  const [countries, setCountries] = useState<{ name: string; code: string; stationCount: number }[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<string>("");
+  const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
+  const [countrySearchQuery, setCountrySearchQuery] = useState("");
+  const [isCountriesLoading, setIsCountriesLoading] = useState(false);
+
   // Audio Engine State
   const [activeFilter, setActiveFilter] = useState("clear");
   const [loopModeState, setLoopModeState] = useState<"off" | "track" | "queue">("off");
@@ -140,11 +147,29 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     fetchChannels();
   }, [fetchChannels]);
 
+  const fetchCountries = useCallback(async () => {
+    setIsCountriesLoading(true);
+    try {
+      const res = await musicService.getRadioCountries();
+      if (res.success && res.countries) {
+        setCountries(res.countries);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch countries:", err);
+    } finally {
+      setIsCountriesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCountries();
+  }, [fetchCountries]);
+
   const selectedChannelName = channels.find(c => c.id === voiceChannelId)?.name || "Select Channel...";
   const filteredChannels = channels.filter(c => c.name.toLowerCase().includes(channelSearchQuery.toLowerCase()));
 
   return (
-    <div className="w-full flex-grow relative overflow-hidden flex flex-col bg-[#04080c] min-h-[calc(100vh-88px)]">
+    <div className="w-full flex-grow relative overflow-hidden flex flex-col bg-[#04080c] h-full max-h-full min-h-0">
       {/* Background Gradient Layer */}
       <div className={`absolute inset-0 bg-gradient-to-br ${currentGradient} opacity-25 transition-all duration-[1.5s] ease-in-out`} />
       <div className="absolute inset-0 backdrop-blur-3xl bg-[#04080c]/75" />
@@ -181,9 +206,9 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
       <div className="flex flex-grow overflow-hidden relative z-10">
         
         {/* LEFT PANE: Channel & Discovery */}
-        <div className={`w-[280px] xl:w-[320px] flex-shrink-0 border-r border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex ${
+        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-r border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
           isLeftPaneOpen 
-            ? "flex absolute inset-y-0 left-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[290px] shadow-2xl" 
+            ? "flex absolute inset-y-0 left-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[260px] shadow-2xl" 
             : "hidden"
         }`}>
           
@@ -248,7 +273,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                       <Search className="w-3 h-3 text-brand-secondary/40 absolute left-2.5 top-1/2 -translate-y-1/2" />
                     </div>
                   </div>
-                  <div className="max-h-[150px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  <div className="max-h-[150px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {filteredChannels.length > 0 ? (
                       filteredChannels.map((channel) => (
                         <div
@@ -277,7 +302,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (!searchQuery.trim()) return;
+                if (!searchQuery.trim() && !selectedCountry && discoverTab !== "radio") return;
 
                 setIsSearching(true);
                 try {
@@ -285,7 +310,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                     const res = await musicService.searchTracks(searchQuery);
                     if (res.success && res.tracks) setSearchResults(res.tracks);
                   } else if (discoverTab === "radio") {
-                    const res = await musicService.searchRadio(searchQuery);
+                    const res = await musicService.searchRadio(searchQuery, selectedCountry || undefined);
                     if (res.success && res.stations) setRadioSearchResults(res.stations);
                   } else if (discoverTab === "live") {
                     const res = await musicService.searchTracks(`${searchQuery} live stream`);
@@ -313,10 +338,100 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 {isSearching ? <div className="w-3.5 h-3.5 rounded-full border-2 border-brand-secondary/30 border-t-brand-secondary animate-spin" /> : <ChevronRight className="w-3.5 h-3.5" />}
               </button>
             </form>
+
+            {discoverTab === "radio" && (
+              <div className="mt-2.5 relative">
+                <button
+                  type="button"
+                  onClick={() => setIsCountryDropdownOpen(!isCountryDropdownOpen)}
+                  className="w-full bg-[#04080c]/40 border border-brand-secondary/10 hover:border-brand-secondary/30 rounded-xl px-3 py-2 text-[9px] text-white/80 focus:outline-none transition flex justify-between items-center cursor-pointer group animate-fade-in"
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="text-brand-secondary/50 font-bold uppercase tracking-wider">Country:</span>
+                    <span className="truncate text-white font-medium">
+                      {selectedCountry || "All Countries (Global)"}
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-3 h-3 text-brand-secondary/50 transition-transform duration-200 group-hover:text-white ${isCountryDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                <AnimatePresence>
+                  {isCountryDropdownOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -5 }}
+                      className="absolute left-0 right-0 mt-1.5 bg-[#0b141d] border border-brand-secondary/20 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col"
+                    >
+                      <div className="p-2 border-b border-brand-secondary/10">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Filter countries..."
+                            value={countrySearchQuery}
+                            onChange={(e) => setCountrySearchQuery(e.target.value)}
+                            className="w-full bg-[#04080c] border border-brand-secondary/10 rounded-lg px-2.5 py-1.5 text-[9px] text-white placeholder-white/30 focus:outline-none focus:border-brand-secondary/35 transition pl-7"
+                          />
+                          <Search className="w-3 h-3 text-brand-secondary/40 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                        </div>
+                      </div>
+                      <div className="max-h-[140px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
+                        <div
+                          onClick={async () => {
+                            setSelectedCountry("");
+                            setIsCountryDropdownOpen(false);
+                            setCountrySearchQuery("");
+                            setIsSearching(true);
+                            try {
+                              const res = await musicService.searchRadio(searchQuery, undefined);
+                              if (res.success && res.stations) setRadioSearchResults(res.stations);
+                            } catch (_) {} finally { setIsSearching(false); }
+                          }}
+                          className={`px-3 py-1.5 text-[9px] cursor-pointer hover:bg-brand-secondary/10 transition flex items-center justify-between font-bold ${
+                            selectedCountry === "" ? "text-brand-secondary bg-brand-secondary/5" : "text-white/70 hover:text-white"
+                          }`}
+                        >
+                          <span>All Countries (Global)</span>
+                        </div>
+                        {isCountriesLoading ? (
+                          <div className="p-4 text-center text-[9px] text-brand-secondary/40">Loading countries...</div>
+                        ) : countries.filter(c => c.name.toLowerCase().includes(countrySearchQuery.toLowerCase())).length > 0 ? (
+                          countries
+                            .filter(c => c.name.toLowerCase().includes(countrySearchQuery.toLowerCase()))
+                            .map((country) => (
+                              <div
+                                key={country.name}
+                                onClick={async () => {
+                                  setSelectedCountry(country.name);
+                                  setIsCountryDropdownOpen(false);
+                                  setCountrySearchQuery("");
+                                  setIsSearching(true);
+                                  try {
+                                    const res = await musicService.searchRadio(searchQuery, country.name);
+                                    if (res.success && res.stations) setRadioSearchResults(res.stations);
+                                  } catch (_) {} finally { setIsSearching(false); }
+                                }}
+                                className={`px-3 py-1.5 text-[9px] cursor-pointer hover:bg-brand-secondary/10 transition flex items-center justify-between ${
+                                  selectedCountry === country.name ? "text-brand-secondary font-bold bg-brand-secondary/5" : "text-white/80 hover:text-white"
+                                }`}
+                              >
+                                <span className="truncate">{country.name}</span>
+                                <span className="text-[7px] font-mono text-brand-secondary/40 font-normal">{country.stationCount} st.</span>
+                              </div>
+                            ))
+                        ) : (
+                          <div className="p-4 text-center text-[9px] text-brand-secondary/30">No countries found.</div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
 
           {/* Results & Recommendations List */}
-          <div className="flex-grow overflow-hidden flex flex-col px-3 pb-4">
+          <div className="flex-grow min-h-0 min-w-0 overflow-hidden flex flex-col px-3 pb-4">
             
             {/* Discover Tab Switcher */}
             <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-4">
@@ -372,12 +487,12 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
 
             {discoverTab === "recommendations" ? (
               searchResults.length > 0 ? (
-                <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex justify-between items-center mb-2 px-2">
                     <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">YouTube Results</span>
                     <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                   </div>
-                  <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {searchResults.map((track, i) => (
                       <div
                         key={i}
@@ -394,7 +509,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex flex-wrap gap-1 mb-3 px-2">
                     {(["jpop", "lofi", "edm", "rock"] as const).map((tag) => (
                       <button
@@ -408,7 +523,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                       </button>
                     ))}
                   </div>
-                  <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {isRecLoading ? (
                       <div className="py-8 text-center flex flex-col items-center gap-2">
                         <div className="w-4 h-4 rounded-full border-2 border-brand-secondary/30 border-t-brand-secondary animate-spin" />
@@ -441,12 +556,12 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
               )
             ) : discoverTab === "radio" ? (
               radioSearchResults.length > 0 ? (
-                <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex justify-between items-center mb-2 px-2">
                     <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Radio Results</span>
                     <button onClick={() => setRadioSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                   </div>
-                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {radioSearchResults.map((station, i) => {
                       const trackGradient = getGhibliGradient(station.name);
                       return (
@@ -474,8 +589,8 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {RADIO_STATIONS.map((station, i) => {
                       const trackGradient = getGhibliGradient(station.title);
                       return (
@@ -505,12 +620,12 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
               )
             ) : (
               liveSearchResults.length > 0 ? (
-                <div className="flex flex-col h-full overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   <div className="flex justify-between items-center mb-2 px-2">
                     <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Live Results</span>
                     <button onClick={() => setLiveSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                   </div>
-                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {liveSearchResults.map((track, i) => {
                       const trackGradient = getGhibliGradient(track.title);
                       return (
@@ -535,8 +650,8 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col h-full overflow-hidden">
-                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
                     {LIVE_ATMOSPHERES.map((live, i) => {
                       const trackGradient = getGhibliGradient(live.title);
                       return (
@@ -569,7 +684,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
         </div>
 
         {/* CENTER PANE: Hero Stage */}
-        <div className="flex-grow flex flex-col items-center justify-center p-6 md:p-8 relative overflow-hidden">
+        <div className="flex-grow flex flex-col items-center justify-center p-6 md:p-8 relative overflow-hidden min-h-0">
           
           {/* Mobile Overlay Toggle Sub-Header */}
           <div className="xl:hidden flex items-center justify-between w-full border-b border-white/5 pb-4 mb-4 relative z-20">
@@ -653,9 +768,9 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
         </div>
 
         {/* RIGHT PANE: Queue */}
-        <div className={`w-[280px] xl:w-[320px] flex-shrink-0 border-l border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex ${
+        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-l border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
           isRightPaneOpen 
-            ? "flex absolute inset-y-0 right-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[290px] shadow-2xl" 
+            ? "flex absolute inset-y-0 right-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[260px] shadow-2xl" 
             : "hidden"
         }`}>
           <div className="p-5 border-b border-brand-secondary/10 flex items-center justify-between">
@@ -674,7 +789,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
             </div>
           </div>
           
-          <div className="flex-grow overflow-y-auto px-3 py-4 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+          <div className="flex-grow overflow-y-auto px-3 py-4 space-y-1.5 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
             {serverQueue.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center text-brand-secondary/30 text-[9px] uppercase tracking-widest px-4 gap-3">
                 <ListMusic className="w-6 h-6 opacity-20" />

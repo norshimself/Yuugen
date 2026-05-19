@@ -69,9 +69,23 @@ export const musicService = {
   /**
    * Search for radio stations via query
    */
-  async searchRadio(query: string): Promise<{ success: boolean; stations: any[] }> {
+  async searchRadio(query: string, country?: string): Promise<{ success: boolean; stations: any[] }> {
+    let url = `/player/radio/search?query=${encodeURIComponent(query)}`;
+    if (country) {
+      url += `&country=${encodeURIComponent(country)}`;
+    }
     return apiClient<{ success: boolean; stations: any[] }>(
-      `/player/radio/search?query=${encodeURIComponent(query)}`,
+      url,
+      { method: "GET" }
+    );
+  },
+
+  /**
+   * Fetch list of countries from the radio directory API
+   */
+  async getRadioCountries(): Promise<{ success: boolean; countries: { name: string; code: string; stationCount: number }[] }> {
+    return apiClient<{ success: boolean; countries: { name: string; code: string; stationCount: number }[] }>(
+      "/player/radio/countries",
       { method: "GET" }
     );
   },

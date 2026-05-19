@@ -307,51 +307,24 @@ export class PlayerService {
 
   async getRecommendations(tag: string) {
     let query = `${tag} music mix`;
-    if (tag.toLowerCase() === 'jpop') query = 'jpop anime mix';
-    else if (tag.toLowerCase() === 'lofi') query = 'lofi hip hop radio';
-    else if (tag.toLowerCase() === 'edm') query = 'gaming edm mix';
-    else if (tag.toLowerCase() === 'rock') query = 'classic rock hits';
-
-    // Curated high-fidelity default recommendations
-    const fallbacks: Record<string, any[]> = {
-      jpop: [
-        { title: "Yoasobi - Idol (Official Anime Theme)", uri: "https://www.youtube.com/watch?v=ZRtdQ81jCgA", duration: 220000, author: "YOASOBI" },
-        { title: "Kenshi Yonezu - Kick Back", uri: "https://www.youtube.com/watch?v=M2cckDmNLMI", duration: 198000, author: "Kenshi Yonezu" },
-        { title: "LiSA - Gurenge (Demon Slayer OST)", uri: "https://www.youtube.com/watch?v=MpYy6Y1cRZA", duration: 240000, author: "LiSA" },
-        { title: "Eve - Kaikai Kitan (Jujutsu Kaisen)", uri: "https://www.youtube.com/watch?v=1tk1pqYy2UA", duration: 224000, author: "Eve" }
-      ],
-      lofi: [
-        { title: "Lofi Hip Hop Radio - Beats to Relax/Study to", uri: "https://www.youtube.com/watch?v=jfKfPfyJRdk", duration: 0, author: "Lofi Girl" },
-        { title: "Late Night Study Session - Chill Lofi Mix", uri: "https://www.youtube.com/watch?v=5wRWniH7rt8", duration: 3600000, author: "ChilledCow" },
-        { title: "Ghibli Lofi Music - Relaxing Piano Beats", uri: "https://www.youtube.com/watch?v=3jWRrafhO6M", duration: 7200000, author: "Ghibli Lofi" },
-        { title: "Rainy Night In Tokyo - Chill Lofi Beats", uri: "https://www.youtube.com/watch?v=5yx6yLgC9yA", duration: 1800000, author: "Tokyo Beats" }
-      ],
-      edm: [
-        { title: "Alan Walker - Faded (Official Gaming Mix)", uri: "https://www.youtube.com/watch?v=60ItHLz5WEA", duration: 212000, author: "Alan Walker" },
-        { title: "Marshmello - Alone (Radio Edit)", uri: "https://www.youtube.com/watch?v=ALZHF5UqnU4", duration: 250000, author: "Marshmello" },
-        { title: "Avicii - The Nights", uri: "https://www.youtube.com/watch?v=UtF6Jej8yb4", duration: 180000, author: "Avicii" },
-        { title: "The Chainsmokers - Closer ft. Halsey", uri: "https://www.youtube.com/watch?v=PT2_F-1esPk", duration: 245000, author: "The Chainsmokers" }
-      ],
-      rock: [
-        { title: "Queen - Bohemian Rhapsody (Remastered)", uri: "https://www.youtube.com/watch?v=fJ9rUzIMcZQ", duration: 355000, author: "Queen" },
-        { title: "Nirvana - Smells Like Teen Spirit", uri: "https://www.youtube.com/watch?v=hTWKbfoikeg", duration: 301000, author: "Nirvana" },
-        { title: "AC/DC - Back In Black", uri: "https://www.youtube.com/watch?v=pAgnJDJN4VA", duration: 255000, author: "AC/DC" },
-        { title: "Linkin Park - In The End", uri: "https://www.youtube.com/watch?v=eVTXPUF4Oz4", duration: 216000, author: "Linkin Park" }
-      ]
-    };
+    const lowerTag = tag.toLowerCase();
+    if (lowerTag === 'jpop') query = 'jpop anime mix';
+    else if (lowerTag === 'lofi') query = 'lofi hip hop radio';
+    else if (lowerTag === 'edm') query = 'gaming edm mix';
+    else if (lowerTag === 'rock') query = 'classic rock hits';
 
     try {
-      const players = Array.from(this.lavalinkManager.players.values());
-      if (players.length > 0) {
-        const result = await players[0].search(
+      const node = this.lavalinkManager.nodeManager.nodes.get('main_node');
+      if (node) {
+        const result = (await node.search(
           { query: `ytsearch:${query}` },
           { id: 'api', username: 'API' } as any
-        );
+        )) as any;
 
         if (result && result.tracks && result.tracks.length > 0) {
           return {
             success: true,
-            tracks: result.tracks.slice(0, 6).map((t: any) => ({
+            tracks: result.tracks.slice(0, 10).map((t: any) => ({
               title: t.info.title,
               uri: t.info.uri,
               duration: t.info.duration,
@@ -366,18 +339,18 @@ export class PlayerService {
 
     return {
       success: true,
-      tracks: fallbacks[tag.toLowerCase()] || []
+      tracks: []
     };
   }
 
   async search(query: string) {
     try {
-      const players = Array.from(this.lavalinkManager.players.values());
-      if (players.length > 0) {
-        const result = await players[0].search(
+      const node = this.lavalinkManager.nodeManager.nodes.get('main_node');
+      if (node) {
+        const result = (await node.search(
           { query: `ytsearch:${query}` },
           { id: 'api', username: 'API' } as any
-        );
+        )) as any;
 
         if (result && result.tracks && result.tracks.length > 0) {
           return {
@@ -432,9 +405,33 @@ export class PlayerService {
     };
   }
 
-  async searchRadio(query: string) {
+  async getRadioCountries() {
     try {
-      const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(query)}&limit=10&order=votes`;
+      const response = await fetch('https://de1.api.radio-browser.info/json/countries');
+      const countries = (await response.json()) as any[];
+      return {
+        success: true,
+        countries: countries
+          .filter(c => c.stationcount > 5)
+          .map(c => ({
+            name: c.name,
+            code: c.code || "",
+            stationCount: c.stationcount
+          }))
+          .sort((a, b) => b.stationCount - a.stationCount)
+      };
+    } catch (err) {
+      console.error("Failed to fetch radio countries:", err);
+      return { success: false, countries: [] };
+    }
+  }
+
+  async searchRadio(query: string, country?: string) {
+    try {
+      let url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(query)}&limit=15&order=votes`;
+      if (country) {
+        url += `&country=${encodeURIComponent(country)}`;
+      }
       const response = await fetch(url);
       const stations = (await response.json()) as any[];
       

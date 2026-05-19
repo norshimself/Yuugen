@@ -66,5 +66,20 @@ h1, h2, h3, .font-serif-header {
     border-color: rgba(199, 176, 154, 0.25);
     transform: translateY(-2px);
   }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(199, 176, 154, 0.2);
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(199, 176, 154, 0.4);
+  }
 }
 

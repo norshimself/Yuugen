@@ -102,9 +102,17 @@ export class PlayerController {
     return this.playerService.getVoiceChannels(guildId);
   }
 
+  @Get('radio/countries')
+  async getRadioCountries() {
+    return this.playerService.getRadioCountries();
+  }
+
   @Get('radio/search')
-  async searchRadio(@Query('query') query: string) {
-    return this.playerService.searchRadio(query);
+  async searchRadio(
+    @Query('query') query: string,
+    @Query('country') country?: string,
+  ) {
+    return this.playerService.searchRadio(query, country);
   }
 
   @Post('radio/play')

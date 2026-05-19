@@ -57,7 +57,7 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="min-h-screen w-full bg-[#04080c] text-white font-sans flex flex-col relative overflow-x-hidden selection:bg-brand-primary selection:text-white">
+    <div className={`w-full bg-[#04080c] text-white font-sans flex flex-col relative selection:bg-brand-primary selection:text-white ${activeTab === 'music' ? 'h-screen overflow-hidden' : 'min-h-screen overflow-x-hidden'}`}>
       {/* Background Decor (Minimalist flat aesthetic) */}
       <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-brand-primary/5 rounded-full blur-[150px] pointer-events-none" />
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-brand-secondary/5 rounded-full blur-[120px] pointer-events-none" />
@@ -237,7 +237,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Main Content Area */}
-      <main className={`flex-1 w-full relative z-30 flex flex-col ${activeTab === 'music' ? '' : 'max-w-[1600px] mx-auto px-6 py-8 md:py-10'}`}>
+      <main className={`flex-1 w-full relative z-30 flex flex-col min-h-0 ${activeTab === 'music' ? 'h-[calc(100vh-80px)] overflow-hidden' : 'max-w-[1600px] mx-auto px-6 py-8 md:py-10'}`}>
         {/* Mobile Navigation (Shown only on small screens) */}
         <nav className={`md:hidden flex items-center justify-between mb-8 pb-4 border-b border-white/5 ${activeTab === 'music' ? 'px-6 pt-4' : ''}`}>
            {navItems.map((item) => {
@@ -263,7 +263,7 @@ export default function DashboardPage() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -15 }}
             transition={{ duration: 0.4, ease: "easeOut" }}
-            className="flex-1 w-full flex flex-col"
+            className="flex-1 w-full flex flex-col min-h-0"
           >
             {activeTab === "music" && <MusicDeck selectedGuild={selectedGuild} />}
             {activeTab === "economy" && <EconomyDeck selectedGuildId={selectedGuild?.id} />}
