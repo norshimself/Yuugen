@@ -5,10 +5,26 @@ import { useState, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Pause, SkipForward, Volume2,
-  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, AlertCircle, Trash2, Search, Square, Settings2, X, Activity, Link2Off
+  ListMusic, Radio, Sliders, Heart, Shuffle, Repeat, ChevronRight, AlertCircle, Trash2, Search, Square, Settings2, X, Activity, Link2Off, Sparkles
 } from "lucide-react";
 import { usePlayer } from "../hooks/usePlayer";
 import { musicService } from "../services/musicService";
+
+const RADIO_STATIONS = [
+  { title: "Lofi Girl 24/7 Chill Beats", query: "https://www.youtube.com/watch?v=jfKfPfyJRdk", genre: "Lofi / Study", desc: "The legendary Study Beats live radio." },
+  { title: "Anime J-Pop Hits Radio", query: "J-Pop Anime Hits Radio Live", genre: "J-Pop / Vocaloid", desc: "Energy packed Anime themes & J-Pop." },
+  { title: "Synthwave Retro Outrun FM", query: "Synthwave Retro Radio Live", genre: "Synthwave / Synth", desc: "Neon grids & retro futuristic melodies." },
+  { title: "Chillstep Dreamy Liquid Bass", query: "Chillstep Radio Live", genre: "Chillstep / Ambient", desc: "Atmospheric basslines and liquid step." },
+  { title: "Classic Rock Radio Stream", query: "Classic Rock Live Stream", genre: "Rock / Nostalgia", desc: "Greatest hits of classic rock history." },
+];
+
+const LIVE_ATMOSPHERES = [
+  { title: "Tokyo Rain Cafe Lounge", query: "Tokyo Rain Cafe Live", type: "Rainy Cafe", desc: "Gentle rain tap against a Tokyo coffee shop." },
+  { title: "Ghibli Orchestral Orchestra", query: "Ghibli Orchestral Live", type: "Orchestra / Ghibli", desc: "Warm orchestral symphonies of Ghibli films." },
+  { title: "Deep Forest Night rain", query: "Deep Forest Rain Live", type: "Nature Ambience", desc: "Quiet night sounds of nature and light breeze." },
+  { title: "Cyberpunk Ambient 24/7", query: "Cyberpunk Synth Ambient 24/7", type: "Cyberpunk / Sci-Fi", desc: "Gritty synthesizers and holographic whispers." },
+  { title: "Relaxing Ocean Waves Live", query: "Relaxing Ocean Waves Live", type: "Relax / Sleep", desc: "Crashing waves of pristine shorelines." }
+];
 
 interface MusicDeckProps {
   selectedGuild?: {
@@ -54,6 +70,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ title: string; uri: string; duration: number; author: string }[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [discoverTab, setDiscoverTab] = useState<"recommendations" | "radio" | "live">("recommendations");
   
   // Voice Channels Dropdown State
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
@@ -283,10 +300,47 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
 
           {/* Results & Recommendations List */}
           <div className="flex-grow overflow-hidden flex flex-col px-3 pb-4">
+            
+            {/* Discover Tab Switcher */}
+            {searchResults.length === 0 && (
+              <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setDiscoverTab("recommendations")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    discoverTab === "recommendations" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="w-3 h-3" />
+                  <span>Explore</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscoverTab("radio")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    discoverTab === "radio" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                  }`}
+                >
+                  <Radio className="w-3 h-3" />
+                  <span>Radio</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDiscoverTab("live")}
+                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                    discoverTab === "live" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                  }`}
+                >
+                  <Activity className="w-3 h-3" />
+                  <span>Live</span>
+                </button>
+              </div>
+            )}
+
             {searchResults.length > 0 ? (
               <div className="flex flex-col h-full">
                 <div className="flex justify-between items-center mb-2 px-2">
-                  <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Results</span>
+                  <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Search Results</span>
                   <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                 </div>
                 <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
@@ -305,8 +359,8 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="flex flex-col h-full">
+            ) : discoverTab === "recommendations" ? (
+              <div className="flex flex-col h-full overflow-hidden">
                 <div className="flex flex-wrap gap-1 mb-3 px-2">
                   {(["jpop", "lofi", "edm", "rock"] as const).map((tag) => (
                     <button
@@ -348,6 +402,64 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                       );
                     })
                   )}
+                </div>
+              </div>
+            ) : discoverTab === "radio" ? (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {RADIO_STATIONS.map((station, i) => {
+                    const trackGradient = getGhibliGradient(station.title);
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => playTrack(station.query)}
+                        className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden pr-2">
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/radio:scale-105 transition-transform duration-300`}>
+                            <Radio className="w-3.5 h-3.5 text-white/80" />
+                          </div>
+                          <div className="truncate">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/radio:text-brand-secondary transition">{station.title}</span>
+                              <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.genre}</span>
+                            </div>
+                            <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.desc}</span>
+                          </div>
+                        </div>
+                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/radio:opacity-100 transition-opacity flex-shrink-0" />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full overflow-hidden">
+                <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                  {LIVE_ATMOSPHERES.map((live, i) => {
+                    const trackGradient = getGhibliGradient(live.title);
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => playTrack(live.query)}
+                        className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden pr-2">
+                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/live:scale-105 transition-transform duration-300`}>
+                            <Activity className="w-3.5 h-3.5 text-white/80" />
+                          </div>
+                          <div className="truncate">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/live:text-brand-secondary transition">{live.title}</span>
+                              <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase flex-shrink-0">{live.type}</span>
+                            </div>
+                            <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{live.desc}</span>
+                          </div>
+                        </div>
+                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/live:opacity-100 transition-opacity flex-shrink-0" />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
