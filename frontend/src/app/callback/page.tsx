@@ -12,10 +12,14 @@ function CallbackHandler() {
 
   useEffect(() => {
     const accessToken = searchParams.get("access_token");
+    const refreshToken = searchParams.get("refresh_token");
 
     if (accessToken) {
       // Store token securely in localStorage for authentication validation
       localStorage.setItem("access_token", accessToken);
+      if (refreshToken) {
+        localStorage.setItem("refresh_token", refreshToken);
+      }
       
       // Delay briefly for a premium, smooth transition effect
       const timer = setTimeout(() => {

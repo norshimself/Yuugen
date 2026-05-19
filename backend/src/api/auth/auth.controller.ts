@@ -45,7 +45,7 @@ export class AuthController {
     });
     
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/callback?access_token=${accessToken}`);
+    res.redirect(`${frontendUrl}/callback?access_token=${accessToken}&refresh_token=${sessionId}`);
   }
 
   @Get('callback')
@@ -74,16 +74,24 @@ export class AuthController {
     });
     
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/callback?access_token=${accessToken}`);
+    res.redirect(`${frontendUrl}/callback?access_token=${accessToken}&refresh_token=${sessionId}`);
   }
 
   @Post('refresh')
   @UseGuards(SessionGuard)
   async refresh(@Req() req: any) {
     const accessToken = this.jwtService.sign({ userId: req.user.id });
+    
+    const sessionId = 
+      req.cookies?.['session_id'] || 
+      req.headers?.['x-refresh-token'] || 
+      req.body?.refreshToken || 
+      req.body?.refresh_token;
+
     return {
       success: true,
       access_token: accessToken,
+      refresh_token: sessionId,
     };
   }
 }

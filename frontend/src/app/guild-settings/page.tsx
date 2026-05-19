@@ -1,4 +1,4 @@
-import { settingsService } from '@/features/settings';
+import { settingsService } from '@/features/settings/services/settingsService';
 import { UpdateGuildSettingsForm } from '@/components/guild-settings/UpdateGuildSettingsForm';
 
 interface GuildSettingsPageProps {

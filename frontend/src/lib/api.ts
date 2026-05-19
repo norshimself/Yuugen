@@ -30,17 +30,28 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       
       try {
+        const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+        
         // Call refresh endpoint to get a new access token
         const response = await axios.post(
           `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-          {},
-          { withCredentials: true } // Ensure cookies are sent
+          { refreshToken },
+          { 
+            headers: {
+              ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
+            },
+            withCredentials: true 
+          } // Ensure cookies are sent
         );
         
         const newToken = response.data.access_token;
+        const newRefreshToken = response.data.refresh_token;
         
         if (typeof window !== 'undefined') {
           localStorage.setItem('access_token', newToken);
+          if (newRefreshToken) {
+            localStorage.setItem('refresh_token', newRefreshToken);
+          }
         }
         
         // Update header and retry
@@ -50,6 +61,7 @@ api.interceptors.response.use(
         // Refresh failed, redirect to login or clear token
         if (typeof window !== 'undefined') {
           localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
           window.location.href = '/login';
         }
         return Promise.reject(refreshError);

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { refreshAccessToken } from "@/services/apiClient";
 
 export type DashboardTab = "music" | "economy" | "games" | "settings";
 
@@ -103,7 +104,7 @@ export function useDashboard() {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
       const apiKey = process.env.NEXT_PUBLIC_API_KEY || "4029c9b9b5ad007d8c24a2a51b458dce46674bbbc2ce1acfed1cfcd3cad2623f";
       try {
-        const res = await fetch(`${apiUrl}${endpoint}`, {
+        let res = await fetch(`${apiUrl}${endpoint}`, {
           ...options,
           headers: {
             "Content-Type": "application/json",
@@ -111,11 +112,30 @@ export function useDashboard() {
             "x-api-key": apiKey,
             ...(options.headers || {}),
           },
+          credentials: "include",
         });
 
-        if (res.status === 401) {
-          logout();
-          return null;
+        if (res.status === 401 && endpoint !== "/auth/refresh") {
+          const newToken = await refreshAccessToken();
+          if (newToken) {
+            // Update token state
+            setToken(newToken);
+            
+            // Retry
+            res = await fetch(`${apiUrl}${endpoint}`, {
+              ...options,
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${newToken}`,
+                "x-api-key": apiKey,
+                ...(options.headers || {}),
+              },
+              credentials: "include",
+            });
+          } else {
+            logout();
+            return null;
+          }
         }
 
         return res;
