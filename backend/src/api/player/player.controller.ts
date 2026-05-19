@@ -12,6 +12,10 @@ export class PlayerController {
   async play(@Body() playDto: PlayDto) {
     return this.playerService.play(playDto.guildId, playDto.query, playDto.channelId);
   }
+  @Post('join')
+  async join(@Body() body: { guildId: string, channelId: string }) {
+    return this.playerService.join(body.guildId, body.channelId);
+  }
 
   @Post('pause')
   async pause(@Body() dto: GuildOnlyDto) {
@@ -76,5 +80,25 @@ export class PlayerController {
   @Get('nowplaying')
   async getNowPlaying(@Query() query: GuildOnlyDto) {
     return this.playerService.getNowPlaying(query.guildId);
+  }
+
+  @Get('guilds')
+  async getGuilds() {
+    return this.playerService.getGuilds();
+  }
+
+  @Get('recommendations')
+  async getRecommendations(@Query('tag') tag: string) {
+    return this.playerService.getRecommendations(tag);
+  }
+
+  @Get('search')
+  async search(@Query('query') query: string) {
+    return this.playerService.search(query);
+  }
+
+  @Get('channels')
+  async getChannels(@Query('guildId') guildId: string) {
+    return this.playerService.getVoiceChannels(guildId);
   }
 }

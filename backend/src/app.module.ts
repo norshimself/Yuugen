@@ -13,6 +13,7 @@ import { StatusService } from './shared/status.service';
 import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
+import { SettingsModule } from './api/settings/settings.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { GamesApiModule } from './api/games/games.module';
     EconomyModule,
     EconomyApiModule,
     GamesApiModule,
+    SettingsModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

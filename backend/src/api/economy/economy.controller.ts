@@ -1,21 +1,21 @@
-import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { EconomyService } from '../../domain/economy/economy.service';
-import { UserIdDto, GambleDto, RobDto, BuyDto } from './economy.dto';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { GambleDto, RobDto, BuyDto } from './economy.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('economy')
-@UseGuards(ApiKeyGuard)
+@UseGuards(JwtAuthGuard)
 export class EconomyController {
   constructor(private readonly economyService: EconomyService) {}
 
   @Get('profile')
-  async getProfile(@Query() query: UserIdDto) {
-    return this.economyService.getProfile(query.userId);
+  async getProfile(@Req() req: any) {
+    return this.economyService.getProfile(req.user.id);
   }
 
   @Post('daily')
-  async daily(@Body() dto: UserIdDto) {
-    return this.economyService.claimDaily(dto.userId);
+  async daily(@Req() req: any) {
+    return this.economyService.claimDaily(req.user.id);
   }
 
   @Get('leaderboard')
@@ -24,23 +24,23 @@ export class EconomyController {
   }
 
   @Post('gamble')
-  async gamble(@Body() dto: GambleDto) {
-    return this.economyService.gamble(dto.userId, dto.amount);
+  async gamble(@Req() req: any, @Body() dto: GambleDto) {
+    return this.economyService.gamble(req.user.id, dto.amount);
   }
 
   @Post('work')
-  async work(@Body() dto: UserIdDto) {
-    return this.economyService.work(dto.userId);
+  async work(@Req() req: any) {
+    return this.economyService.work(req.user.id);
   }
 
   @Post('crime')
-  async crime(@Body() dto: UserIdDto) {
-    return this.economyService.crime(dto.userId);
+  async crime(@Req() req: any) {
+    return this.economyService.crime(req.user.id);
   }
 
   @Post('rob')
-  async rob(@Body() dto: RobDto) {
-    return this.economyService.rob(dto.userId, dto.targetId);
+  async rob(@Req() req: any, @Body() dto: RobDto) {
+    return this.economyService.rob(req.user.id, dto.targetId);
   }
 
   @Get('shop')
@@ -49,7 +49,7 @@ export class EconomyController {
   }
 
   @Post('buy')
-  async buy(@Body() dto: BuyDto) {
-    return this.economyService.buyItem(dto.userId, dto.itemId);
+  async buy(@Req() req: any, @Body() dto: BuyDto) {
+    return this.economyService.buyItem(req.user.id, dto.itemId);
   }
 }

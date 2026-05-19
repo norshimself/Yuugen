@@ -5,14 +5,22 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { LoggingInterceptor } from './shared/interceptors/logging.interceptor';
 import { HttpExceptionFilter } from './shared/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  // Register native WebSocket adapter
+  app.useWebSocketAdapter(new WsAdapter(app));
+  
   // Enable CORS for frontend interaction
-  app.enableCors();
+  app.enableCors({
+    origin: true,
+    credentials: true,
+    allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key',
+  });
   
   // Set global prefix
   app.setGlobalPrefix('api');

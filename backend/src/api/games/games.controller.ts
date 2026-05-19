@@ -1,27 +1,24 @@
-import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { EconomyService } from '../../domain/economy/economy.service';
 import { RpsDto, TriviaAnswerDto } from './games.dto';
-import { UserIdDto } from '../economy/economy.dto';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 @Controller('games')
-@UseGuards(ApiKeyGuard)
+@UseGuards(JwtAuthGuard)
 export class GamesController {
   constructor(private readonly economyService: EconomyService) {}
 
   @Post('rps')
-  async playRps(@Body() dto: RpsDto) {
+  async playRps(@Req() req: any, @Body() dto: RpsDto) {
     const choices = ['rock', 'paper', 'scissors'];
     const botChoice = choices[Math.floor(Math.random() * choices.length)];
     const userChoice = dto.choice;
 
     let result = '';
     let won = false;
-    let tie = false;
 
     if (userChoice === botChoice) {
       result = 'tie';
-      tie = true;
     } else if (
       (userChoice === 'rock' && botChoice === 'scissors') ||
       (userChoice === 'paper' && botChoice === 'rock') ||
@@ -37,7 +34,7 @@ export class GamesController {
     let newBalance = undefined;
 
     if (won) {
-      newBalance = await this.economyService.addCoins(dto.userId, reward);
+      newBalance = await this.economyService.addCoins(req.user.id, reward);
     }
 
     return {
@@ -51,8 +48,8 @@ export class GamesController {
   }
 
   @Get('trivia/question')
-  async getTriviaQuestion(@Query() query: UserIdDto) {
-    const userId = query.userId;
+  async getTriviaQuestion(@Req() req: any) {
+    const userId = req.user.id;
     const activeSession = await this.economyService.getTriviaSession(userId);
     if (activeSession) {
       return {
@@ -75,8 +72,9 @@ export class GamesController {
   }
 
   @Post('trivia/answer')
-  async answerTrivia(@Body() dto: TriviaAnswerDto) {
-    const game = await this.economyService.getTriviaSession(dto.userId);
+  async answerTrivia(@Req() req: any, @Body() dto: TriviaAnswerDto) {
+    const userId = req.user.id;
+    const game = await this.economyService.getTriviaSession(userId);
 
     if (!game) {
       return {
@@ -85,13 +83,13 @@ export class GamesController {
       };
     }
 
-    await this.economyService.deleteTriviaSession(dto.userId);
+    await this.economyService.deleteTriviaSession(userId);
 
     const isCorrect = dto.answerIndex === game.correctIndex;
     let newBalance = undefined;
 
     if (isCorrect) {
-      newBalance = await this.economyService.addCoins(dto.userId, game.reward);
+      newBalance = await this.economyService.addCoins(userId, game.reward);
     }
 
     return {
