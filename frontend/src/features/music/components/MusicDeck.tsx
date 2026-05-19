@@ -72,6 +72,8 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   const [searchResults, setSearchResults] = useState<{ title: string; uri: string; duration: number; author: string }[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [discoverTab, setDiscoverTab] = useState<"recommendations" | "radio" | "live">("recommendations");
+  const [radioSearchResults, setRadioSearchResults] = useState<{ name: string; url: string; homepage?: string; country?: string; tags?: string; favicon?: string }[]>([]);
+  const [liveSearchResults, setLiveSearchResults] = useState<{ title: string; uri: string; duration: number; author: string }[]>([]);
   
   // Voice Channels Dropdown State
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
@@ -275,20 +277,34 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
-                if (searchQuery.trim()) {
-                  setIsSearching(true);
-                  try {
+                if (!searchQuery.trim()) return;
+
+                setIsSearching(true);
+                try {
+                  if (discoverTab === "recommendations") {
                     const res = await musicService.searchTracks(searchQuery);
                     if (res.success && res.tracks) setSearchResults(res.tracks);
-                  } catch (_) {
-                  } finally { setIsSearching(false); }
-                }
+                  } else if (discoverTab === "radio") {
+                    const res = await musicService.searchRadio(searchQuery);
+                    if (res.success && res.stations) setRadioSearchResults(res.stations);
+                  } else if (discoverTab === "live") {
+                    const res = await musicService.searchTracks(`${searchQuery} live stream`);
+                    if (res.success && res.tracks) setLiveSearchResults(res.tracks);
+                  }
+                } catch (_) {
+                } finally { setIsSearching(false); }
               }}
               className="relative"
             >
               <input
                 type="text"
-                placeholder="Search YouTube..."
+                placeholder={
+                  discoverTab === "recommendations" 
+                    ? "Search YouTube..." 
+                    : discoverTab === "radio" 
+                      ? "Search global live radio (e.g. Lofi, Jazz)..." 
+                      : "Search live atmospheres (e.g. Rain, Cafe)..."
+                }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-[#04080c]/50 border border-brand-secondary/15 hover:border-brand-secondary/35 rounded-xl pl-3 pr-10 py-2.5 text-[10px] text-white focus:outline-none focus:border-brand-secondary/45 transition"
@@ -303,166 +319,251 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
           <div className="flex-grow overflow-hidden flex flex-col px-3 pb-4">
             
             {/* Discover Tab Switcher */}
-            {searchResults.length === 0 && (
-              <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setDiscoverTab("recommendations")}
-                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    discoverTab === "recommendations" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                  }`}
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Explore</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDiscoverTab("radio")}
-                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    discoverTab === "radio" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                  }`}
-                >
-                  <Radio className="w-3 h-3" />
-                  <span>Radio</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDiscoverTab("live")}
-                  className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                    discoverTab === "live" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                  }`}
-                >
-                  <Activity className="w-3 h-3" />
-                  <span>Live</span>
-                </button>
-              </div>
-            )}
+            <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("recommendations");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "recommendations" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Explore</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("radio");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "radio" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Radio className="w-3 h-3" />
+                <span>Radio</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("live");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "live" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Activity className="w-3 h-3" />
+                <span>Live</span>
+              </button>
+            </div>
 
-            {searchResults.length > 0 ? (
-              <div className="flex flex-col h-full">
-                <div className="flex justify-between items-center mb-2 px-2">
-                  <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Search Results</span>
-                  <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
-                </div>
-                <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  {searchResults.map((track, i) => (
-                    <div
-                      key={i}
-                      onClick={() => { playTrack(track.title); setSearchResults([]); setSearchQuery(""); }}
-                      className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/s"
-                    >
-                      <div className="overflow-hidden pr-2">
-                        <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/s:text-brand-secondary transition">{track.title}</h4>
-                        <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+            {discoverTab === "recommendations" ? (
+              searchResults.length > 0 ? (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 px-2">
+                    <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">YouTube Results</span>
+                    <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
+                  </div>
+                  <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {searchResults.map((track, i) => (
+                      <div
+                        key={i}
+                        onClick={() => { playTrack(track.title); setSearchResults([]); setSearchQuery(""); }}
+                        className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/s"
+                      >
+                        <div className="overflow-hidden pr-2">
+                          <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/s:text-brand-secondary transition">{track.title}</h4>
+                          <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+                        </div>
+                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/s:opacity-100 transition-opacity flex-shrink-0" />
                       </div>
-                      <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/s:opacity-100 transition-opacity flex-shrink-0" />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : discoverTab === "recommendations" ? (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="flex flex-wrap gap-1 mb-3 px-2">
-                  {(["jpop", "lofi", "edm", "rock"] as const).map((tag) => (
-                    <button
-                      key={tag}
-                      onClick={() => setActiveRecTag(tag)}
-                      className={`text-[8px] font-bold px-2 py-1 rounded-md transition-all uppercase tracking-wider cursor-pointer ${
-                        activeRecTag === tag ? "bg-brand-secondary text-[#04080c]" : "bg-white/5 text-brand-secondary/50 hover:text-brand-secondary hover:bg-white/10"
-                      }`}
-                    >
-                      {tag}
-                    </button>
-                  ))}
+              ) : (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex flex-wrap gap-1 mb-3 px-2">
+                    {(["jpop", "lofi", "edm", "rock"] as const).map((tag) => (
+                      <button
+                        key={tag}
+                        onClick={() => setActiveRecTag(tag)}
+                        className={`text-[8px] font-bold px-2 py-1 rounded-md transition-all uppercase tracking-wider cursor-pointer ${
+                          activeRecTag === tag ? "bg-brand-secondary text-[#04080c]" : "bg-white/5 text-brand-secondary/50 hover:text-brand-secondary hover:bg-white/10"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {isRecLoading ? (
+                      <div className="py-8 text-center flex flex-col items-center gap-2">
+                        <div className="w-4 h-4 rounded-full border-2 border-brand-secondary/30 border-t-brand-secondary animate-spin" />
+                      </div>
+                    ) : (
+                      recommendations.map((track, i) => {
+                        const trackGradient = getGhibliGradient(track.title);
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => playTrack(track.title)}
+                            className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/rec"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              <div className={`w-7 h-7 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md`}>
+                                <Radio className="w-3 h-3 text-white/80" />
+                              </div>
+                              <div className="truncate">
+                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/rec:text-brand-secondary transition">{track.title}</span>
+                                <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+                              </div>
+                            </div>
+                            <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/rec:opacity-100 transition-opacity flex-shrink-0" />
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-                <div className="overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  {isRecLoading ? (
-                    <div className="py-8 text-center flex flex-col items-center gap-2">
-                      <div className="w-4 h-4 rounded-full border-2 border-brand-secondary/30 border-t-brand-secondary animate-spin" />
-                    </div>
-                  ) : (
-                    recommendations.map((track, i) => {
+              )
+            ) : discoverTab === "radio" ? (
+              radioSearchResults.length > 0 ? (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 px-2">
+                    <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Radio Results</span>
+                    <button onClick={() => setRadioSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
+                  </div>
+                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {radioSearchResults.map((station, i) => {
+                      const trackGradient = getGhibliGradient(station.name);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => { playRadio(station.url, station.name, station.tags || 'Global Radio'); setRadioSearchResults([]); setSearchQuery(""); }}
+                          className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/rs"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden pr-2">
+                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/rs:scale-105 transition-transform duration-300`}>
+                              <Radio className="w-3.5 h-3.5 text-white/80" />
+                            </div>
+                            <div className="truncate">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/rs:text-brand-secondary transition">{station.name}</span>
+                                <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.country || 'Global'}</span>
+                              </div>
+                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.tags || 'Live Stream'}</span>
+                            </div>
+                          </div>
+                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/rs:opacity-100 transition-opacity flex-shrink-0" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {RADIO_STATIONS.map((station, i) => {
+                      const trackGradient = getGhibliGradient(station.title);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => playRadio(station.query, station.title, station.genre)}
+                          className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden pr-2">
+                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/radio:scale-105 transition-transform duration-300`}>
+                              <Radio className="w-3.5 h-3.5 text-white/80" />
+                            </div>
+                            <div className="truncate">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/radio:text-brand-secondary transition">{station.title}</span>
+                                <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.genre}</span>
+                              </div>
+                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.desc}</span>
+                            </div>
+                          </div>
+                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/radio:opacity-100 transition-opacity flex-shrink-0" />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )
+            ) : (
+              liveSearchResults.length > 0 ? (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 px-2">
+                    <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Live Results</span>
+                    <button onClick={() => setLiveSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
+                  </div>
+                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {liveSearchResults.map((track, i) => {
                       const trackGradient = getGhibliGradient(track.title);
                       return (
                         <div
                           key={i}
-                          onClick={() => playTrack(track.title)}
-                          className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/rec"
+                          onClick={() => { playRadio(track.uri, track.title, 'Live Atmosphere'); setLiveSearchResults([]); setSearchQuery(""); }}
+                          className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/ls"
                         >
                           <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <div className={`w-7 h-7 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md`}>
-                              <Radio className="w-3 h-3 text-white/80" />
+                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/ls:scale-105 transition-transform duration-300`}>
+                              <Activity className="w-3.5 h-3.5 text-white/80" />
                             </div>
                             <div className="truncate">
-                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/rec:text-brand-secondary transition">{track.title}</span>
-                              <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/ls:text-brand-secondary transition">{track.title}</span>
+                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{track.author}</span>
                             </div>
                           </div>
-                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/rec:opacity-100 transition-opacity flex-shrink-0" />
+                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/ls:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
                 </div>
-              </div>
-            ) : discoverTab === "radio" ? (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  {RADIO_STATIONS.map((station, i) => {
-                    const trackGradient = getGhibliGradient(station.title);
-                    return (
-                      <div
-                        key={i}
-                        onClick={() => playRadio(station.query, station.title, station.genre)}
-                        className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden pr-2">
-                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/radio:scale-105 transition-transform duration-300`}>
-                            <Radio className="w-3.5 h-3.5 text-white/80" />
-                          </div>
-                          <div className="truncate">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/radio:text-brand-secondary transition">{station.title}</span>
-                              <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.genre}</span>
+              ) : (
+                <div className="flex flex-col h-full overflow-hidden">
+                  <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+                    {LIVE_ATMOSPHERES.map((live, i) => {
+                      const trackGradient = getGhibliGradient(live.title);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => playRadio(live.query, live.title, live.type)}
+                          className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden pr-2">
+                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/live:scale-105 transition-transform duration-300`}>
+                              <Activity className="w-3.5 h-3.5 text-white/80" />
                             </div>
-                            <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.desc}</span>
-                          </div>
-                        </div>
-                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/radio:opacity-100 transition-opacity flex-shrink-0" />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col h-full overflow-hidden">
-                <div className="overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-                  {LIVE_ATMOSPHERES.map((live, i) => {
-                    const trackGradient = getGhibliGradient(live.title);
-                    return (
-                      <div
-                        key={i}
-                        onClick={() => playRadio(live.query, live.title, live.type)}
-                        className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
-                      >
-                        <div className="flex items-center gap-3 overflow-hidden pr-2">
-                          <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/live:scale-105 transition-transform duration-300`}>
-                            <Activity className="w-3.5 h-3.5 text-white/80" />
-                          </div>
-                          <div className="truncate">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/live:text-brand-secondary transition">{live.title}</span>
-                              <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase flex-shrink-0">{live.type}</span>
+                            <div className="truncate">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/live:text-brand-secondary transition">{live.title}</span>
+                                <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase flex-shrink-0">{live.type}</span>
+                              </div>
+                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{live.desc}</span>
                             </div>
-                            <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{live.desc}</span>
                           </div>
+                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/live:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
-                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/live:opacity-100 transition-opacity flex-shrink-0" />
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )
             )}
           </div>
         </div>
