@@ -431,4 +431,76 @@ export class PlayerService {
       ]
     };
   }
+
+  async searchRadio(query: string) {
+    try {
+      const url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(query)}&limit=10&order=votes`;
+      const response = await fetch(url);
+      const stations = (await response.json()) as any[];
+      
+      return {
+        success: true,
+        stations: (stations || []).map((s: any) => ({
+          name: s.name,
+          url: s.url_resolved || s.url,
+          homepage: s.homepage,
+          country: s.country,
+          tags: s.tags,
+          favicon: s.favicon
+        }))
+      };
+    } catch (err) {
+      console.error("Failed to search radio stations:", err);
+      return { success: false, stations: [] };
+    }
+  }
+
+  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string) {
+    let player = this.lavalinkManager.players.get(guildId);
+
+    if (!player) {
+      if (!channelId) {
+        return { success: false, message: 'Voice channel ID is required to create a player.' };
+      }
+      player = this.lavalinkManager.createPlayer({
+        guildId,
+        voiceChannelId: channelId,
+        textChannelId: '',
+        selfDeaf: true,
+      });
+    }
+
+    if (!player.connected) {
+      await player.connect();
+    }
+
+    const result = await player.search({ query: streamUrl }, { id: 'api', username: 'API' } as any);
+
+    if (!result.tracks.length) {
+      return { success: false, message: 'Could not resolve the radio stream!' };
+    }
+
+    const track = result.tracks[0];
+    track.info.title = name;
+    track.info.author = tags || 'Radio Stream';
+    track.info.isStream = true;
+
+    player.queue.add(track);
+
+    if (!player.playing) {
+      await player.play();
+    }
+
+    this.broadcastUpdate(guildId);
+
+    return {
+      success: true,
+      message: `Playing radio: ${name}`,
+      track: {
+        title: track.info.title,
+        uri: track.info.uri,
+        duration: track.info.duration
+      }
+    };
+  }
 }

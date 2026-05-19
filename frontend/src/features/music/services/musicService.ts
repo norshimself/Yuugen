@@ -65,4 +65,30 @@ export const musicService = {
       },
     });
   },
+
+  /**
+   * Search for radio stations via query
+   */
+  async searchRadio(query: string): Promise<{ success: boolean; stations: any[] }> {
+    return apiClient<{ success: boolean; stations: any[] }>(
+      `/player/radio/search?query=${encodeURIComponent(query)}`,
+      { method: "GET" }
+    );
+  },
+
+  /**
+   * Play a specific radio station
+   */
+  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string): Promise<any> {
+    return apiClient<any>("/player/radio/play", {
+      method: "POST",
+      bodyData: {
+        guildId,
+        streamUrl,
+        name,
+        tags,
+        channelId
+      }
+    });
+  },
 };

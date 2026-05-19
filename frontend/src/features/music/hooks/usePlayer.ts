@@ -192,6 +192,28 @@ export function usePlayer(guildId: string | undefined) {
     }
   }, [sendPlayerRequest, voiceChannelId, fetchQueue]);
 
+  const playRadio = useCallback(async (streamUrl: string, name: string, tags?: string) => {
+    if (!guildId) return;
+    setPlayerStatusMessage({ text: `Connecting to radio stream: "${name}"...`, success: true });
+    
+    try {
+      const data = await musicService.playRadio(guildId, streamUrl, name, tags, voiceChannelId);
+      if (data && data.success) {
+        setPlayerStatusMessage({ text: `Synced: ${data.message || 'Radio streaming successfully!'}`, success: true });
+        setIsPlaying(true);
+        setIsConnected(true);
+        await fetchQueue();
+      } else {
+        setPlayerStatusMessage({ 
+          text: `Radio failed. (Discord: ${data?.message || 'Lavalink nodes starting up or channel offline'})`, 
+          success: false 
+        });
+      }
+    } catch (err) {
+      setPlayerStatusMessage({ text: `Failed to stream radio.`, success: false });
+    }
+  }, [guildId, voiceChannelId, fetchQueue]);
+
   const joinVoiceChannel = useCallback(async (channelId: string) => {
     setPlayerStatusMessage({ text: `Joining voice channel...`, success: true });
     const data = await sendPlayerRequest("/join", { channelId });
@@ -336,6 +358,7 @@ export function usePlayer(guildId: string | undefined) {
     fetchRecommendations,
     // Actions
     playTrack,
+    playRadio,
     joinVoiceChannel,
     skipTrack,
     stopTrack,

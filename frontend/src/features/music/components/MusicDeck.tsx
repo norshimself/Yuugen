@@ -53,6 +53,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     recommendations,
     isRecLoading,
     playTrack,
+    playRadio,
     skipTrack,
     stopTrack,
     shuffleQueue,
@@ -412,7 +413,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                     return (
                       <div
                         key={i}
-                        onClick={() => playTrack(station.query)}
+                        onClick={() => playRadio(station.query, station.title, station.genre)}
                         className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
                       >
                         <div className="flex items-center gap-3 overflow-hidden pr-2">
@@ -441,7 +442,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                     return (
                       <div
                         key={i}
-                        onClick={() => playTrack(live.query)}
+                        onClick={() => playRadio(live.query, live.title, live.type)}
                         className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
                       >
                         <div className="flex items-center gap-3 overflow-hidden pr-2">

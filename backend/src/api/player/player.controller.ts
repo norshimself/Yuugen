@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
 import { PlayerService } from '../../domain/player/player.service';
-import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto } from './player.dto';
+import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto, PlayRadioDto } from './player.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('player')
@@ -100,5 +100,15 @@ export class PlayerController {
   @Get('channels')
   async getChannels(@Query('guildId') guildId: string) {
     return this.playerService.getVoiceChannels(guildId);
+  }
+
+  @Get('radio/search')
+  async searchRadio(@Query('query') query: string) {
+    return this.playerService.searchRadio(query);
+  }
+
+  @Post('radio/play')
+  async playRadio(@Body() dto: PlayRadioDto) {
+    return this.playerService.playRadio(dto.guildId, dto.streamUrl, dto.name, dto.tags, dto.channelId);
   }
 }

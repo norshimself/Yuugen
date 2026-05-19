@@ -70,3 +70,25 @@ export class FilterDto {
   @IsNotEmpty()
   type: string;
 }
+
+export class PlayRadioDto {
+  @IsString()
+  @IsNotEmpty()
+  guildId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  streamUrl: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsOptional()
+  tags?: string;
+
+  @IsString()
+  @IsOptional()
+  channelId?: string;
+}
