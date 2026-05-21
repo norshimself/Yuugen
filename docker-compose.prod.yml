@@ -1,0 +1,64 @@
+services:
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+    # Uncomment for SSL with Certbot:
+    # volumes:
+    #   - ./nginx/certs:/etc/letsencrypt:ro
+    #   - ./nginx/certbot:/var/www/certbot:ro
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./backend/.env
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4
+    volumes:
+      - ./lavalink/application.yml:/opt/Lavalink/application.yml
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_DB: discord_bot
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - app-network
+
+volumes:
+  postgres_data:
+
+networks:
+  app-network:
+    driver: bridge

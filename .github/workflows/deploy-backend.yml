@@ -1,0 +1,39 @@
+name: Deploy Backend to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'docker-compose.prod.yml'
+      - 'nginx/**'
+      - 'lavalink/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to VPS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          script: |
+            cd /root/yuugen
+
+            echo "📥 Pulling latest changes..."
+            git pull origin main
+
+            echo "🔨 Building and deploying..."
+            docker compose -f docker-compose.prod.yml up --build -d
+
+            echo "🧹 Cleaning up old images..."
+            docker image prune -f
+
+            echo "✅ Deployment complete!"
+            docker compose -f docker-compose.prod.yml ps

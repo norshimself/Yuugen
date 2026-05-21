@@ -16,8 +16,9 @@ async function bootstrap() {
   app.useWebSocketAdapter(new WsAdapter(app));
   
   // Enable CORS for frontend interaction
+  const corsOrigin = process.env.CORS_ORIGIN;
   app.enableCors({
-    origin: true,
+    origin: corsOrigin || true,
     credentials: true,
     allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key, x-refresh-token',
   });
@@ -68,6 +69,6 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3000, '0.0.0.0');
 }
 bootstrap();

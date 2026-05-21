@@ -33,7 +33,7 @@ import { SettingsModule } from './api/settings/settings.module';
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL') || 'postgres://postgres:password@postgres:5432/discord_bot',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true, // Note: turn off in production
+        synchronize: process.env.NODE_ENV !== 'production',
       }),
       inject: [ConfigService],
     }),
