@@ -1,4 +1,12 @@
-import { Controller, Post, Body, Get, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { EconomyService } from '../../domain/economy/economy.service';
 import { GambleDto, RobDto, BuyDto } from './economy.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';

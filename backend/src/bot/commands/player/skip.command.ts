@@ -18,7 +18,7 @@ export class SkipCommand {
     const player = this.lavalinkManager.players.get(interaction.guildId!)!;
 
     await interaction.deferReply();
-    
+
     const skippedTrack = player.queue.current;
     await player.skip();
 
@@ -28,7 +28,10 @@ export class SkipCommand {
       const embed = new EmbedBuilder()
         .setTitle('✦ Track Skipped')
         .setColor('#2B2D31')
-        .setFooter({ text: `Skipped by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+        .setFooter({
+          text: `Skipped by ${interaction.user.username}`,
+          iconURL: interaction.user.displayAvatarURL() || undefined,
+        });
 
       let description = '';
       if (skippedTrack) {

@@ -37,16 +37,25 @@ export class PlayerGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const payload = typeof data === 'string' ? JSON.parse(data) : data;
     if (payload && payload.guildId) {
       this.activeClients.set(client, payload.guildId);
-      console.log(`WebSocket client subscribed to guild updates: ${payload.guildId}`);
-      client.send(JSON.stringify({ event: 'subscribed', guildId: payload.guildId }));
+      console.log(
+        `WebSocket client subscribed to guild updates: ${payload.guildId}`,
+      );
+      client.send(
+        JSON.stringify({ event: 'subscribed', guildId: payload.guildId }),
+      );
     }
   }
 
   // Broadcast player changes to all clients viewing the active guild
   broadcastPlayerState(guildId: string, payload: any) {
-    const message = JSON.stringify({ event: 'playerUpdate', guildId, data: payload });
+    const message = JSON.stringify({
+      event: 'playerUpdate',
+      guildId,
+      data: payload,
+    });
     for (const [client, clientGuildId] of this.activeClients.entries()) {
-      if (clientGuildId === guildId && client.readyState === 1) { // 1 = WebSocket.OPEN
+      if (clientGuildId === guildId && client.readyState === 1) {
+        // 1 = WebSocket.OPEN
         client.send(message);
       }
     }

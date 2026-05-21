@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { Context, SlashCommand, Options, StringOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } from 'discord.js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
+} from 'discord.js';
 
 class RadioOptions {
   @StringOption({
@@ -54,7 +60,7 @@ export class RadioCommand {
     try {
       // Search for top 5 radio stations using Radio Browser API
       let url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(query)}&limit=5&order=votes`;
-      
+
       if (country) {
         if (country.length === 2) {
           url += `&countrycode=${encodeURIComponent(country.toUpperCase())}`;
@@ -62,21 +68,26 @@ export class RadioCommand {
           // Capitalize first letter of each word for the country name
           const capitalizedCountry = country
             .split(' ')
-            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .map(
+              (word) =>
+                word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+            )
             .join(' ');
           url += `&country=${encodeURIComponent(capitalizedCountry)}`;
         }
       }
 
       const response = await fetch(url);
-      const stations = await response.json() as any[];
+      const stations = (await response.json()) as any[];
 
       if (!stations || stations.length === 0) {
         return interaction.editReply({ content: 'No radio stations found!' });
       }
 
       // Build list for embed
-      const listText = stations.map((s, i) => `${i + 1}. **${s.name}** (${s.country || 'Unknown'})`).join('\n');
+      const listText = stations
+        .map((s, i) => `${i + 1}. **${s.name}** (${s.country || 'Unknown'})`)
+        .join('\n');
 
       const embed = new EmbedBuilder()
         .setTitle('✦ Radio Search Results')
@@ -85,17 +96,20 @@ export class RadioCommand {
 
       // Create buttons
       const row = new ActionRowBuilder<ButtonBuilder>();
-      
+
       stations.forEach((s, i) => {
         row.addComponents(
           new ButtonBuilder()
             .setCustomId(`radio_select_${i}`)
             .setLabel(`${i + 1}`)
-            .setStyle(ButtonStyle.Primary)
+            .setStyle(ButtonStyle.Primary),
         );
       });
 
-      const message = await interaction.editReply({ embeds: [embed], components: [row] });
+      const message = await interaction.editReply({
+        embeds: [embed],
+        components: [row],
+      });
 
       // Wait for user to select a button
       try {
@@ -125,10 +139,16 @@ export class RadioCommand {
         }
 
         // Search for the stream URL in Lavalink
-        const result = await player.search({ query: streamUrl }, interaction.user);
+        const result = await player.search(
+          { query: streamUrl },
+          interaction.user,
+        );
 
         if (!result.tracks.length) {
-          return interaction.editReply({ content: 'Could not resolve the radio stream!', components: [] });
+          return interaction.editReply({
+            content: 'Could not resolve the radio stream!',
+            components: [],
+          });
         }
 
         const track = result.tracks[0];
@@ -144,22 +164,33 @@ export class RadioCommand {
 
         const playEmbed = new EmbedBuilder()
           .setTitle('✦ Playing Radio')
-          .setDescription(`**[${selectedStation.name}](${selectedStation.homepage || streamUrl})**`)
+          .setDescription(
+            `**[${selectedStation.name}](${selectedStation.homepage || streamUrl})**`,
+          )
           .setThumbnail(selectedStation.favicon || null)
           .addFields(
-            { name: 'Country', value: selectedStation.country || 'Unknown', inline: true },
+            {
+              name: 'Country',
+              value: selectedStation.country || 'Unknown',
+              inline: true,
+            },
             { name: 'Status', value: '🔴 LIVE', inline: true },
-            { name: 'Tags', value: selectedStation.tags || 'None', inline: false }
+            {
+              name: 'Tags',
+              value: selectedStation.tags || 'None',
+              inline: false,
+            },
           )
           .setColor('#2B2D31');
 
         return interaction.editReply({ embeds: [playEmbed], components: [] });
-
       } catch (e) {
         // Timeout
-        return interaction.editReply({ content: 'Selection timed out.', components: [] });
+        return interaction.editReply({
+          content: 'Selection timed out.',
+          components: [],
+        });
       }
-
     } catch (error) {
       console.error(error);
       return interaction.editReply({
@@ -169,5 +200,3 @@ export class RadioCommand {
     }
   }
 }
-
-

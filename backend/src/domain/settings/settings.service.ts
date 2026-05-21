@@ -11,7 +11,9 @@ export class SettingsService {
   ) {}
 
   async getSettings(guildId: string): Promise<GuildSettings> {
-    let settings = await this.settingsRepository.findOne({ where: { guildId } });
+    let settings = await this.settingsRepository.findOne({
+      where: { guildId },
+    });
     if (!settings) {
       settings = this.settingsRepository.create({ guildId });
       await this.settingsRepository.save(settings);
@@ -19,7 +21,10 @@ export class SettingsService {
     return settings;
   }
 
-  async updateSettings(guildId: string, updateData: Partial<GuildSettings>): Promise<GuildSettings> {
+  async updateSettings(
+    guildId: string,
+    updateData: Partial<GuildSettings>,
+  ): Promise<GuildSettings> {
     const settings = await this.getSettings(guildId);
     Object.assign(settings, updateData);
     return this.settingsRepository.save(settings);

@@ -1,6 +1,23 @@
-import { Controller, Post, Body, Get, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Query,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { PlayerService } from '../../domain/player/player.service';
-import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto, PlayRadioDto } from './player.dto';
+import {
+  PlayDto,
+  GuildOnlyDto,
+  VolumeDto,
+  RemoveDto,
+  SeekDto,
+  LoopDto,
+  FilterDto,
+  PlayRadioDto,
+} from './player.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 
 @Controller('player')
@@ -10,10 +27,14 @@ export class PlayerController {
 
   @Post('play')
   async play(@Body() playDto: PlayDto) {
-    return this.playerService.play(playDto.guildId, playDto.query, playDto.channelId);
+    return this.playerService.play(
+      playDto.guildId,
+      playDto.query,
+      playDto.channelId,
+    );
   }
   @Post('join')
-  async join(@Body() body: { guildId: string, channelId: string }) {
+  async join(@Body() body: { guildId: string; channelId: string }) {
     return this.playerService.join(body.guildId, body.channelId);
   }
 
@@ -64,7 +85,10 @@ export class PlayerController {
 
   @Post('seek')
   async seek(@Body() dto: SeekDto) {
-    const seconds = dto.position !== undefined ? Math.floor(dto.position / 1000) : (dto.seconds || 0);
+    const seconds =
+      dto.position !== undefined
+        ? Math.floor(dto.position / 1000)
+        : dto.seconds || 0;
     return this.playerService.seek(dto.guildId, seconds);
   }
 
@@ -128,6 +152,13 @@ export class PlayerController {
 
   @Post('radio/play')
   async playRadio(@Body() dto: PlayRadioDto) {
-    return this.playerService.playRadio(dto.guildId, dto.streamUrl, dto.name, dto.tags, dto.channelId, dto.artworkUrl);
+    return this.playerService.playRadio(
+      dto.guildId,
+      dto.streamUrl,
+      dto.name,
+      dto.tags,
+      dto.channelId,
+      dto.artworkUrl,
+    );
   }
 }

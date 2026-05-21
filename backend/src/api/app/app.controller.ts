@@ -19,4 +19,3 @@ export class AppController {
     return this.statusService.getStatus();
   }
 }
-

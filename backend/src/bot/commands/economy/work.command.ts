@@ -19,7 +19,9 @@ export class WorkCommand {
       const embed = new EmbedBuilder()
         .setColor('#FFA500')
         .setTitle('Slow down!')
-        .setDescription(`You can work again <t:${Math.floor(result.nextClaim!.getTime() / 1000)}:R>.`)
+        .setDescription(
+          `You can work again <t:${Math.floor(result.nextClaim!.getTime() / 1000)}:R>.`,
+        )
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }
@@ -27,7 +29,9 @@ export class WorkCommand {
     const embed = new EmbedBuilder()
       .setColor('#00FF00')
       .setTitle('Payday!')
-      .setDescription(`You worked as a **${result.job}** and earned **${result.amount}** coins!`)
+      .setDescription(
+        `You worked as a **${result.job}** and earned **${result.amount}** coins!`,
+      )
       .setTimestamp();
 
     return interaction.reply({ embeds: [embed] });

@@ -8,7 +8,10 @@ export class WelcomeListener {
   @On('guildMemberAdd')
   public async onGuildMemberAdd(member: GuildMember) {
     const channel = member.guild.channels.cache.find(
-      ch => ch.name === 'welcome' || ch.name === '👋・welcome' || ch.name === 'general'
+      (ch) =>
+        ch.name === 'welcome' ||
+        ch.name === '👋・welcome' ||
+        ch.name === 'general',
     ) as TextChannel;
 
     if (!channel) return;
@@ -35,19 +38,24 @@ export class WelcomeListener {
       ctx.fillText(`Member #${member.guild.memberCount}`, 250, 200);
 
       // Draw avatar
-      const avatarUrl = member.user.displayAvatarURL({ extension: 'png', size: 128 });
+      const avatarUrl = member.user.displayAvatarURL({
+        extension: 'png',
+        size: 128,
+      });
       const avatar = await loadImage(avatarUrl);
-      
+
       // Clip avatar to circle
       ctx.beginPath();
       ctx.arc(125, 125, 60, 0, Math.PI * 2, true);
       ctx.closePath();
       ctx.clip();
-      
+
       ctx.drawImage(avatar, 65, 65, 120, 120);
 
       const buffer = canvas.toBuffer('image/png');
-      const attachment = new AttachmentBuilder(buffer, { name: 'welcome-image.png' });
+      const attachment = new AttachmentBuilder(buffer, {
+        name: 'welcome-image.png',
+      });
 
       await channel.send({
         content: `Welcome to the server, ${member}!`,

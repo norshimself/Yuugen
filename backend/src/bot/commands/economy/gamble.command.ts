@@ -32,7 +32,10 @@ export class GambleCommand {
       });
     }
 
-    const result = await this.economyService.gamble(interaction.user.id, amount);
+    const result = await this.economyService.gamble(
+      interaction.user.id,
+      amount,
+    );
 
     if (!result.success) {
       return interaction.reply({
@@ -41,16 +44,23 @@ export class GambleCommand {
       });
     }
 
-    const embed = new EmbedBuilder()
-      .setTitle('🎰 Gambling Result')
-      .setFooter({ text: `Gamble by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+    const embed = new EmbedBuilder().setTitle('🎰 Gambling Result').setFooter({
+      text: `Gamble by ${interaction.user.username}`,
+      iconURL: interaction.user.displayAvatarURL() || undefined,
+    });
 
     if (result.won) {
-      embed.setColor('#2ecc71')
-        .setDescription(`🎉 You won! You doubled your bet and gained **${amount}** coins!\nNew Balance: **${result.newBalance}** coins.`);
+      embed
+        .setColor('#2ecc71')
+        .setDescription(
+          `🎉 You won! You doubled your bet and gained **${amount}** coins!\nNew Balance: **${result.newBalance}** coins.`,
+        );
     } else {
-      embed.setColor('#e74c3c')
-        .setDescription(`😢 You lost! You lost **${amount}** coins.\nNew Balance: **${result.newBalance}** coins.`);
+      embed
+        .setColor('#e74c3c')
+        .setDescription(
+          `😢 You lost! You lost **${amount}** coins.\nNew Balance: **${result.newBalance}** coins.`,
+        );
     }
 
     return interaction.reply({ embeds: [embed] });

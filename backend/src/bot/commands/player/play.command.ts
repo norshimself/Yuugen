@@ -69,11 +69,12 @@ export class PlayCommand {
       // Calculate estimated time and position
       const queuePosition = player.queue.tracks.length;
       let estimatedTimeMs = 0;
-      
+
       if (player.playing && player.queue.current) {
-        estimatedTimeMs += (player.queue.current.info.duration || 0) - player.position;
+        estimatedTimeMs +=
+          (player.queue.current.info.duration || 0) - player.position;
       }
-      
+
       for (let i = 0; i < queuePosition - 1; i++) {
         estimatedTimeMs += player.queue.tracks[i].info.duration || 0;
       }
@@ -86,19 +87,36 @@ export class PlayCommand {
 
       const embed = new EmbedBuilder()
         .setTitle(isPlayingNow ? '✦ Playing Now' : '✦ Added to Queue')
-        .setDescription(`**[${track.info.title}](${track.info.uri})**\n\n` + 
-          (isPlayingNow ? '' : `**Position in Queue:** \`#${queuePosition}\`\n**Estimated Time:** \`${this.formatDuration(estimatedTimeMs)}\`\n`)
+        .setDescription(
+          `**[${track.info.title}](${track.info.uri})**\n\n` +
+            (isPlayingNow
+              ? ''
+              : `**Position in Queue:** \`#${queuePosition}\`\n**Estimated Time:** \`${this.formatDuration(estimatedTimeMs)}\`\n`),
         )
         .setThumbnail(track.info.artworkUrl || null)
         .addFields(
-          { name: 'Duration', value: track.info.isStream ? '🔴 LIVE' : `\`${this.formatDuration(track.info.duration || 0)}\``, inline: true },
-          { name: 'Author', value: track.info.author || 'Unknown', inline: true },
-          { name: 'Source', value: track.info.sourceName || 'Unknown', inline: true }
+          {
+            name: 'Duration',
+            value: track.info.isStream
+              ? '🔴 LIVE'
+              : `\`${this.formatDuration(track.info.duration || 0)}\``,
+            inline: true,
+          },
+          {
+            name: 'Author',
+            value: track.info.author || 'Unknown',
+            inline: true,
+          },
+          {
+            name: 'Source',
+            value: track.info.sourceName || 'Unknown',
+            inline: true,
+          },
         )
         .setColor('#2B2D31') // Sleek dark theme
-        .setFooter({ 
-          text: `Added by ${interaction.user.username}`, 
-          iconURL: interaction.user.displayAvatarURL() || undefined
+        .setFooter({
+          text: `Added by ${interaction.user.username}`,
+          iconURL: interaction.user.displayAvatarURL() || undefined,
         });
 
       return interaction.editReply({ embeds: [embed] });
@@ -116,10 +134,10 @@ export class PlayCommand {
     const hours = Math.floor((ms / (1000 * 60 * 60)) % 24);
 
     const hoursStr = hours > 0 ? `${hours}:` : '';
-    const minutesStr = minutes < 10 && hours > 0 ? `0${minutes}:` : `${minutes}:`;
+    const minutesStr =
+      minutes < 10 && hours > 0 ? `0${minutes}:` : `${minutes}:`;
     const secondsStr = seconds < 10 ? `0${seconds}` : `${seconds}`;
 
     return `${hoursStr}${minutesStr}${secondsStr}`;
   }
 }
-

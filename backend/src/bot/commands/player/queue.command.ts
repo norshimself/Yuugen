@@ -38,12 +38,15 @@ export class QueueCommand {
 
     if (tracks.length > 0) {
       const queueList = tracks
-        .map((track, index) => `\`${index + 1}.\` [${track.info.title}](${track.info.uri})`)
+        .map(
+          (track, index) =>
+            `\`${index + 1}.\` [${track.info.title}](${track.info.uri})`,
+        )
         .slice(0, 10)
         .join('\n');
-      
+
       description += queueList;
-      
+
       if (tracks.length > 10) {
         embed.setFooter({ text: `...and ${tracks.length - 10} more tracks.` });
       }

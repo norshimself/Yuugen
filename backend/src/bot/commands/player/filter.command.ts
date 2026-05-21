@@ -67,7 +67,10 @@ export class FilterCommand {
         await player.filterManager.toggleLowPass();
         break;
       case 'bassboost': {
-        const isEqActive = player.filterManager.equalizerBands && player.filterManager.equalizerBands.length > 0 && player.filterManager.equalizerBands.some(band => band.gain !== 0);
+        const isEqActive =
+          player.filterManager.equalizerBands &&
+          player.filterManager.equalizerBands.length > 0 &&
+          player.filterManager.equalizerBands.some((band) => band.gain !== 0);
         if (isEqActive) {
           await player.filterManager.clearEQ();
         } else {
@@ -89,7 +92,11 @@ export class FilterCommand {
 
     const embed = new EmbedBuilder()
       .setTitle('✦ Audio Filter Applied')
-      .setDescription(type === 'clear' ? 'All filters have been cleared.' : `Toggled the **${type}** filter!`)
+      .setDescription(
+        type === 'clear'
+          ? 'All filters have been cleared.'
+          : `Toggled the **${type}** filter!`,
+      )
       .setColor('#2B2D31')
       .setFooter({ text: 'Note: Filters may take a few seconds to apply.' });
 

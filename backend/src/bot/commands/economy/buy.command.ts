@@ -25,7 +25,10 @@ export class BuyCommand {
     @Context() [interaction]: SlashCommandContext,
     @Options() { itemId }: BuyOptions,
   ) {
-    const result = await this.economyService.buyItem(interaction.user.id, itemId);
+    const result = await this.economyService.buyItem(
+      interaction.user.id,
+      itemId,
+    );
 
     const embed = new EmbedBuilder()
       .setColor(result.success ? '#00FF00' : '#FF0000')
@@ -34,7 +37,10 @@ export class BuyCommand {
       .setTimestamp();
 
     if (result.success && result.newBalance !== undefined) {
-      embed.addFields({ name: 'New Balance', value: `💰 **${result.newBalance}** coins` });
+      embed.addFields({
+        name: 'New Balance',
+        value: `💰 **${result.newBalance}** coins`,
+      });
     }
 
     return interaction.reply({ embeds: [embed], ephemeral: !result.success });

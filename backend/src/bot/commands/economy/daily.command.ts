@@ -14,9 +14,9 @@ export class DailyCommand {
   })
   public async onDaily(@Context() [interaction]: SlashCommandContext) {
     const result = await this.economyService.claimDaily(interaction.user.id);
-    
+
     const embed = new EmbedBuilder();
-    
+
     if (result.success) {
       embed
         .setTitle('Daily Reward Claimed!')
@@ -26,10 +26,12 @@ export class DailyCommand {
       const timeLeft = result.nextClaim!.getTime() - new Date().getTime();
       const hours = Math.floor(timeLeft / (1000 * 60 * 60));
       const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-      
+
       embed
         .setTitle('Too Early!')
-        .setDescription(`You can claim your next daily reward in **${hours}h ${minutes}m**.`)
+        .setDescription(
+          `You can claim your next daily reward in **${hours}h ${minutes}m**.`,
+        )
         .setColor('#f04747');
     }
 

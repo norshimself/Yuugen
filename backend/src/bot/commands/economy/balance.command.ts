@@ -21,7 +21,11 @@ export class BalanceCommand {
       .addFields(
         { name: 'Wallet', value: `${profile.coins} 🪙`, inline: true },
         { name: 'Bank', value: `${profile.bank} 🪙`, inline: true },
-        { name: 'Total', value: `${profile.coins + profile.bank} 🪙`, inline: true }
+        {
+          name: 'Total',
+          value: `${profile.coins + profile.bank} 🪙`,
+          inline: true,
+        },
       )
       .setThumbnail(interaction.user.displayAvatarURL() || null);
 

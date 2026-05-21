@@ -23,10 +23,15 @@ export class PauseCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Music Paused')
       .setColor('#2B2D31')
-      .setFooter({ text: `Paused by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Paused by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     if (currentTrack) {
-      embed.setDescription(`⏸️ **Paused:** [${currentTrack.info.title}](${currentTrack.info.uri})`);
+      embed.setDescription(
+        `⏸️ **Paused:** [${currentTrack.info.title}](${currentTrack.info.uri})`,
+      );
       embed.setThumbnail(currentTrack.info.artworkUrl || null);
     } else {
       embed.setDescription('Playback has been paused.');

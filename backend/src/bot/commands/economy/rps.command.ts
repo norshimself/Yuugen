@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Context, SlashCommand, Button } from 'necord';
 import type { SlashCommandContext, ButtonContext } from 'necord';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { EconomyService } from '../../../domain/economy/economy.service';
 
 @Injectable()
@@ -20,9 +25,21 @@ export class RpsCommand {
       .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder().setCustomId('rps-rock').setLabel('Rock').setStyle(ButtonStyle.Primary).setEmoji('✊'),
-      new ButtonBuilder().setCustomId('rps-paper').setLabel('Paper').setStyle(ButtonStyle.Primary).setEmoji('✋'),
-      new ButtonBuilder().setCustomId('rps-scissors').setLabel('Scissors').setStyle(ButtonStyle.Primary).setEmoji('✌️'),
+      new ButtonBuilder()
+        .setCustomId('rps-rock')
+        .setLabel('Rock')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✊'),
+      new ButtonBuilder()
+        .setCustomId('rps-paper')
+        .setLabel('Paper')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✋'),
+      new ButtonBuilder()
+        .setCustomId('rps-scissors')
+        .setLabel('Scissors')
+        .setStyle(ButtonStyle.Primary)
+        .setEmoji('✌️'),
     );
 
     return interaction.reply({ embeds: [embed], components: [row] });
@@ -73,14 +90,13 @@ export class RpsCommand {
 
     if (won) {
       await this.economyService.addCoins(interaction.user.id, reward);
-      embed.setColor('#2ecc71')
+      embed
+        .setColor('#2ecc71')
         .setDescription(`${result}\nYou earned **${reward}** coins!`);
     } else if (tie) {
-      embed.setColor('#f1c40f')
-        .setDescription(result);
+      embed.setColor('#f1c40f').setDescription(result);
     } else {
-      embed.setColor('#e74c3c')
-        .setDescription(result);
+      embed.setColor('#e74c3c').setDescription(result);
     }
 
     return interaction.update({ embeds: [embed], components: [] });

@@ -11,4 +11,3 @@ export class BotGateway {
     this.logger.log(`Bot is ready! Logged in as ${client.user?.tag}`);
   }
 }
-

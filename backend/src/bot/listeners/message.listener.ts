@@ -16,7 +16,9 @@ export class MessageListener {
     const result = await this.economyService.addXp(message.author.id, xpToAdd);
 
     if (result.leveledUp) {
-      await message.reply(`🎉 Congrats ${message.author.username}, you leveled up to **Level ${result.level}**!`);
+      await message.reply(
+        `🎉 Congrats ${message.author.username}, you leveled up to **Level ${result.level}**!`,
+      );
     }
   }
 }

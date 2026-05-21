@@ -15,7 +15,7 @@ export class RankCommand {
   public async onRank(@Context() [interaction]: SlashCommandContext) {
     const profile = await this.economyService.getProfile(interaction.user.id);
     const xpNeeded = profile.level * 100;
-    
+
     const embed = new EmbedBuilder()
       .setTitle(`${interaction.user.username}'s Rank`)
       .setThumbnail(interaction.user.displayAvatarURL())

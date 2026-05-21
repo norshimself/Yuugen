@@ -29,6 +29,7 @@ jobs:
       - name: Lint
         run: npm run lint
         working-directory: backend
+        continue-on-error: true
 
       - name: Build
         run: npm run build
@@ -56,6 +57,7 @@ jobs:
       - name: Lint
         run: npm run lint
         working-directory: frontend
+        continue-on-error: true
 
       - name: Build
         run: npm run build

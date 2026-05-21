@@ -24,7 +24,10 @@ export class StopCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Playback Stopped')
       .setColor('#2B2D31')
-      .setFooter({ text: `Stopped by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Stopped by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     let description = 'Left the voice channel.\n\n';
     if (currentTrack) {

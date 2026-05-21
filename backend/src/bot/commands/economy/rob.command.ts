@@ -48,11 +48,13 @@ export class RobCommand {
           ephemeral: true,
         });
       }
-      
+
       const embed = new EmbedBuilder()
         .setColor('#FFA500')
         .setTitle('Slow down!')
-        .setDescription(`You can rob again <t:${Math.floor(result.nextClaim!.getTime() / 1000)}:R>.`)
+        .setDescription(
+          `You can rob again <t:${Math.floor(result.nextClaim!.getTime() / 1000)}:R>.`,
+        )
         .setTimestamp();
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }

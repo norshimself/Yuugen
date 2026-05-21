@@ -42,7 +42,10 @@ export class VolumeCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Volume Updated')
       .setColor('#2B2D31')
-      .setFooter({ text: `Volume updated by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Volume updated by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     let description = `🔊 Volume set to \`${level}%\`\n${this.createProgressBar(level, 100)}\n\n`;
     if (currentTrack) {
@@ -54,7 +57,11 @@ export class VolumeCommand {
     return interaction.reply({ embeds: [embed] });
   }
 
-  private createProgressBar(current: number, total: number, size: number = 10): string {
+  private createProgressBar(
+    current: number,
+    total: number,
+    size: number = 10,
+  ): string {
     const progress = Math.round((size * current) / total);
     const emptyProgress = size - progress;
 

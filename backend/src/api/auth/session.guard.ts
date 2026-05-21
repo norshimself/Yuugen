@@ -1,4 +1,9 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Session } from './session.entity';
@@ -12,17 +17,21 @@ export class SessionGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const sessionId = 
-      request.cookies?.['session_id'] || 
-      request.headers?.['x-refresh-token'] || 
-      request.body?.refreshToken || 
+    const sessionId =
+      request.cookies?.['session_id'] ||
+      request.headers?.['x-refresh-token'] ||
+      request.body?.refreshToken ||
       request.body?.refresh_token;
 
     if (!sessionId) {
-      throw new UnauthorizedException('Missing session cookie or refresh token');
+      throw new UnauthorizedException(
+        'Missing session cookie or refresh token',
+      );
     }
 
-    const session = await this.sessionRepository.findOne({ where: { id: sessionId } });
+    const session = await this.sessionRepository.findOne({
+      where: { id: sessionId },
+    });
 
     if (!session) {
       throw new UnauthorizedException('Invalid session');

@@ -1,4 +1,11 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 
 @Catch()
@@ -12,7 +19,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     // Check if it's an HTTP request
     if (!request || !request.url) {
-      return; 
+      return;
     }
 
     const status =
@@ -39,7 +46,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message: typeof message === 'object' ? (message as any).message || message : message,
+      message:
+        typeof message === 'object'
+          ? (message as any).message || message
+          : message,
     });
   }
 }

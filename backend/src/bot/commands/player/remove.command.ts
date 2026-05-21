@@ -45,11 +45,14 @@ export class RemoveCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Track Removed')
       .setColor('#2B2D31')
-      .setFooter({ text: `Removed by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Removed by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     embed.setDescription(
       `🗑️ **Removed:** [${removedTrack.info.title}](${removedTrack.info.uri})\n` +
-      `**Remaining Tracks:** \`${queueLength}\``
+        `**Remaining Tracks:** \`${queueLength}\``,
     );
 
     return interaction.reply({ embeds: [embed] });

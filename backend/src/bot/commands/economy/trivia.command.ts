@@ -1,7 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { Context, SlashCommand, Button } from 'necord';
 import type { SlashCommandContext, ButtonContext } from 'necord';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { EconomyService } from '../../../domain/economy/economy.service';
 
 @Injectable()
@@ -13,7 +18,9 @@ export class TriviaCommand {
     description: 'Answer a trivia question to win coins!',
   })
   public async onTrivia(@Context() [interaction]: SlashCommandContext) {
-    const activeSession = await this.economyService.getTriviaSession(interaction.user.id);
+    const activeSession = await this.economyService.getTriviaSession(
+      interaction.user.id,
+    );
     if (activeSession) {
       return interaction.reply({
         content: 'You already have an active trivia game! Answer it first.',
@@ -24,7 +31,11 @@ export class TriviaCommand {
     const question = await this.economyService.getRandomTriviaQuestion();
     const reward = 50;
 
-    await this.economyService.startTriviaSession(interaction.user.id, question.correctIndex, reward);
+    await this.economyService.startTriviaSession(
+      interaction.user.id,
+      question.correctIndex,
+      reward,
+    );
 
     const embed = new EmbedBuilder()
       .setColor('#3498db')
@@ -68,7 +79,9 @@ export class TriviaCommand {
   }
 
   private async handleAnswer(interaction: any, answerIndex: number) {
-    const game = await this.economyService.getTriviaSession(interaction.user.id);
+    const game = await this.economyService.getTriviaSession(
+      interaction.user.id,
+    );
 
     if (!game) {
       return interaction.reply({
@@ -83,7 +96,7 @@ export class TriviaCommand {
 
     if (isCorrect) {
       await this.economyService.addCoins(interaction.user.id, game.reward);
-      
+
       const embed = new EmbedBuilder()
         .setColor('#2ecc71')
         .setTitle('🎉 Correct!')

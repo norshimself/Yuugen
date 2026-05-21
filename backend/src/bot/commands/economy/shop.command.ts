@@ -21,7 +21,7 @@ export class ShopCommand {
       .setDescription('Use `/buy <item_id>` to purchase an item!')
       .setTimestamp();
 
-    items.forEach(item => {
+    items.forEach((item) => {
       embed.addFields({
         name: `${item.name} (ID: \`${item.id}\`)`,
         value: `💰 **${item.price}** coins\n${item.description}`,

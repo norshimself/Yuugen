@@ -61,7 +61,11 @@ export class GamesController {
     const question = await this.economyService.getRandomTriviaQuestion();
     const reward = 50;
 
-    await this.economyService.startTriviaSession(userId, question.correctIndex, reward);
+    await this.economyService.startTriviaSession(
+      userId,
+      question.correctIndex,
+      reward,
+    );
 
     return {
       success: true,

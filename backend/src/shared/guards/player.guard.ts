@@ -9,7 +9,9 @@ export class PlayerGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const necordContext = NecordExecutionContext.create(context);
-    const [interaction] = necordContext.getContext() as [ChatInputCommandInteraction];
+    const [interaction] = necordContext.getContext() as [
+      ChatInputCommandInteraction,
+    ];
 
     if (!interaction || !interaction.guildId) {
       if (interaction && interaction.reply) {

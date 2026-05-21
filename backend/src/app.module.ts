@@ -31,7 +31,9 @@ import { SettingsModule } from './api/settings/settings.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
-        url: configService.get<string>('DATABASE_URL') || 'postgres://postgres:password@postgres:5432/discord_bot',
+        url:
+          configService.get<string>('DATABASE_URL') ||
+          'postgres://postgres:password@postgres:5432/discord_bot',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
         synchronize: process.env.NODE_ENV !== 'production',
       }),
@@ -69,9 +71,6 @@ import { SettingsModule } from './api/settings/settings.module';
     }),
   ],
   controllers: [AppController],
-  providers: [
-    AppService,
-    StatusService,
-  ],
+  providers: [AppService, StatusService],
 })
 export class AppModule {}

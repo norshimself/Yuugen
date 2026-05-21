@@ -23,10 +23,15 @@ export class ClearCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Queue Cleared')
       .setColor('#2B2D31')
-      .setFooter({ text: `Cleared by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Cleared by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     if (queueLength > 0) {
-      embed.setDescription(`🗑️ Removed \`${queueLength}\` tracks from the queue.`);
+      embed.setDescription(
+        `🗑️ Removed \`${queueLength}\` tracks from the queue.`,
+      );
     } else {
       embed.setDescription('The queue is already empty.');
     }

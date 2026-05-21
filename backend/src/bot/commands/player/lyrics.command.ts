@@ -30,7 +30,8 @@ export class LyricsCommand {
       // Check if getCurrentLyrics method exists
       if (typeof player.getCurrentLyrics !== 'function') {
         return interaction.editReply({
-          content: 'Lyrics feature is not supported by this version of the client or node.',
+          content:
+            'Lyrics feature is not supported by this version of the client or node.',
         });
       }
 

@@ -23,10 +23,15 @@ export class ResumeCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Music Resumed')
       .setColor('#2B2D31')
-      .setFooter({ text: `Resumed by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Resumed by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     if (currentTrack) {
-      embed.setDescription(`▶️ **Resumed:** [${currentTrack.info.title}](${currentTrack.info.uri})`);
+      embed.setDescription(
+        `▶️ **Resumed:** [${currentTrack.info.title}](${currentTrack.info.uri})`,
+      );
       embed.setThumbnail(currentTrack.info.artworkUrl || null);
     } else {
       embed.setDescription('Playback has been resumed.');

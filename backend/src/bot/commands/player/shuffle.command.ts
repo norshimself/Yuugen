@@ -23,10 +23,15 @@ export class ShuffleCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Queue Shuffled')
       .setColor('#2B2D31')
-      .setFooter({ text: `Shuffled by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Shuffled by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     if (queueLength > 0) {
-      embed.setDescription(`🔀 Shuffled \`${queueLength}\` tracks in the queue.`);
+      embed.setDescription(
+        `🔀 Shuffled \`${queueLength}\` tracks in the queue.`,
+      );
     } else {
       embed.setDescription('The queue is empty, nothing to shuffle.');
     }

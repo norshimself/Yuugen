@@ -8,7 +8,14 @@ import { EconomyService } from './economy.service';
 import { MessageListener } from '../../bot/listeners/message.listener';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([UserProfile, ShopItem, TriviaQuestion, TriviaSession])],
+  imports: [
+    TypeOrmModule.forFeature([
+      UserProfile,
+      ShopItem,
+      TriviaQuestion,
+      TriviaSession,
+    ]),
+  ],
   providers: [EconomyService, MessageListener],
   exports: [EconomyService],
 })

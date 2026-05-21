@@ -50,11 +50,14 @@ export class SeekCommand {
     const embed = new EmbedBuilder()
       .setTitle('✦ Seeked')
       .setColor('#2B2D31')
-      .setFooter({ text: `Seeked by ${interaction.user.username}`, iconURL: interaction.user.displayAvatarURL() || undefined });
+      .setFooter({
+        text: `Seeked by ${interaction.user.username}`,
+        iconURL: interaction.user.displayAvatarURL() || undefined,
+      });
 
     embed.setDescription(
       `⏩ **Jumped to:** \`${seconds}s\`\n\n` +
-      `**Currently Playing:** [${currentTrack.info.title}](${currentTrack.info.uri})`
+        `**Currently Playing:** [${currentTrack.info.title}](${currentTrack.info.uri})`,
     );
     embed.setThumbnail(currentTrack.info.artworkUrl || null);
 
