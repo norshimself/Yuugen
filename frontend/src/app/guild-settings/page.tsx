@@ -30,7 +30,7 @@ export default async function GuildSettingsPage({ searchParams }: GuildSettingsP
       {settings ? (
         <UpdateGuildSettingsForm initialSettings={settings} guildId={guildId} />
       ) : (
-        <div className="p-8 text-brand-secondary/50 text-sm font-light italic text-center border border-brand-secondary/15 rounded-[1.5rem] bg-[#101c26]/40 backdrop-blur-xl">
+        <div className="p-8 text-brand-secondary/50 text-sm font-light italic text-center border border-brand-secondary/15 rounded-[1.5rem] bg-[#080d14]/90 backdrop-blur-xl">
           No configurations active. Generating default settings for Guild ID: {guildId}...
           <div className="mt-4">
             <UpdateGuildSettingsForm 

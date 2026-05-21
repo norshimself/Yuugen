@@ -14,7 +14,7 @@ lavalink:
       http: true
       local: false
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.17.0"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
       snapshot: false
 
 plugins:
@@ -26,9 +26,24 @@ plugins:
     clients:
       - MUSIC
       - ANDROID_VR
+      - WEBEMBEDDED
+      - WEB
+      - TVHTML5EMBEDDED
       - ANDROID_MUSIC
       - IOS
-      - MWEB
-      - WEB
-      - WEBEMBEDDED
-      - TV
+    clientOptions:
+      MUSIC:
+        searching: false
+      ANDROID_VR:
+        searching: false
+      WEBEMBEDDED:
+        searching: false
+      WEB:
+        searching: true
+      TVHTML5EMBEDDED:
+        searching: false
+      ANDROID_MUSIC:
+        searching: false
+      IOS:
+        searching: false
+

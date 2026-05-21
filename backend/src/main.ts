@@ -19,7 +19,7 @@ async function bootstrap() {
   app.enableCors({
     origin: true,
     credentials: true,
-    allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key',
+    allowedHeaders: 'Content-Type, Accept, Authorization, x-api-key, x-refresh-token',
   });
   
   // Set global prefix

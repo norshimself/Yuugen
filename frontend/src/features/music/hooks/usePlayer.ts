@@ -8,8 +8,12 @@ export function usePlayer(guildId: string | undefined) {
   const [volume, setVolumeState] = useState<number>(70);
   const [bassBoost, setBassBoost] = useState<boolean>(false);
   const [reverb, setReverb] = useState<boolean>(false);
+  const [activeFilter, setActiveFilter] = useState<string>("clear");
   const [isMuted, setIsMuted] = useState<boolean>(false);
   const [isConnected, setIsConnected] = useState<boolean>(false);
+  const [positionMs, setPositionMs] = useState<number>(0);
+  const [isActionPending, setIsActionPending] = useState<boolean>(false);
+  const [isFavorited, setIsFavorited] = useState<boolean>(false);
   
   // Bridge inputs
   const [voiceChannelId, setVoiceChannelId] = useState<string>("1123389644764090544"); // Default sample channel ID
@@ -18,6 +22,7 @@ export function usePlayer(guildId: string | undefined) {
   // Dynamic server queue and currently playing track
   const [serverQueue, setServerQueue] = useState<QueueTrack[]>([]);
   const [currentTrack, setCurrentTrack] = useState<QueueTrack | null>(null);
+  const [isPlaybackLoading, setIsPlaybackLoading] = useState<boolean>(false);
 
   // Dynamic YouTube Recommendations state by tags (jpop, lofi, edm, rock)
   const [activeRecTag, setActiveRecTag] = useState<"jpop" | "lofi" | "edm" | "rock">("jpop");
@@ -46,11 +51,14 @@ export function usePlayer(guildId: string | undefined) {
   // Bridge request sender
   const sendPlayerRequest = useCallback(async (endpoint: string, body: any = {}) => {
     if (!guildId) return null;
+    setIsActionPending(true);
     try {
       return await musicService.sendAction(guildId, endpoint, body);
     } catch (err) {
       console.warn("Backend Lavalink player offline fallback:", err);
       return null;
+    } finally {
+      setIsActionPending(false);
     }
   }, [guildId]);
 
@@ -66,23 +74,38 @@ export function usePlayer(guildId: string | undefined) {
         if (npRes.voiceChannelId) {
           setVoiceChannelId(npRes.voiceChannelId);
         }
+        if (npRes.activeFilter !== undefined) {
+          setActiveFilter(npRes.activeFilter);
+        }
+        if (npRes.bassBoost !== undefined) {
+          setBassBoost(npRes.bassBoost);
+        }
+        if (npRes.reverb !== undefined) {
+          setReverb(npRes.reverb);
+        }
         
         if (npRes.playing && npRes.track) {
           setCurrentTrack({
             title: npRes.track.title,
             uri: npRes.track.uri,
             duration: npRes.track.duration,
-            artist: "Discord Voice Stream"
+            position: npRes.track.position !== undefined ? npRes.track.position : 0,
+            artist: npRes.track.author || "Discord Voice Stream",
+            isStream: npRes.track.isStream || false,
+            artworkUrl: npRes.track.artworkUrl
           });
           setIsPlaying(true);
+          setIsPlaybackLoading(false);
         } else {
           setCurrentTrack(null);
           setIsPlaying(false);
+          setIsPlaybackLoading(false);
         }
       } else {
         setIsConnected(false);
         setCurrentTrack(null);
         setIsPlaying(false);
+        setIsPlaybackLoading(false);
       }
 
       // 2. Fetch full upcoming track queue
@@ -124,7 +147,13 @@ export function usePlayer(guildId: string | undefined) {
               if (payload.isConnected !== undefined) setIsConnected(payload.isConnected);
               if (payload.voiceChannelId !== undefined) setVoiceChannelId(payload.voiceChannelId);
               if (payload.isPlaying !== undefined) setIsPlaying(payload.isPlaying);
-              if (payload.currentTrack !== undefined) setCurrentTrack(payload.currentTrack);
+              if (payload.activeFilter !== undefined) setActiveFilter(payload.activeFilter);
+              if (payload.bassBoost !== undefined) setBassBoost(payload.bassBoost);
+              if (payload.reverb !== undefined) setReverb(payload.reverb);
+              if (payload.currentTrack !== undefined) {
+                setCurrentTrack(payload.currentTrack);
+                setIsPlaybackLoading(false);
+              }
               if (payload.serverQueue !== undefined) setServerQueue(payload.serverQueue);
             }
           } catch (err) {
@@ -174,9 +203,84 @@ export function usePlayer(guildId: string | undefined) {
     };
   }, [guildId, fetchQueue]);
 
+  // Sync positionMs & isFavorited state whenever a fresh currentTrack object arrives (auto-corrects clock drift)
+  useEffect(() => {
+    if (currentTrack) {
+      const serverPos = currentTrack.position !== undefined ? currentTrack.position : 0;
+      setPositionMs(serverPos);
+
+      try {
+        const favorites = JSON.parse(localStorage.getItem("player_favorites") || "[]");
+        setIsFavorited(favorites.includes(currentTrack.uri));
+      } catch (err) {
+        setIsFavorited(false);
+      }
+    } else {
+      setPositionMs(0);
+      setIsFavorited(false);
+    }
+  }, [currentTrack]);
+
+  // Self-correcting ticker that runs when playing, clamped to finite duration or infinite for live streams
+  useEffect(() => {
+    if (!isPlaying || !currentTrack) return;
+
+    const interval = setInterval(() => {
+      setPositionMs((prev) => {
+        const duration = currentTrack.duration || 0;
+        if (currentTrack.isStream) {
+          return prev + 1000;
+        }
+        if (prev + 1000 >= duration) {
+          clearInterval(interval);
+          return duration;
+        }
+        return prev + 1000;
+      });
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [isPlaying, currentTrack]);
+
+  // Optimistic UI updates and REST action for seeking tracks
+  const seekTrack = useCallback(async (targetMs: number) => {
+    if (!currentTrack) return;
+
+    let sanitizedMs = targetMs;
+    if (!currentTrack.isStream && currentTrack.duration) {
+      sanitizedMs = Math.max(0, Math.min(targetMs, currentTrack.duration));
+    }
+
+    setPositionMs(sanitizedMs);
+    await sendPlayerRequest("/seek", { position: sanitizedMs });
+  }, [currentTrack, sendPlayerRequest]);
+
+  // Toggle favorited track utilizing localStorage
+  const toggleFavoriteTrack = useCallback(() => {
+    if (!currentTrack) return;
+    try {
+      const favorites = JSON.parse(localStorage.getItem("player_favorites") || "[]");
+      let nextFavorites;
+      if (favorites.includes(currentTrack.uri)) {
+        nextFavorites = favorites.filter((uri: string) => uri !== currentTrack.uri);
+        setIsFavorited(false);
+      } else {
+        nextFavorites = [...favorites, currentTrack.uri];
+        setIsFavorited(true);
+      }
+      localStorage.setItem("player_favorites", JSON.stringify(nextFavorites));
+    } catch (err) {
+      console.warn("Failed to persist favorites:", err);
+    }
+  }, [currentTrack]);
+
   // Player Actions
-  const playTrack = useCallback(async (query: string) => {
-    setPlayerStatusMessage({ text: `Queueing query: "${query}"...`, success: true });
+  const playTrack = useCallback(async (query: string, title?: string) => {
+    setIsPlaybackLoading(true);
+    const displayTitle = title || query;
+    setPlayerStatusMessage({ text: `Queueing query: "${displayTitle}"...`, success: true });
     const data = await sendPlayerRequest("/play", { query, channelId: voiceChannelId });
     
     if (data && data.success) {
@@ -185,6 +289,7 @@ export function usePlayer(guildId: string | undefined) {
       setIsConnected(true);
       await fetchQueue();
     } else {
+      setIsPlaybackLoading(false);
       setPlayerStatusMessage({ 
         text: `Playback failed. (Discord: ${data?.message || 'Lavalink nodes starting up or channel offline'})`, 
         success: false 
@@ -192,24 +297,27 @@ export function usePlayer(guildId: string | undefined) {
     }
   }, [sendPlayerRequest, voiceChannelId, fetchQueue]);
 
-  const playRadio = useCallback(async (streamUrl: string, name: string, tags?: string) => {
+  const playRadio = useCallback(async (streamUrl: string, name: string, tags?: string, artworkUrl?: string) => {
     if (!guildId) return;
+    setIsPlaybackLoading(true);
     setPlayerStatusMessage({ text: `Connecting to radio stream: "${name}"...`, success: true });
     
     try {
-      const data = await musicService.playRadio(guildId, streamUrl, name, tags, voiceChannelId);
+      const data = await musicService.playRadio(guildId, streamUrl, name, tags, voiceChannelId, artworkUrl);
       if (data && data.success) {
         setPlayerStatusMessage({ text: `Synced: ${data.message || 'Radio streaming successfully!'}`, success: true });
         setIsPlaying(true);
         setIsConnected(true);
         await fetchQueue();
       } else {
+        setIsPlaybackLoading(false);
         setPlayerStatusMessage({ 
           text: `Radio failed. (Discord: ${data?.message || 'Lavalink nodes starting up or channel offline'})`, 
           success: false 
         });
       }
     } catch (err) {
+      setIsPlaybackLoading(false);
       setPlayerStatusMessage({ text: `Failed to stream radio.`, success: false });
     }
   }, [guildId, voiceChannelId, fetchQueue]);
@@ -287,9 +395,17 @@ export function usePlayer(guildId: string | undefined) {
     if (data && data.success) {
       setPlayerStatusMessage({ text: `Filter ${type} applied on server.`, success: true });
       // Update local states for UI sync
-      if (type === "nightcore") { setBassBoost(true); setReverb(false); }
-      else if (type === "vaporwave") { setReverb(true); setBassBoost(false); }
-      else if (type === "clear") { setBassBoost(false); setReverb(false); }
+      if (type === "bassboost") {
+        setBassBoost(prev => !prev);
+      } else if (type === "reverb") {
+        setReverb(prev => !prev);
+      } else if (type === "clear") {
+        setBassBoost(false);
+        setReverb(false);
+        setActiveFilter("clear");
+      } else {
+        setActiveFilter(prev => prev === type ? "clear" : type);
+      }
     }
   }, [sendPlayerRequest]);
 
@@ -343,12 +459,21 @@ export function usePlayer(guildId: string | undefined) {
     toggleMute,
     applyFilter,
     setLoopMode,
+    bassBoost,
+    reverb,
+    activeFilter,
     // Connection status
     isConnected,
     disconnectBot: stopTrack,
     // Dynamic Server Queue states
     serverQueue,
     currentTrack,
+    isPlaybackLoading,
+    isActionPending,
+    positionMs,
+    isFavorited,
+    seekTrack,
+    toggleFavoriteTrack,
     visualizerBars,
     // Curated recommendations
     activeRecTag,

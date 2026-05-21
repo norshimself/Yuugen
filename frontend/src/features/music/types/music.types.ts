@@ -5,6 +5,9 @@ export interface QueueTrack {
   uri?: string;
   duration?: number;
   artist?: string;
+  isStream?: boolean;
+  artworkUrl?: string;
+  position?: number;
 }
 
 export interface RecommendationTrack {

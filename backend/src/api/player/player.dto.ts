@@ -47,8 +47,14 @@ export class SeekDto {
   guildId: string;
 
   @IsNumber()
+  @IsOptional()
   @Min(0)
-  seconds: number;
+  seconds?: number;
+
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  position?: number;
 }
 
 export class LoopDto {
@@ -91,4 +97,8 @@ export class PlayRadioDto {
   @IsString()
   @IsOptional()
   channelId?: string;
+
+  @IsString()
+  @IsOptional()
+  artworkUrl?: string;
 }

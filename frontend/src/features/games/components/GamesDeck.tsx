@@ -60,7 +60,7 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
 
   if (coinsBalance === null) {
     return (
-      <div className="w-full min-h-[400px] flex flex-col items-center justify-center border border-brand-secondary/10 bg-[#101c26]/60 rounded-3xl p-12 text-center">
+      <div className="w-full min-h-[400px] flex flex-col items-center justify-center border border-brand-secondary/10 bg-[#080d14]/90 backdrop-blur-xl rounded-3xl p-12 text-center">
         <Loader2 className="w-8 h-8 text-brand-secondary animate-spin mb-4" />
         <span className="text-xs text-brand-secondary/60 uppercase tracking-widest font-semibold">Aligning Games Console...</span>
       </div>
@@ -71,7 +71,7 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
     <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
       
       {/* LEFT PANEL: ROCK-PAPER-SCISSORS ARENA (7 Columns) */}
-      <div className="lg:col-span-7 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between min-h-[500px]">
+      <div className="lg:col-span-7 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between min-h-[500px]">
         <div>
           <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
             <Gamepad2 className="w-4 h-4" />
@@ -166,7 +166,7 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
       </div>
 
       {/* RIGHT PANEL: ZEN TRIVIA SESSIONS (5 Columns) */}
-      <div className="lg:col-span-5 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between min-h-[500px]">
+      <div className="lg:col-span-5 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between min-h-[500px]">
         <div>
           <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
             <HelpCircle className="w-4 h-4" />

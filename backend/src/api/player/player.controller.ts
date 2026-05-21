@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, UseGuards, Req } from '@nestjs/common';
 import { PlayerService } from '../../domain/player/player.service';
 import { PlayDto, GuildOnlyDto, VolumeDto, RemoveDto, SeekDto, LoopDto, FilterDto, PlayRadioDto } from './player.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
@@ -64,7 +64,8 @@ export class PlayerController {
 
   @Post('seek')
   async seek(@Body() dto: SeekDto) {
-    return this.playerService.seek(dto.guildId, dto.seconds);
+    const seconds = dto.position !== undefined ? Math.floor(dto.position / 1000) : (dto.seconds || 0);
+    return this.playerService.seek(dto.guildId, seconds);
   }
 
   @Post('loop')
@@ -83,8 +84,13 @@ export class PlayerController {
   }
 
   @Get('guilds')
-  async getGuilds() {
-    return this.playerService.getGuilds();
+  async getGuilds(@Req() req: any) {
+    const authHeader = req.headers['authorization'];
+    let token: string | undefined;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+    return this.playerService.getGuilds(token);
   }
 
   @Get('recommendations')
@@ -109,14 +115,19 @@ export class PlayerController {
 
   @Get('radio/search')
   async searchRadio(
-    @Query('query') query: string,
+    @Query('query') query?: string,
     @Query('country') country?: string,
   ) {
     return this.playerService.searchRadio(query, country);
   }
 
+  @Get('live/atmospheres')
+  async getLiveAtmospheres() {
+    return this.playerService.getLiveAtmospheres();
+  }
+
   @Post('radio/play')
   async playRadio(@Body() dto: PlayRadioDto) {
-    return this.playerService.playRadio(dto.guildId, dto.streamUrl, dto.name, dto.tags, dto.channelId);
+    return this.playerService.playRadio(dto.guildId, dto.streamUrl, dto.name, dto.tags, dto.channelId, dto.artworkUrl);
   }
 }

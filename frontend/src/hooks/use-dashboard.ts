@@ -37,14 +37,19 @@ export function useDashboard() {
     }
   }, []);
 
-  const fetchGuilds = useCallback(async () => {
+  const fetchGuilds = useCallback(async (customToken?: string) => {
     const apiKey = process.env.NEXT_PUBLIC_API_KEY || "4029c9b9b5ad007d8c24a2a51b458dce46674bbbc2ce1acfed1cfcd3cad2623f";
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+    const storedToken = customToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) || token;
     try {
+      const headers: Record<string, string> = {
+        "x-api-key": apiKey
+      };
+      if (storedToken) {
+        headers["Authorization"] = `Bearer ${storedToken}`;
+      }
       const res = await fetch(`${apiUrl}/player/guilds`, {
-        headers: {
-          "x-api-key": apiKey
-        }
+        headers
       });
       if (res.ok) {
         const data = await res.json();
@@ -71,7 +76,7 @@ export function useDashboard() {
     } catch (err) {
       console.error("Error fetching guilds:", err);
     }
-  }, []);
+  }, [token]);
 
   // Trivia state
   const [trivia, setTrivia] = useState<TriviaQuestion | null>(null);
@@ -86,7 +91,7 @@ export function useDashboard() {
     } else {
       setToken(storedToken);
       setIsLoading(false);
-      fetchGuilds();
+      fetchGuilds(storedToken);
     }
   }, [router, fetchGuilds]);
 

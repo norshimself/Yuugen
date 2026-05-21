@@ -45,10 +45,10 @@ export default function DashboardPage() {
   }
 
   const navItems = [
-    { id: "music", label: "Music Deck", icon: Music },
-    { id: "economy", label: "Server Economy", icon: Coins },
-    { id: "games", label: "Guild Games", icon: Gamepad2 },
-    { id: "settings", label: "Server Settings", icon: Settings2 },
+    { id: "music", label: "Music Deck", icon: Music, disabled: false },
+    { id: "economy", label: "Server Economy", icon: Coins, disabled: true },
+    { id: "games", label: "Guild Games", icon: Gamepad2, disabled: true },
+    { id: "settings", label: "Server Settings", icon: Settings2, disabled: true },
   ] as const;
 
   // Filter guilds based on search query
@@ -63,7 +63,7 @@ export default function DashboardPage() {
       <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-brand-secondary/5 rounded-full blur-[120px] pointer-events-none" />
 
       {/* Top Navbar */}
-      <header className="w-full border-b border-white/5 bg-[#0b141d]/80 backdrop-blur-xl relative z-50">
+      <header className="w-full border-b border-white/5 bg-[#080d14]/90 backdrop-blur-xl relative z-50">
         <div className="max-w-[1600px] mx-auto px-6 h-20 flex items-center justify-between">
           
           {/* Logo Section */}
@@ -89,10 +89,15 @@ export default function DashboardPage() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
+                  onClick={() => {
+                    if (item.disabled) return;
+                    setActiveTab(item.id as any);
+                  }}
+                  disabled={item.disabled}
                   className={`
                     relative px-5 py-2.5 flex items-center gap-2.5 rounded-lg transition-all duration-300
                     ${isActive ? "text-brand-secondary bg-brand-secondary/10" : "text-white/50 hover:text-white hover:bg-white/5"}
+                    ${item.disabled ? "opacity-30 cursor-not-allowed hover:bg-transparent text-white/30 hover:text-white/30" : ""}
                   `}
                 >
                   <Icon className="w-4 h-4" />
@@ -121,7 +126,7 @@ export default function DashboardPage() {
                     setIsDropdownOpen(!isDropdownOpen);
                     setSearchQuery("");
                   }}
-                  className="flex items-center gap-3 px-4 py-2 bg-[#101c26]/60 border border-brand-secondary/10 hover:border-brand-secondary/35 rounded-xl transition duration-250 select-none text-left"
+                  className="flex items-center gap-3 px-4 py-2 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 hover:border-brand-secondary/35 rounded-xl transition duration-250 select-none text-left"
                 >
                   {/* Server Avatar Custom Circle */}
                   <div className="w-6 h-6 rounded-lg bg-brand-primary/10 border border-brand-primary/30 flex items-center justify-center text-brand-secondary text-[10px] font-bold uppercase overflow-hidden">
@@ -154,7 +159,7 @@ export default function DashboardPage() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-2 w-72 bg-[#0b141d] border border-brand-secondary/15 rounded-2xl p-4 shadow-xl z-50"
+                      className="absolute right-0 top-full mt-2 w-72 bg-[#080d14]/95 backdrop-blur-2xl border border-brand-secondary/20 rounded-2xl p-4 shadow-xl z-50"
                     >
                       {/* Search input field */}
                       <div className="relative mb-3">
@@ -246,8 +251,12 @@ export default function DashboardPage() {
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id as any)}
-                  className={`flex flex-col items-center gap-1.5 p-2 ${isActive ? "text-brand-secondary" : "text-white/50"}`}
+                  onClick={() => {
+                    if (item.disabled) return;
+                    setActiveTab(item.id as any);
+                  }}
+                  disabled={item.disabled}
+                  className={`flex flex-col items-center gap-1.5 p-2 transition-all duration-300 ${isActive ? "text-brand-secondary" : "text-white/50"} ${item.disabled ? "opacity-30 cursor-not-allowed" : ""}`}
                 >
                   <Icon className="w-5 h-5" />
                   <span className="text-[9px] font-bold tracking-widest uppercase">{item.label.split(' ')[1]}</span>

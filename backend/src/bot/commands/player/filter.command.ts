@@ -18,6 +18,8 @@ class FilterOptions {
       { name: 'Tremolo', value: 'tremolo' },
       { name: 'Vibrato', value: 'vibrato' },
       { name: 'Low Pass (Muffled)', value: 'lowpass' },
+      { name: 'Bass Boost (High-Impact EQ)', value: 'bassboost' },
+      { name: 'Space Reverb (Environmental)', value: 'reverb' },
       { name: 'Clear All Filters', value: 'clear' },
     ],
   })
@@ -64,8 +66,24 @@ export class FilterCommand {
       case 'lowpass':
         await player.filterManager.toggleLowPass();
         break;
+      case 'bassboost': {
+        const isEqActive = player.filterManager.equalizerBands && player.filterManager.equalizerBands.length > 0 && player.filterManager.equalizerBands.some(band => band.gain !== 0);
+        if (isEqActive) {
+          await player.filterManager.clearEQ();
+        } else {
+          await player.filterManager.setEQPreset('BassboostHigh');
+        }
+        break;
+      }
+      case 'reverb':
+        await player.filterManager.lavalinkFilterPlugin.toggleReverb();
+        break;
       case 'clear':
         await player.filterManager.resetFilters();
+        await player.filterManager.clearEQ();
+        if (player.filterManager.filters.lavalinkFilterPlugin?.reverb) {
+          await player.filterManager.lavalinkFilterPlugin.toggleReverb();
+        }
         break;
     }
 

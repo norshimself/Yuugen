@@ -31,7 +31,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
 
   if (isLoading || !profile) {
     return (
-      <div className="w-full min-h-[400px] flex flex-col items-center justify-center border border-brand-secondary/10 bg-[#101c26]/60 rounded-3xl p-12 text-center">
+      <div className="w-full min-h-[400px] flex flex-col items-center justify-center border border-brand-secondary/10 bg-[#080d14]/90 backdrop-blur-xl rounded-3xl p-12 text-center">
         <Loader2 className="w-8 h-8 text-brand-secondary animate-spin mb-4" />
         <span className="text-xs text-brand-secondary/60 uppercase tracking-widest font-semibold">Tuning Wallet Connection...</span>
       </div>
@@ -56,7 +56,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         
         {/* Level and XP */}
-        <div className="bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-brand-secondary">
             <span className="text-[10px] font-bold tracking-widest uppercase">Guild Level</span>
             <Shield className="w-4 h-4 text-brand-secondary" />
@@ -77,7 +77,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         </div>
 
         {/* Wallet Balance */}
-        <div className="bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-brand-secondary">
             <span className="text-[10px] font-bold tracking-widest uppercase">Wallet Cash</span>
             <Coins className="w-4 h-4 text-brand-secondary" />
@@ -92,7 +92,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         </div>
 
         {/* Bank Savings */}
-        <div className="bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-brand-secondary">
             <span className="text-[10px] font-bold tracking-widest uppercase">Bank Deposits</span>
             <Coins className="w-4 h-4 opacity-50" />
@@ -107,7 +107,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         </div>
 
         {/* Total Net Worth */}
-        <div className="bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-brand-secondary">
             <span className="text-[10px] font-bold tracking-widest uppercase">Net Worth</span>
             <Award className="w-4 h-4 text-brand-secondary" />
@@ -153,7 +153,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         
         {/* Core Actions Grid */}
-        <div className="lg:col-span-7 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="lg:col-span-7 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
               <Briefcase className="w-4 h-4" />
@@ -215,7 +215,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         </div>
 
         {/* Gamble Station */}
-        <div className="lg:col-span-5 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
               <Star className="w-4 h-4" />
@@ -282,7 +282,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
         
         {/* Virtual Shop Grid */}
-        <div className="lg:col-span-7 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl">
+        <div className="lg:col-span-7 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl">
           <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
             <ShoppingBag className="w-4 h-4" />
             <span>Virtual Server Shop</span>
@@ -332,7 +332,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         </div>
 
         {/* Global wealth ranking leaderboard */}
-        <div className="lg:col-span-5 bg-[#101c26]/60 border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
+        <div className="lg:col-span-5 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div>
             <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
               <Trophy className="w-4 h-4" />

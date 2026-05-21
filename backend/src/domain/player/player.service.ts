@@ -1,17 +1,181 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { LavalinkManager } from 'lavalink-client';
 import { Client } from 'discord.js';
 import { PlayerGateway } from '../../api/player/player.gateway';
+import * as http from 'http';
+import * as https from 'https';
+import { parse as parseUrl } from 'url';
+
+export async function getIcyMetadata(streamUrl: string): Promise<{ title?: string; artist?: string } | null> {
+  return new Promise((resolve) => {
+    try {
+      const parsed = parseUrl(streamUrl);
+      const isHttps = parsed.protocol === 'https:';
+      const lib = isHttps ? https : http;
+      
+      const req = lib.get(streamUrl, {
+        headers: {
+          'Icy-MetaData': '1',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        },
+        timeout: 4000
+      }, (res) => {
+        const metaintStr = res.headers['icy-metaint'];
+        const icyName = res.headers['icy-name'] as string;
+        
+        if (!metaintStr) {
+          req.destroy();
+          resolve(icyName ? { title: icyName } : null);
+          return;
+        }
+        
+        const metaint = parseInt(metaintStr as string, 10);
+        if (isNaN(metaint) || metaint <= 0) {
+          req.destroy();
+          resolve(icyName ? { title: icyName } : null);
+          return;
+        }
+        
+        let bytesRead = 0;
+        let metaBuffer = Buffer.alloc(0);
+        let metaLength = -1;
+        
+        res.on('data', (chunk: Buffer) => {
+          try {
+            let offset = 0;
+            while (offset < chunk.length) {
+              if (metaLength === -1) {
+                const needed = metaint - bytesRead;
+                const available = chunk.length - offset;
+                
+                if (available < needed) {
+                  bytesRead += available;
+                  break;
+                } else {
+                  offset += needed;
+                  bytesRead = 0;
+                  metaLength = chunk[offset] * 16;
+                  offset += 1;
+                }
+              } else {
+                const available = chunk.length - offset;
+                const needed = metaLength - metaBuffer.length;
+                
+                if (available < needed) {
+                  metaBuffer = Buffer.concat([metaBuffer, chunk.subarray(offset)]);
+                  break;
+                } else {
+                  metaBuffer = Buffer.concat([metaBuffer, chunk.subarray(offset, offset + needed)]);
+                  offset += needed;
+                  
+                  const metaString = metaBuffer.toString('utf8');
+                  req.destroy();
+                  
+                  const match = metaString.match(/StreamTitle='([^']*)'/);
+                  if (match && match[1]) {
+                    const fullTitle = match[1];
+                    const parts = fullTitle.split(' - ');
+                    if (parts.length >= 2) {
+                      resolve({
+                        title: parts.slice(1).join(' - ').trim(),
+                        artist: parts[0].trim()
+                      });
+                    } else {
+                      resolve({
+                        title: fullTitle.trim()
+                      });
+                    }
+                  } else {
+                    resolve(icyName ? { title: icyName } : null);
+                  }
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            req.destroy();
+            resolve(null);
+          }
+        });
+      });
+      
+      req.on('error', () => {
+        resolve(null);
+      });
+      
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(null);
+      });
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
 
 @Injectable()
 export class PlayerService {
+  private radioPollInterval: NodeJS.Timeout | null = null;
+  private radioMetadataMap = new Map<string, { title: string; artist: string; streamUrl: string }>();
+
   constructor(
     private readonly lavalinkManager: LavalinkManager,
     private readonly client: Client,
     @Inject(forwardRef(() => PlayerGateway))
     private readonly playerGateway: PlayerGateway,
+    private readonly jwtService: JwtService,
   ) {
     this.setupLavalinkListeners();
+  }
+
+  private startRadioPoller() {
+    if (this.radioPollInterval) return;
+    
+    this.radioPollInterval = setInterval(async () => {
+      if (this.radioMetadataMap.size === 0) {
+        this.stopRadioPoller();
+        return;
+      }
+      
+      for (const [guildId, info] of this.radioMetadataMap.entries()) {
+        const player = this.lavalinkManager.players.get(guildId);
+        if (!player || !player.playing) {
+          this.radioMetadataMap.delete(guildId);
+          continue;
+        }
+        
+        try {
+          const meta = await getIcyMetadata(info.streamUrl);
+          if (meta && (meta.title || meta.artist)) {
+            const currentMeta = this.radioMetadataMap.get(guildId);
+            if (currentMeta) {
+              const newTitle = meta.title || currentMeta.title;
+              const newArtist = meta.artist || currentMeta.artist;
+              
+              if (currentMeta.title !== newTitle || currentMeta.artist !== newArtist) {
+                this.radioMetadataMap.set(guildId, {
+                  title: newTitle,
+                  artist: newArtist,
+                  streamUrl: info.streamUrl
+                });
+                
+                this.broadcastUpdate(guildId);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn(`Failed to poll radio metadata for guild ${guildId}:`, err);
+        }
+      }
+    }, 12000); // Check every 12 seconds
+  }
+
+  private stopRadioPoller() {
+    if (this.radioPollInterval) {
+      clearInterval(this.radioPollInterval);
+      this.radioPollInterval = null;
+    }
   }
 
   private setupLavalinkListeners() {
@@ -31,11 +195,17 @@ export class PlayerService {
         isConnected: current.success && (current as any).connected,
         voiceChannelId: current.success ? (current as any).voiceChannelId : null,
         isPlaying: current.success && current.playing,
+        activeFilter: current.success ? (current as any).activeFilter : 'clear',
+        bassBoost: current.success ? (current as any).bassBoost : false,
+        reverb: current.success ? (current as any).reverb : false,
         currentTrack: (current.success && current.playing && current.track) ? {
           title: current.track.title,
           uri: current.track.uri,
           duration: current.track.duration,
-          artist: "Discord Voice Stream"
+          position: current.track.position || 0,
+          artist: current.track.author || "Discord Voice Stream",
+          isStream: current.track.isStream || false,
+          artworkUrl: current.track.artworkUrl
         } : null,
         serverQueue: (queue.success && queue.tracks) ? queue.tracks : []
       });
@@ -45,6 +215,11 @@ export class PlayerService {
   }
 
   async play(guildId: string, query: string, channelId?: string) {
+    this.radioMetadataMap.delete(guildId);
+    if (this.radioMetadataMap.size === 0) {
+      this.stopRadioPoller();
+    }
+    
     let player = this.lavalinkManager.players.get(guildId);
 
     if (!player) {
@@ -57,6 +232,22 @@ export class PlayerService {
         textChannelId: '', // Optional for API
         selfDeaf: true,
       });
+    } else if (channelId) {
+      const currentChannelId = player.voiceChannelId || player.options.voiceChannelId;
+      if (currentChannelId !== channelId) {
+        if (player.connected) {
+          try {
+            await player.changeVoiceState({ voiceChannelId: channelId });
+          } catch (err) {
+            console.warn(`Failed to change voice state, fallback to reconnect:`, err);
+            player.options.voiceChannelId = channelId;
+            await player.connect();
+          }
+        } else {
+          player.options.voiceChannelId = channelId;
+          await player.connect();
+        }
+      }
     }
 
     if (!player.connected) {
@@ -100,6 +291,22 @@ export class PlayerService {
         textChannelId: '', 
         selfDeaf: true,
       });
+    } else {
+      const currentChannelId = player.voiceChannelId || player.options.voiceChannelId;
+      if (currentChannelId !== channelId) {
+        if (player.connected) {
+          try {
+            await player.changeVoiceState({ voiceChannelId: channelId });
+          } catch (err) {
+            console.warn(`Failed to change voice state, fallback to reconnect:`, err);
+            player.options.voiceChannelId = channelId;
+            await player.connect();
+          }
+        } else {
+          player.options.voiceChannelId = channelId;
+          await player.connect();
+        }
+      }
     }
 
     if (!player.connected) {
@@ -130,6 +337,11 @@ export class PlayerService {
   }
 
   async skip(guildId: string) {
+    this.radioMetadataMap.delete(guildId);
+    if (this.radioMetadataMap.size === 0) {
+      this.stopRadioPoller();
+    }
+    
     const player = this.lavalinkManager.players.get(guildId);
     if (!player) return { success: false, message: 'No player found.' };
     
@@ -139,6 +351,11 @@ export class PlayerService {
   }
 
   async stop(guildId: string) {
+    this.radioMetadataMap.delete(guildId);
+    if (this.radioMetadataMap.size === 0) {
+      this.stopRadioPoller();
+    }
+    
     const player = this.lavalinkManager.players.get(guildId);
     if (!player) return { success: false, message: 'No player found.' };
     
@@ -165,12 +382,18 @@ export class PlayerService {
       current: player.queue.current ? {
         title: player.queue.current.info.title,
         uri: player.queue.current.info.uri,
-        duration: player.queue.current.info.duration
+        duration: player.queue.current.info.duration,
+        artworkUrl: player.queue.current.info.artworkUrl,
+        artist: player.queue.current.info.author,
+        isStream: player.queue.current.info.isStream
       } : null,
       tracks: player.queue.tracks.map(t => ({
         title: t.info.title,
         uri: t.info.uri,
-        duration: t.info.duration
+        duration: t.info.duration,
+        artworkUrl: t.info.artworkUrl,
+        artist: t.info.author,
+        isStream: t.info.isStream
       }))
     };
   }
@@ -246,7 +469,27 @@ export class PlayerService {
       case 'tremolo': await player.filterManager.toggleTremolo(); break;
       case 'vibrato': await player.filterManager.toggleVibrato(); break;
       case 'lowpass': await player.filterManager.toggleLowPass(); break;
-      case 'clear': await player.filterManager.resetFilters(); break;
+      case 'bassboost': {
+        const isEqActive = player.filterManager.equalizerBands && player.filterManager.equalizerBands.length > 0 && player.filterManager.equalizerBands.some(band => band.gain !== 0);
+        if (isEqActive) {
+          await player.filterManager.clearEQ();
+        } else {
+          await player.filterManager.setEQPreset('BassboostHigh');
+        }
+        break;
+      }
+      case 'reverb': {
+        await player.filterManager.lavalinkFilterPlugin.toggleReverb();
+        break;
+      }
+      case 'clear': {
+        await player.filterManager.resetFilters();
+        await player.filterManager.clearEQ();
+        if (player.filterManager.filters.lavalinkFilterPlugin?.reverb) {
+          await player.filterManager.lavalinkFilterPlugin.toggleReverb();
+        }
+        break;
+      }
       default: return { success: false, message: 'Invalid filter type.' };
     }
     
@@ -258,36 +501,89 @@ export class PlayerService {
     const player = this.lavalinkManager.players.get(guildId);
     if (!player) return { success: false, message: 'No player found.', connected: false };
     
+    const filters = player.filterManager?.filters;
+    const activeFilter = filters?.nightcore ? 'nightcore' :
+                         filters?.vaporwave ? 'vaporwave' :
+                         filters?.rotation ? '8d' :
+                         filters?.karaoke ? 'karaoke' :
+                         filters?.tremolo ? 'tremolo' :
+                         filters?.vibrato ? 'vibrato' :
+                         filters?.lowPass ? 'lowpass' : 'clear';
+    const bassBoost = !!(player.filterManager?.equalizerBands && player.filterManager.equalizerBands.length > 0 && player.filterManager.equalizerBands.some(band => band.gain !== 0));
+    const reverb = !!player.filterManager?.filters?.lavalinkFilterPlugin?.reverb;
+
     const current = player.queue.current;
-    if (!current) return { success: true, playing: false, connected: player.connected, voiceChannelId: player.voiceChannelId };
+    if (!current) return { success: true, playing: false, connected: player.connected, voiceChannelId: player.voiceChannelId, activeFilter, bassBoost, reverb };
     
+    const radioMeta = this.radioMetadataMap.get(guildId);
+
     return {
       success: true,
       playing: true,
       connected: player.connected,
       voiceChannelId: player.voiceChannelId,
+      activeFilter,
+      bassBoost,
+      reverb,
       track: {
-        title: current.info.title,
+        title: radioMeta ? radioMeta.title : current.info.title,
         uri: current.info.uri,
         duration: current.info.duration,
         position: player.position,
-        artworkUrl: current.info.artworkUrl
+        artworkUrl: current.info.artworkUrl,
+        author: radioMeta ? radioMeta.artist : current.info.author,
+        isStream: current.info.isStream
       }
     };
   }
 
-  async getGuilds() {
+  async getGuilds(token?: string) {
+    let userId: string | null = null;
+    if (token) {
+      try {
+        const payload = await this.jwtService.verifyAsync(token);
+        userId = payload.userId;
+      } catch (err) {
+        console.warn('Invalid JWT token supplied to getGuilds:', err);
+      }
+    }
+
     try {
-      if (this.client && this.client.guilds && this.client.guilds.cache) {
-        const clientGuilds = this.client.guilds.cache.map(g => ({
-          id: g.id,
-          name: g.name,
-          memberCount: g.memberCount,
-          isActive: true,
-          iconURL: g.iconURL() || null
-        }));
-        
-        if (clientGuilds.length > 0) {
+      if (this.client && this.client.guilds && this.client.guilds.cache && this.client.guilds.cache.size > 0) {
+        if (userId && !userId.startsWith('demo_user')) {
+          const promises = this.client.guilds.cache.map(async (guild) => {
+            if (guild.members.cache.has(userId)) {
+              return { guild, isMember: true };
+            }
+            try {
+              const member = await guild.members.fetch(userId).catch(() => null);
+              return { guild, isMember: !!member };
+            } catch (err) {
+              return { guild, isMember: false };
+            }
+          });
+
+          const results = await Promise.all(promises);
+          const clientGuilds = results
+            .filter(r => r.isMember)
+            .map(r => ({
+              id: r.guild.id,
+              name: r.guild.name,
+              memberCount: r.guild.memberCount,
+              isActive: true,
+              iconURL: r.guild.iconURL() || null
+            }));
+
+          return clientGuilds;
+        } else {
+          // Demo user or unauthenticated request: return all bot guilds
+          const clientGuilds = this.client.guilds.cache.map(g => ({
+            id: g.id,
+            name: g.name,
+            memberCount: g.memberCount,
+            isActive: true,
+            iconURL: g.iconURL() || null
+          }));
           return clientGuilds;
         }
       }
@@ -426,11 +722,19 @@ export class PlayerService {
     }
   }
 
-  async searchRadio(query: string, country?: string) {
+  async searchRadio(query?: string, country?: string) {
     try {
-      let url = `https://de1.api.radio-browser.info/json/stations/search?name=${encodeURIComponent(query)}&limit=15&order=votes`;
-      if (country) {
-        url += `&country=${encodeURIComponent(country)}`;
+      let url = '';
+      if (!query && !country) {
+        url = 'https://de1.api.radio-browser.info/json/stations/topclick/15';
+      } else {
+        url = `https://de1.api.radio-browser.info/json/stations/search?limit=15&order=votes`;
+        if (query) {
+          url += `&name=${encodeURIComponent(query)}`;
+        }
+        if (country) {
+          url += `&country=${encodeURIComponent(country)}`;
+        }
       }
       const response = await fetch(url);
       const stations = (await response.json()) as any[];
@@ -452,7 +756,66 @@ export class PlayerService {
     }
   }
 
-  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string) {
+  async getLiveAtmospheres() {
+    const categories = [
+      { query: "Tokyo Rain Cafe Live 24/7", type: "Rainy Cafe", defaultDesc: "Gentle rain tap against a Tokyo coffee shop." },
+      { query: "Ghibli Orchestral Live 24/7", type: "Orchestra / Ghibli", defaultDesc: "Warm orchestral symphonies of Ghibli films." },
+      { query: "Deep Forest Rain Live 24/7", type: "Nature Ambience", defaultDesc: "Quiet night sounds of nature and light breeze." },
+      { query: "Cyberpunk Synth Ambient 24/7", type: "Cyberpunk / Sci-Fi", defaultDesc: "Gritty synthesizers and holographic whispers." },
+      { query: "Relaxing Ocean Waves Live 24/7", type: "Relax / Sleep", defaultDesc: "Crashing waves of pristine shorelines." }
+    ];
+
+    try {
+      const node = this.lavalinkManager.nodeManager.nodes.get('main_node');
+      if (node) {
+        const promises = categories.map(async (cat) => {
+          try {
+            const result = await node.search(
+              { query: `ytsearch:${cat.query}` },
+              { id: 'api', username: 'API' } as any
+            ) as any;
+            if (result && result.tracks && result.tracks.length > 0) {
+              const t = result.tracks[0];
+              return {
+                title: t.info.title,
+                uri: t.info.uri,
+                duration: t.info.duration,
+                author: t.info.author || "YouTube Live",
+                type: cat.type,
+                desc: cat.defaultDesc
+              };
+            }
+          } catch (err) {
+            console.warn(`Failed to search atmosphere for ${cat.query}:`, err);
+          }
+          return null;
+        });
+
+        const results = await Promise.all(promises);
+        const tracks = results.filter(t => t !== null);
+        if (tracks.length > 0) {
+          return { success: true, tracks };
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch live atmospheres:", err);
+    }
+
+    // Fallback to static info if main_node is offline/failing
+    return {
+      success: true,
+      tracks: categories.map(cat => ({
+        title: cat.query.replace(" 24/7", ""),
+        uri: cat.query,
+        duration: 0,
+        author: "YouTube Atmosphere",
+        type: cat.type,
+        desc: cat.defaultDesc
+      }))
+    };
+  }
+
+  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string, artworkUrl?: string) {
     let player = this.lavalinkManager.players.get(guildId);
 
     if (!player) {
@@ -465,6 +828,22 @@ export class PlayerService {
         textChannelId: '',
         selfDeaf: true,
       });
+    } else if (channelId) {
+      const currentChannelId = player.voiceChannelId || player.options.voiceChannelId;
+      if (currentChannelId !== channelId) {
+        if (player.connected) {
+          try {
+            await player.changeVoiceState({ voiceChannelId: channelId });
+          } catch (err) {
+            console.warn(`Failed to change voice state, fallback to reconnect:`, err);
+            player.options.voiceChannelId = channelId;
+            await player.connect();
+          }
+        } else {
+          player.options.voiceChannelId = channelId;
+          await player.connect();
+        }
+      }
     }
 
     if (!player.connected) {
@@ -481,6 +860,12 @@ export class PlayerService {
     track.info.title = name;
     track.info.author = tags || 'Radio Stream';
     track.info.isStream = true;
+    if (artworkUrl) {
+      track.info.artworkUrl = artworkUrl;
+    }
+
+    this.radioMetadataMap.set(guildId, { title: name, artist: tags || 'Radio Stream', streamUrl });
+    this.startRadioPoller();
 
     player.queue.add(track);
 

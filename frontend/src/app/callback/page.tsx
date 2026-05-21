@@ -44,7 +44,7 @@ function CallbackHandler() {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6 }}
-        className="w-full max-w-md p-10 rounded-[2.5rem] bg-[#101c26]/40 border border-brand-secondary/15 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center relative z-10"
+        className="w-full max-w-md p-10 rounded-[2.5rem] bg-[#080d14]/90 border border-brand-secondary/15 shadow-2xl backdrop-blur-xl flex flex-col items-center text-center relative z-10"
       >
         {/* Brand Logo with spin animation */}
         <div className="relative mb-8">

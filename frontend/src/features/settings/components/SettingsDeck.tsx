@@ -163,7 +163,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
           variants={cardVariants}
           initial="hidden"
           animate="visible"
-          className="p-8 rounded-[2rem] bg-[#101c26]/40 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
+          className="p-8 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center gap-3.5 mb-6 border-b border-brand-secondary/10 pb-4">
@@ -205,7 +205,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
           variants={cardVariants}
           initial="hidden"
           animate="visible"
-          className="p-8 rounded-[2rem] bg-[#101c26]/40 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
+          className="p-8 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center gap-3.5 mb-6 border-b border-brand-secondary/10 pb-4">
@@ -231,9 +231,9 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
                   {...register('welcomeChannelId')}
                   className="w-full px-4 py-3 bg-[#04080c]/50 border border-brand-secondary/15 rounded-xl text-white font-sans text-sm focus:outline-none focus:border-brand-primary focus:ring-1 focus:ring-brand-primary/50 transition-all cursor-pointer"
                 >
-                  <option value="" className="bg-[#101c26]">Disabled / Secret Garden Only</option>
+                  <option value="" className="bg-[#080d14]">Disabled / Secret Garden Only</option>
                   {channels.map((chan) => (
-                    <option key={chan.id} value={chan.id} className="bg-[#101c26]">
+                    <option key={chan.id} value={chan.id} className="bg-[#080d14]">
                       #{chan.name}
                     </option>
                   ))}
@@ -273,7 +273,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
           variants={cardVariants}
           initial="hidden"
           animate="visible"
-          className="p-8 rounded-[2rem] bg-[#101c26]/40 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
+          className="p-8 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/15 backdrop-blur-xl relative overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center gap-3.5 mb-6 border-b border-brand-secondary/10 pb-4">
@@ -410,7 +410,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
           variants={cardVariants}
           initial="hidden"
           animate="visible"
-          className="p-6 rounded-[2rem] bg-[#101c26]/60 border border-brand-secondary/20 shadow-2xl backdrop-blur-xl relative overflow-hidden flex flex-col gap-6"
+          className="p-6 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/20 shadow-2xl backdrop-blur-xl relative overflow-hidden flex flex-col gap-6"
         >
           <div className="flex items-center gap-2 text-brand-primary">
             <Info className="w-4 h-4 text-brand-primary" />
@@ -429,7 +429,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
               {/* Simulated Discord User Avatar */}
               <div className="relative">
                 <div className="absolute inset-0 rounded-full bg-brand-secondary/20 blur-[10px]" />
-                <div className="w-16 h-16 rounded-full border-2 border-brand-secondary/40 overflow-hidden relative shadow-lg bg-[#101c26]">
+                <div className="w-16 h-16 rounded-full border-2 border-brand-secondary/40 overflow-hidden relative shadow-lg bg-[#080d14]">
                   <div className="absolute inset-0 bg-[#c9b09a]/25 flex items-center justify-center font-serif text-brand-secondary font-bold text-lg select-none">
                     K
                   </div>
@@ -465,7 +465,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
           variants={cardVariants}
           initial="hidden"
           animate="visible"
-          className="p-6 rounded-[2rem] bg-[#101c26]/60 border border-brand-secondary/20 shadow-2xl backdrop-blur-xl flex flex-col gap-6"
+          className="p-6 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/20 shadow-2xl backdrop-blur-xl flex flex-col gap-6"
         >
           {/* Status Messages */}
           <AnimatePresence>

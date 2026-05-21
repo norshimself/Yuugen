@@ -33,11 +33,8 @@ export const musicService = {
     );
   },
 
-  /**
-   * Fetch current playing track detail
-   */
-  async getNowPlaying(guildId: string): Promise<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; track?: any }> {
-    return apiClient<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; track?: any }>(
+  async getNowPlaying(guildId: string): Promise<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; activeFilter?: string; bassBoost?: boolean; reverb?: boolean; track?: any }> {
+    return apiClient<{ success: boolean; playing: boolean; connected?: boolean; voiceChannelId?: string | null; activeFilter?: string; bassBoost?: boolean; reverb?: boolean; track?: any }>(
       `/player/nowplaying?guildId=${guildId}`,
       { method: "GET" }
     );
@@ -91,9 +88,19 @@ export const musicService = {
   },
 
   /**
+   * Fetch popular live atmospheres/streams
+   */
+  async getLiveAtmospheres(): Promise<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string; type?: string; desc?: string }[] }> {
+    return apiClient<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string; type?: string; desc?: string }[] }>(
+      "/player/live/atmospheres",
+      { method: "GET" }
+    );
+  },
+
+  /**
    * Play a specific radio station
    */
-  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string): Promise<any> {
+  async playRadio(guildId: string, streamUrl: string, name: string, tags?: string, channelId?: string, artworkUrl?: string): Promise<any> {
     return apiClient<any>("/player/radio/play", {
       method: "POST",
       bodyData: {
@@ -101,7 +108,8 @@ export const musicService = {
         streamUrl,
         name,
         tags,
-        channelId
+        channelId,
+        artworkUrl
       }
     });
   },

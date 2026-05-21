@@ -1,7 +1,7 @@
 // src/features/music/components/MusicDeck.tsx
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Pause, SkipForward, Volume2,
@@ -9,6 +9,53 @@ import {
 } from "lucide-react";
 import { usePlayer } from "../hooks/usePlayer";
 import { musicService } from "../services/musicService";
+
+const getTrackThumbnail = (track: any): string | null => {
+  if (!track) return null;
+  if (track.artworkUrl) return track.artworkUrl;
+  if (track.uri) {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = track.uri.match(regExp);
+    if (match && match[2].length === 11) {
+      const videoId = match[2];
+      return `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`;
+    }
+  }
+  return null;
+};
+
+interface MarqueeTextProps {
+  text: string;
+  className?: string;
+}
+
+function MarqueeText({ text, className }: MarqueeTextProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLSpanElement>(null);
+  const [shouldMarquee, setShouldMarquee] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const textEl = textRef.current;
+    if (container && textEl) {
+      setShouldMarquee(textEl.scrollWidth > container.clientWidth);
+    }
+  }, [text]);
+
+  return (
+    <div ref={containerRef} className="overflow-hidden w-full relative whitespace-nowrap">
+      {shouldMarquee ? (
+        <div className="flex gap-8 animate-marquee w-max hover:[animation-play-state:paused] cursor-default">
+          <span ref={textRef} className={className}>{text}</span>
+          <span className={className}>{text}</span>
+        </div>
+      ) : (
+        <span ref={textRef} className={`${className} block truncate`}>{text}</span>
+      )}
+    </div>
+  );
+}
+
 
 const RADIO_STATIONS = [
   { title: "Lofi Girl 24/7 Chill Beats", query: "https://www.youtube.com/watch?v=jfKfPfyJRdk", genre: "Lofi / Study", desc: "The legendary Study Beats live radio." },
@@ -18,13 +65,9 @@ const RADIO_STATIONS = [
   { title: "Classic Rock Radio Stream", query: "Classic Rock Live Stream", genre: "Rock / Nostalgia", desc: "Greatest hits of classic rock history." },
 ];
 
-const LIVE_ATMOSPHERES = [
-  { title: "Tokyo Rain Cafe Lounge", query: "Tokyo Rain Cafe Live", type: "Rainy Cafe", desc: "Gentle rain tap against a Tokyo coffee shop." },
-  { title: "Ghibli Orchestral Orchestra", query: "Ghibli Orchestral Live", type: "Orchestra / Ghibli", desc: "Warm orchestral symphonies of Ghibli films." },
-  { title: "Deep Forest Night rain", query: "Deep Forest Rain Live", type: "Nature Ambience", desc: "Quiet night sounds of nature and light breeze." },
-  { title: "Cyberpunk Ambient 24/7", query: "Cyberpunk Synth Ambient 24/7", type: "Cyberpunk / Sci-Fi", desc: "Gritty synthesizers and holographic whispers." },
-  { title: "Relaxing Ocean Waves Live", query: "Relaxing Ocean Waves Live", type: "Relax / Sleep", desc: "Crashing waves of pristine shorelines." }
-];
+
+
+
 
 interface MusicDeckProps {
   selectedGuild?: {
@@ -45,6 +88,9 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     toggleMute,
     applyFilter,
     setLoopMode,
+    bassBoost,
+    reverb,
+    activeFilter,
     serverQueue,
     currentTrack,
     visualizerBars,
@@ -52,6 +98,12 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     setActiveRecTag,
     recommendations,
     isRecLoading,
+    isPlaybackLoading,
+    isActionPending,
+    positionMs,
+    isFavorited,
+    seekTrack,
+    toggleFavoriteTrack,
     playTrack,
     playRadio,
     skipTrack,
@@ -73,7 +125,11 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   const [isSearching, setIsSearching] = useState(false);
   const [discoverTab, setDiscoverTab] = useState<"recommendations" | "radio" | "live">("recommendations");
   const [radioSearchResults, setRadioSearchResults] = useState<{ name: string; url: string; homepage?: string; country?: string; tags?: string; favicon?: string }[]>([]);
+  const [recommendedRadioStations, setRecommendedRadioStations] = useState<{ name: string; url: string; homepage?: string; country?: string; tags?: string; favicon?: string }[]>([]);
+  const [isRecommendedRadioLoading, setIsRecommendedRadioLoading] = useState(false);
   const [liveSearchResults, setLiveSearchResults] = useState<{ title: string; uri: string; duration: number; author: string }[]>([]);
+  const [recommendedLiveAtmospheres, setRecommendedLiveAtmospheres] = useState<{ title: string; uri: string; duration: number; author: string; type?: string; desc?: string }[]>([]);
+  const [isRecommendedLiveLoading, setIsRecommendedLiveLoading] = useState(false);
   
   // Voice Channels Dropdown State
   const [channels, setChannels] = useState<{ id: string; name: string }[]>([]);
@@ -89,13 +145,14 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   const [isCountriesLoading, setIsCountriesLoading] = useState(false);
 
   // Audio Engine State
-  const [activeFilter, setActiveFilter] = useState("clear");
   const [loopModeState, setLoopModeState] = useState<"off" | "track" | "queue">("off");
   const [isAudioEngineOpen, setIsAudioEngineOpen] = useState(false);
 
   // Mobile Sidebar Toggle States
   const [isLeftPaneOpen, setIsLeftPaneOpen] = useState(false);
   const [isRightPaneOpen, setIsRightPaneOpen] = useState(false);
+
+
 
   // Helper to format track durations in milliseconds to MM:SS
   const formatDuration = useCallback((ms: number) => {
@@ -123,6 +180,34 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   }, []);
 
   const currentGradient = getGhibliGradient(currentTrack?.title);
+
+  // 1. Radio Station: Exclusive to actual Web FM/AM/Internet Radio audio streams
+  const isIcecastRadio = !!currentTrack && (
+    // Must be an active live stream
+    currentTrack.isStream === true &&
+    // Must NOT be a YouTube video or stream (YouTube streams are live video feeds, not FM/web radio stations)
+    !currentTrack.uri?.toLowerCase().includes("youtube") &&
+    !currentTrack.uri?.toLowerCase().includes("youtu.be")
+  );
+
+  // 2. Live Stream / Atmosphere: Exclusive to YouTube live streams or ambient video broadcasts
+  const isLiveStream = !!currentTrack && !isIcecastRadio && (
+    // Explicitly played as a YouTube live stream
+    (currentTrack.isStream === true && (
+      currentTrack.uri?.toLowerCase().includes("youtube") || 
+      currentTrack.uri?.toLowerCase().includes("youtu.be")
+    )) ||
+    // Played from the live/atmosphere tab (recognized by specific author tags/types)
+    currentTrack.artist === "Live Atmosphere" ||
+    ["Rainy Cafe", "Orchestra / Ghibli", "Nature Ambience", "Cyberpunk / Sci-Fi", "Relax / Sleep"].includes(currentTrack.artist || "") ||
+    // Explicitly labeled live streams
+    currentTrack.title?.toLowerCase().includes("24/7 live") ||
+    currentTrack.title?.toLowerCase().includes("live stream") ||
+    (currentTrack.title?.toLowerCase().includes("live") && 
+     (currentTrack.title?.toLowerCase().includes("ambience") || 
+      currentTrack.title?.toLowerCase().includes("atmosphere") || 
+      currentTrack.title?.toLowerCase().includes("24/7")))
+  );
 
   const fetchChannels = useCallback(async () => {
     if (!selectedGuild) return;
@@ -165,6 +250,46 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     fetchCountries();
   }, [fetchCountries]);
 
+  const fetchRecommendedRadio = useCallback(async () => {
+    setIsRecommendedRadioLoading(true);
+    try {
+      const res = await musicService.searchRadio("");
+      if (res.success && res.stations) {
+        setRecommendedRadioStations(res.stations);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch recommended radio stations:", err);
+    } finally {
+      setIsRecommendedRadioLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (discoverTab === "radio" && recommendedRadioStations.length === 0) {
+      fetchRecommendedRadio();
+    }
+  }, [discoverTab, recommendedRadioStations.length, fetchRecommendedRadio]);
+
+  const fetchRecommendedLive = useCallback(async () => {
+    setIsRecommendedLiveLoading(true);
+    try {
+      const res = await musicService.getLiveAtmospheres();
+      if (res.success && res.tracks) {
+        setRecommendedLiveAtmospheres(res.tracks);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch recommended live atmospheres:", err);
+    } finally {
+      setIsRecommendedLiveLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (discoverTab === "live" && recommendedLiveAtmospheres.length === 0) {
+      fetchRecommendedLive();
+    }
+  }, [discoverTab, recommendedLiveAtmospheres.length, fetchRecommendedLive]);
+
   const selectedChannelName = channels.find(c => c.id === voiceChannelId)?.name || "Select Channel...";
   const filteredChannels = channels.filter(c => c.name.toLowerCase().includes(channelSearchQuery.toLowerCase()));
 
@@ -206,9 +331,9 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
       <div className="flex flex-grow overflow-hidden relative z-10">
         
         {/* LEFT PANE: Channel & Discovery */}
-        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-r border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
+        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-r border-brand-secondary/10 flex-col bg-[#080d14]/90 backdrop-blur-xl transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
           isLeftPaneOpen 
-            ? "flex absolute inset-y-0 left-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[260px] shadow-2xl" 
+            ? "flex absolute inset-y-0 left-0 z-40 w-[260px] shadow-2xl" 
             : "hidden"
         }`}>
           
@@ -296,9 +421,62 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
             </AnimatePresence>
           </div>
 
-          {/* Search Bar */}
-          <div className="p-5 pb-3">
-            <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase mb-2 flex items-center gap-1.5"><Search className="w-3 h-3"/> Discover</span>
+          {/* Search Bar & Tabs */}
+          <div className="p-5 pb-3 flex flex-col flex-shrink-0">
+            <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase mb-3 flex items-center gap-1.5"><Search className="w-3 h-3"/> Discover</span>
+            
+            {/* Discover Tab Switcher */}
+            <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("recommendations");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "recommendations" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>Explore</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("radio");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "radio" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Radio className="w-3 h-3" />
+                <span>Radio</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDiscoverTab("live");
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setRadioSearchResults([]);
+                  setLiveSearchResults([]);
+                }}
+                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                  discoverTab === "live" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
+                }`}
+              >
+                <Activity className="w-3 h-3" />
+                <span>Live</span>
+              </button>
+            </div>
+
             <form
               onSubmit={async (e) => {
                 e.preventDefault();
@@ -433,57 +611,6 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
           {/* Results & Recommendations List */}
           <div className="flex-grow min-h-0 min-w-0 overflow-hidden flex flex-col px-3 pb-4">
             
-            {/* Discover Tab Switcher */}
-            <div className="flex bg-white/5 border border-brand-secondary/10 rounded-xl p-1 gap-1 mb-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setDiscoverTab("recommendations");
-                  setSearchQuery("");
-                  setSearchResults([]);
-                  setRadioSearchResults([]);
-                  setLiveSearchResults([]);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  discoverTab === "recommendations" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                }`}
-              >
-                <Sparkles className="w-3 h-3" />
-                <span>Explore</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDiscoverTab("radio");
-                  setSearchQuery("");
-                  setSearchResults([]);
-                  setRadioSearchResults([]);
-                  setLiveSearchResults([]);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  discoverTab === "radio" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                }`}
-              >
-                <Radio className="w-3 h-3" />
-                <span>Radio</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDiscoverTab("live");
-                  setSearchQuery("");
-                  setSearchResults([]);
-                  setRadioSearchResults([]);
-                  setLiveSearchResults([]);
-                }}
-                className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 cursor-pointer ${
-                  discoverTab === "live" ? "bg-brand-secondary text-[#04080c]" : "text-brand-secondary/50 hover:text-white"
-                }`}
-              >
-                <Activity className="w-3 h-3" />
-                <span>Live</span>
-              </button>
-            </div>
 
             {discoverTab === "recommendations" ? (
               searchResults.length > 0 ? (
@@ -493,19 +620,37 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                     <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                   </div>
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
-                    {searchResults.map((track, i) => (
-                      <div
-                        key={i}
-                        onClick={() => { playTrack(track.title); setSearchResults([]); setSearchQuery(""); }}
-                        className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/s"
-                      >
-                        <div className="overflow-hidden pr-2">
-                          <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/s:text-brand-secondary transition">{track.title}</h4>
-                          <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+                    {searchResults.map((track, i) => {
+                      const trackGradient = getGhibliGradient(track.title);
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => { playTrack(track.uri, track.title); setSearchResults([]); setSearchQuery(""); }}
+                          className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/s"
+                        >
+                          <div className="flex items-center gap-3 overflow-hidden pr-2">
+                            <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0 shadow-md border border-white/5 relative bg-[#04080c] flex items-center justify-center">
+                              {getTrackThumbnail(track) ? (
+                                <img
+                                  src={getTrackThumbnail(track)!}
+                                  alt=""
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <div className={`w-full h-full bg-gradient-to-tr ${trackGradient} flex items-center justify-center`}>
+                                  <Radio className="w-3 h-3 text-white/80" />
+                                </div>
+                              )}
+                            </div>
+                            <div className="truncate">
+                              <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/s:text-brand-secondary transition">{track.title}</h4>
+                              <span className="text-[8px] text-brand-secondary/40 block mt-0.5 truncate">{track.author}</span>
+                            </div>
+                          </div>
+                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/s:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
-                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/s:opacity-100 transition-opacity flex-shrink-0" />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ) : (
@@ -534,12 +679,22 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                         return (
                           <div
                             key={i}
-                            onClick={() => playTrack(track.title)}
+                            onClick={() => playTrack(track.uri, track.title)}
                             className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/rec"
                           >
                             <div className="flex items-center gap-3 overflow-hidden pr-2">
-                              <div className={`w-7 h-7 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md`}>
-                                <Radio className="w-3 h-3 text-white/80" />
+                              <div className="w-7 h-7 rounded-lg overflow-hidden flex-shrink-0 shadow-md border border-white/5 relative bg-[#04080c] flex items-center justify-center">
+                                {getTrackThumbnail(track) ? (
+                                  <img
+                                    src={getTrackThumbnail(track)!}
+                                    alt=""
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className={`w-full h-full bg-gradient-to-tr ${trackGradient} flex items-center justify-center`}>
+                                    <Radio className="w-3 h-3 text-white/80" />
+                                  </div>
+                                )}
                               </div>
                               <div className="truncate">
                                 <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/rec:text-brand-secondary transition">{track.title}</span>
@@ -567,13 +722,22 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                       return (
                         <div
                           key={i}
-                          onClick={() => { playRadio(station.url, station.name, station.tags || 'Global Radio'); setRadioSearchResults([]); setSearchQuery(""); }}
+                          onClick={() => { playRadio(station.url, station.name, station.tags || 'Global Radio', station.favicon); setRadioSearchResults([]); setSearchQuery(""); }}
                           className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/rs"
                         >
                           <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/rs:scale-105 transition-transform duration-300`}>
-                              <Radio className="w-3.5 h-3.5 text-white/80" />
-                            </div>
+                            {station.favicon ? (
+                              <img 
+                                src={station.favicon} 
+                                alt="" 
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="w-8 h-8 rounded-lg object-cover bg-white/5 flex-shrink-0"
+                              />
+                            ) : (
+                              <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/rs:scale-105 transition-transform duration-300`}>
+                                <Radio className="w-3.5 h-3.5 text-white/80" />
+                              </div>
+                            )}
                             <div className="truncate">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/rs:text-brand-secondary transition">{station.name}</span>
@@ -590,31 +754,69 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 px-2 flex-shrink-0">
+                    <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Popular Stations</span>
+                    <button 
+                      onClick={fetchRecommendedRadio} 
+                      disabled={isRecommendedRadioLoading}
+                      className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isRecommendedRadioLoading ? "Refreshing..." : "↻ Refresh"}
+                    </button>
+                  </div>
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
-                    {RADIO_STATIONS.map((station, i) => {
-                      const trackGradient = getGhibliGradient(station.title);
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => playRadio(station.query, station.title, station.genre)}
-                          className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/radio:scale-105 transition-transform duration-300`}>
-                              <Radio className="w-3.5 h-3.5 text-white/80" />
-                            </div>
-                            <div className="truncate">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/radio:text-brand-secondary transition">{station.title}</span>
-                                <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.genre}</span>
-                              </div>
-                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.desc}</span>
+                    {isRecommendedRadioLoading ? (
+                      /* Shimmer Loading Skeleton */
+                      Array.from({ length: 5 }).map((_, idx) => (
+                        <div key={idx} className="p-2.5 rounded-xl border border-white/5 bg-[#0b141d]/10 animate-pulse flex items-center justify-between">
+                          <div className="flex items-center gap-3 w-full pr-2">
+                            <div className="w-8 h-8 rounded-lg bg-zinc-800/40 flex-shrink-0 animate-pulse" />
+                            <div className="space-y-1.5 flex-grow">
+                              <div className="h-2.5 bg-zinc-800/60 rounded w-1/3 animate-pulse" />
+                              <div className="h-2 bg-zinc-800/30 rounded w-2/3 animate-pulse" />
                             </div>
                           </div>
-                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/radio:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
-                      );
-                    })}
+                      ))
+                    ) : recommendedRadioStations.length > 0 ? (
+                      recommendedRadioStations.map((station, i) => {
+                        const trackGradient = getGhibliGradient(station.name);
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => playRadio(station.url, station.name, station.tags || 'Recommended FM', station.favicon)}
+                            className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/radio"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              {station.favicon ? (
+                                <img 
+                                  src={station.favicon} 
+                                  alt="" 
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  className="w-8 h-8 rounded-lg object-cover bg-white/5 flex-shrink-0"
+                                />
+                              ) : (
+                                <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/radio:scale-105 transition-transform duration-300`}>
+                                  <Radio className="w-3.5 h-3.5 text-white/80" />
+                                </div>
+                              )}
+                              <div className="truncate">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/radio:text-brand-secondary transition">{station.name}</span>
+                                  <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-brand-secondary/15 text-brand-secondary uppercase flex-shrink-0">{station.country || 'Global'}</span>
+                                </div>
+                                <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{station.tags || 'Live Stream'}</span>
+                              </div>
+                            </div>
+                            <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/radio:opacity-100 transition-opacity flex-shrink-0" />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-6 text-center text-[10px] font-mono text-brand-secondary/45 uppercase tracking-widest">
+                        No popular radio streams found.
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -631,7 +833,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                       return (
                         <div
                           key={i}
-                          onClick={() => { playRadio(track.uri, track.title, 'Live Atmosphere'); setLiveSearchResults([]); setSearchQuery(""); }}
+                          onClick={() => { playRadio(track.uri, track.title, 'Live Atmosphere', getTrackThumbnail(track) || undefined); setLiveSearchResults([]); setSearchQuery(""); }}
                           className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/ls"
                         >
                           <div className="flex items-center gap-3 overflow-hidden pr-2">
@@ -651,31 +853,70 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 </div>
               ) : (
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                  <div className="flex justify-between items-center mb-2 px-2 flex-shrink-0">
+                    <span className="text-[8px] font-bold text-brand-secondary/60 tracking-widest uppercase">Popular Atmospheres</span>
+                    <button 
+                      onClick={fetchRecommendedLive} 
+                      disabled={isRecommendedLiveLoading}
+                      className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 disabled:opacity-50 cursor-pointer"
+                    >
+                      {isRecommendedLiveLoading ? "Refreshing..." : "↻ Refresh"}
+                    </button>
+                  </div>
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
-                    {LIVE_ATMOSPHERES.map((live, i) => {
-                      const trackGradient = getGhibliGradient(live.title);
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => playRadio(live.query, live.title, live.type)}
-                          className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
-                        >
-                          <div className="flex items-center gap-3 overflow-hidden pr-2">
-                            <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/live:scale-105 transition-transform duration-300`}>
-                              <Activity className="w-3.5 h-3.5 text-white/80" />
-                            </div>
-                            <div className="truncate">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/live:text-brand-secondary transition">{live.title}</span>
-                                <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase flex-shrink-0">{live.type}</span>
-                              </div>
-                              <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{live.desc}</span>
+                    {isRecommendedLiveLoading ? (
+                      /* Shimmer Loading Skeleton */
+                      Array.from({ length: 5 }).map((_, idx) => (
+                        <div key={idx} className="p-2.5 rounded-xl border border-white/5 bg-[#0b141d]/10 animate-pulse flex items-center justify-between">
+                          <div className="flex items-center gap-3 w-full pr-2">
+                            <div className="w-8 h-8 rounded-lg bg-zinc-800/40 flex-shrink-0 animate-pulse" />
+                            <div className="space-y-1.5 flex-grow">
+                              <div className="h-2.5 bg-zinc-800/60 rounded w-1/3 animate-pulse" />
+                              <div className="h-2 bg-zinc-800/30 rounded w-2/3 animate-pulse" />
                             </div>
                           </div>
-                          <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/live:opacity-100 transition-opacity flex-shrink-0" />
                         </div>
-                      );
-                    })}
+                      ))
+                    ) : recommendedLiveAtmospheres.length > 0 ? (
+                      recommendedLiveAtmospheres.map((live, i) => {
+                        const trackGradient = getGhibliGradient(live.title);
+                        const thumbnail = getTrackThumbnail({ uri: live.uri });
+                        return (
+                          <div
+                            key={i}
+                            onClick={() => playRadio(live.uri, live.title, live.type || 'Live Atmosphere', thumbnail || undefined)}
+                            className="p-2.5 rounded-xl border border-white/5 hover:border-brand-secondary/20 bg-[#0b141d]/30 hover:bg-white/5 cursor-pointer transition flex items-center justify-between group/live"
+                          >
+                            <div className="flex items-center gap-3 overflow-hidden pr-2">
+                              {thumbnail ? (
+                                <img 
+                                  src={thumbnail} 
+                                  alt="" 
+                                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                  className="w-8 h-8 rounded-lg object-cover bg-white/5 flex-shrink-0 shadow-md relative group-hover/live:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${trackGradient} flex-shrink-0 flex items-center justify-center shadow-md relative group-hover/live:scale-105 transition-transform duration-300`}>
+                                  <Activity className="w-3.5 h-3.5 text-white/80" />
+                                </div>
+                              )}
+                              <div className="truncate">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] font-bold text-white block truncate leading-tight group-hover/live:text-brand-secondary transition">{live.title}</span>
+                                  <span className="text-[6px] font-bold px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-400 uppercase flex-shrink-0">{live.type || 'Live'}</span>
+                                </div>
+                                <span className="text-[8px] text-brand-secondary/40 block mt-1 truncate">{live.desc || live.author}</span>
+                              </div>
+                            </div>
+                            <Play className="w-3.5 h-3.5 text-brand-secondary opacity-0 group-hover/live:opacity-100 transition-opacity flex-shrink-0" />
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-6 text-center text-[10px] font-mono text-brand-secondary/45 uppercase tracking-widest">
+                        No popular atmosphere streams found.
+                      </div>
+                    )}
                   </div>
                 </div>
               )
@@ -684,93 +925,387 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
         </div>
 
         {/* CENTER PANE: Hero Stage */}
-        <div className="flex-grow flex flex-col items-center justify-center p-6 md:p-8 relative overflow-hidden min-h-0">
-          
-          {/* Mobile Overlay Toggle Sub-Header */}
-          <div className="xl:hidden flex items-center justify-between w-full border-b border-white/5 pb-4 mb-4 relative z-20">
-            <button
-              onClick={() => { setIsLeftPaneOpen(!isLeftPaneOpen); setIsRightPaneOpen(false); }}
-              className="px-4 py-2 bg-[#101c26]/60 border border-brand-secondary/15 rounded-xl text-[9px] font-bold uppercase tracking-wider text-brand-secondary hover:text-white transition flex items-center gap-1.5 cursor-pointer hover:border-brand-secondary/40"
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>Search & Channel</span>
-            </button>
-            
-            <button
-              onClick={() => { setIsRightPaneOpen(!isRightPaneOpen); setIsLeftPaneOpen(false); }}
-              className="px-4 py-2 bg-[#101c26]/60 border border-brand-secondary/15 rounded-xl text-[9px] font-bold uppercase tracking-wider text-brand-secondary hover:text-white transition flex items-center gap-1.5 cursor-pointer hover:border-brand-secondary/40"
-            >
-              <ListMusic className="w-3.5 h-3.5" />
-              <span>Up Next ({serverQueue.length})</span>
-            </button>
-          </div>
+        <div className="flex-grow flex flex-col relative overflow-hidden min-h-0">
+          <div className="w-full h-full bg-[#091118]/25 backdrop-blur-xl p-6 md:p-8 flex flex-col gap-6 relative overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar min-h-0">
+            {/* Ambient Background Grid lines to look like mechanical casing */}
+            <div className="absolute inset-0 bg-grid-white/[0.01] pointer-events-none" />
+            <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-brand-secondary/20 to-transparent" />
 
-          {/* Backdrop click-away dims center panel when overlay is active */}
-          <AnimatePresence>
-            {(isLeftPaneOpen || isRightPaneOpen) && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 0.6 }}
-                exit={{ opacity: 0 }}
-                onClick={() => { setIsLeftPaneOpen(false); setIsRightPaneOpen(false); }}
-                className="xl:hidden absolute inset-0 bg-[#04080c] z-30 backdrop-blur-sm cursor-pointer"
-              />
-            )}
-          </AnimatePresence>
-
-          {/* Visualizer Backdrop */}
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 w-3/4 max-w-[500px] h-32 flex items-end justify-center gap-1.5 opacity-20 pointer-events-none">
-            {visualizerBars.slice(0, 20).map((bar, i) => (
-              <motion.div
-                key={i}
-                className="w-full max-w-[8px] rounded-t-md bg-brand-secondary shadow-[0_0_10px_rgba(var(--brand-secondary-rgb),0.5)]"
-                animate={{ height: isPlaying ? [bar.baseHeight * 0.5, bar.baseHeight * 2, bar.baseHeight * 0.5] : bar.baseHeight * 0.2 }}
-                transition={{ repeat: Infinity, duration: 1.2 + Math.sin(i) * 0.3, delay: bar.delay, ease: "easeInOut" }}
-                style={{ minHeight: "4px" }}
-              />
-            ))}
-          </div>
-
-          {/* Vinyl player stage */}
-          <motion.div
-            animate={{ scale: isPlaying ? 1.02 : 1 }}
-            whileHover={{ scale: 1.04, rotate: isPlaying ? 0 : 2 }}
-            transition={{ duration: 1.5, ease: "easeInOut" }}
-            className="relative w-56 h-56 md:w-80 md:h-80 rounded-full flex items-center justify-center mb-10 shadow-[0_0_85px_rgba(var(--brand-secondary-rgb),0.18)] group cursor-pointer"
-          >
-            {/* Spinning Vinyl */}
-            <div className="absolute inset-0 rounded-full border-[6px] border-[#04080c]/50 bg-[#0b141d] shadow-2xl transition duration-500 group-hover:border-brand-secondary/15" />
-            <div className="absolute inset-2 rounded-full border border-dashed border-white/10" />
-            <div className="absolute inset-12 rounded-full border border-dashed border-white/5" />
-            
-            <motion.div
-              animate={{ rotate: isPlaying ? 360 : 0 }}
-              transition={{ repeat: Infinity, duration: isPlaying ? 24 : 0, ease: "linear" }}
-              className={`w-40 h-40 md:w-56 md:h-56 rounded-full bg-gradient-to-tr ${currentGradient} flex items-center justify-center p-2 relative shadow-inner`}
-            >
-              <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-[#04080c] border-2 border-brand-secondary/30 flex items-center justify-center relative z-10 shadow-xl group-hover:scale-105 transition-transform duration-300">
-                <div className="w-2.5 h-2.5 md:w-3 md:h-3 rounded-full bg-brand-secondary animate-pulse" />
+            {/* Top row: VU Decibel Towers & OLED Backlit Spec Panel */}
+            <div className="flex items-stretch justify-between gap-4 md:gap-6 select-none">
+              
+              {/* LEFT VU METER */}
+              <div className="flex flex-col justify-between items-center w-5 bg-black/40 border border-white/5 rounded-md py-2 px-1 relative">
+                <span className="text-[6px] font-mono text-brand-secondary/40 font-bold uppercase mb-1">L</span>
+                <div className="flex-grow flex flex-col-reverse gap-0.5 justify-between w-full px-0.5 h-28">
+                  {Array.from({ length: 12 }).map((_, idx) => {
+                    const activeCount = isPlaying ? Math.min(12, Math.floor((volume / 100) * 12) + (Math.floor(Math.random() * 4) - 2)) : 0;
+                    const isActive = idx < activeCount;
+                    let colorClass = "bg-emerald-500/10 border-emerald-500/5";
+                    if (isActive) {
+                      if (idx >= 10) colorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]";
+                      else if (idx >= 7) colorClass = "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]";
+                      else colorClass = "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]";
+                    }
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-full h-1.5 rounded-sm border transition-all duration-75 ${colorClass}`}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[5px] font-mono text-brand-secondary/30 mt-1">dB</span>
               </div>
-            </motion.div>
-          </motion.div>
 
-          <div className="text-center z-10 max-w-lg px-4">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-primary/20 border border-brand-primary/30 text-brand-secondary text-[8px] font-bold tracking-[0.2em] uppercase mb-4">
-              <Activity className="w-3 h-3" /> {currentTrack ? "LIVE STREAM" : "IDLE"}
+              {/* CENTRAL OLED DISPLAY */}
+              <div className="flex-grow bg-[#03070b] border border-brand-secondary/15 rounded-2xl p-4 font-mono text-[9px] relative overflow-hidden flex flex-col justify-between min-h-[140px] shadow-inner">
+                {/* CRT simulation */}
+                <div className="absolute inset-0 bg-scanlines pointer-events-none opacity-[0.03]" />
+                <div className="absolute inset-0 bg-gradient-to-b from-[#0c2528]/10 via-transparent to-[#0c2528]/10 pointer-events-none" />
+
+                {/* Display Header */}
+                <div className="flex items-center justify-between border-b border-brand-secondary/10 pb-1.5 z-10">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]' : 'bg-red-500'}`} />
+                    <span className="text-brand-secondary/60 uppercase tracking-widest text-[7px] font-bold">SYSTEM ACTIVE</span>
+                  </div>
+                  <span className="text-brand-secondary/40 text-[7px] tracking-wider">LAVALINK v4.0.0</span>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="flex items-center justify-between py-2 gap-4 z-10">
+                  {/* Left part: track title & specs */}
+                  <div className="flex-grow overflow-hidden flex flex-col justify-center min-w-0">
+                    <div className="text-[10px] text-white font-bold tracking-wider truncate mb-1">
+                      {currentTrack ? currentTrack.title : "CONSOLE STANDBY"}
+                    </div>
+                    <div className="text-brand-secondary/60 text-[8px] truncate uppercase tracking-widest font-semibold">
+                      {currentTrack ? (currentTrack.artist || "Unknown Artist") : "NO MEDIA LOADED"}
+                    </div>
+                    
+                    {/* Live Waveform graphic */}
+                    <div className="h-6 flex items-end gap-0.5 mt-3 overflow-hidden opacity-60">
+                      {visualizerBars.map((bar, i) => {
+                        const h = isPlaying ? bar.baseHeight : 3;
+                        return (
+                          <motion.div
+                            key={i}
+                            animate={{
+                              height: isPlaying ? [h, h * (0.3 + Math.random() * 0.7), h] : 3
+                            }}
+                            transition={{
+                              duration: 0.8 + Math.random() * 0.5,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                              delay: bar.delay
+                            }}
+                            className="bg-brand-secondary/70 w-[2px] rounded-t-sm"
+                            style={{ height: 3 }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Right part: Vinyl Turntable Graphic */}
+                  <div className="flex-shrink-0 flex items-center justify-center relative">
+                    <motion.div
+                      animate={isPlaying ? { rotate: 360 } : { rotate: 0 }}
+                      transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+                      className="w-16 h-16 rounded-full bg-gradient-to-r from-zinc-800 via-zinc-900 to-zinc-800 border-2 border-zinc-700/60 shadow-lg flex items-center justify-center relative"
+                    >
+                      {/* Vinyl Groove Rings */}
+                      <div className="absolute inset-1 rounded-full border border-black/40" />
+                      <div className="absolute inset-2.5 rounded-full border border-black/30" />
+                      <div className="absolute inset-4 rounded-full border border-black/25" />
+                      
+                      {/* Album art thumbnail fallback / center label */}
+                      <div className="w-5 h-5 rounded-full bg-brand-secondary flex items-center justify-center border border-black/40 z-10 overflow-hidden shadow-inner">
+                        {currentTrack && getTrackThumbnail(currentTrack) ? (
+                          <img
+                            src={getTrackThumbnail(currentTrack)!}
+                            alt=""
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-1.5 h-1.5 rounded-full bg-black" />
+                        )}
+                      </div>
+                      
+                      {/* Vinyl reflection overlay */}
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-white/5 via-transparent to-white/5 pointer-events-none" />
+                    </motion.div>
+                  </div>
+                </div>
+
+                {/* Footer metrics strip */}
+                <div className="flex justify-between items-center border-t border-brand-secondary/10 pt-1.5 text-[7px] text-brand-secondary/40 font-bold z-10">
+                  <div className="flex gap-3">
+                    <span>BITRATE: <span className="text-white">128 KBPS</span></span>
+                    <span>SIGNAL: <span className="text-emerald-400">99.8%</span></span>
+                  </div>
+                  <span>LATENCY: <span className="text-brand-secondary">16ms</span></span>
+                </div>
+              </div>
+
+              {/* RIGHT VU METER */}
+              <div className="flex flex-col justify-between items-center w-5 bg-black/40 border border-white/5 rounded-md py-2 px-1 relative">
+                <span className="text-[6px] font-mono text-brand-secondary/40 font-bold uppercase mb-1">R</span>
+                <div className="flex-grow flex flex-col-reverse gap-0.5 justify-between w-full px-0.5 h-28">
+                  {Array.from({ length: 12 }).map((_, idx) => {
+                    const activeCount = isPlaying ? Math.min(12, Math.floor((volume / 100) * 12) + (Math.floor(Math.random() * 4) - 2)) : 0;
+                    const isActive = idx < activeCount;
+                    let colorClass = "bg-emerald-500/10 border-emerald-500/5";
+                    if (isActive) {
+                      if (idx >= 10) colorClass = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]";
+                      else if (idx >= 7) colorClass = "bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]";
+                      else colorClass = "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]";
+                    }
+                    return (
+                      <div
+                        key={idx}
+                        className={`w-full h-1.5 rounded-sm border transition-all duration-75 ${colorClass}`}
+                      />
+                    );
+                  })}
+                </div>
+                <span className="text-[5px] font-mono text-brand-secondary/30 mt-1">dB</span>
+              </div>
+
             </div>
-            <h2 className="text-2xl md:text-5xl font-bold tracking-tight text-white font-serif leading-tight mb-3 drop-shadow-lg truncate max-w-[280px] md:max-w-md">
-              {currentTrack ? currentTrack.title : "Awaiting Melody"}
-            </h2>
-            <p className="text-xs md:text-base text-brand-secondary/80 font-sans font-light tracking-wide truncate drop-shadow max-w-[280px] md:max-w-md">
-              {currentTrack ? currentTrack.artist : "Select a track to begin playback"}
-            </p>
+
+            {/* Row 2: Tactical Analog EQ Rotary Knobs & Sliding Master Volume */}
+            <div className="flex flex-col gap-5 bg-black/20 border border-white/5 rounded-2xl p-4 md:p-5 select-none">
+              
+              {/* Row 2A: Analog EQ Potentiometers */}
+              <div className="grid grid-cols-2 gap-4 items-center justify-items-center">
+                
+                {/* BASS BOOST POTENTIOMETER */}
+                <div className="flex flex-col items-center justify-center text-center">
+                  <span className="text-[8px] font-bold text-brand-secondary/50 tracking-wider uppercase mb-2">BASS BOOST</span>
+                  <button
+                    onClick={() => applyFilter(bassBoost ? "clear" : "bassboost")}
+                    disabled={!isPlaying}
+                    className="relative cursor-pointer transition-transform duration-250 hover:scale-105 active:scale-95 group focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
+                    title="Toggle High Impact Bass Boost"
+                  >
+                    <svg className="w-14 h-14 md:w-16 md:h-16 transform -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="transparent" stroke="#182836" strokeWidth="8" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="transparent"
+                        stroke={bassBoost ? "#f59e0b" : "#c9b09a"}
+                        strokeWidth="8"
+                        strokeDasharray="251.2"
+                        strokeDashoffset={bassBoost ? "62.8" : "188.4"}
+                        strokeLinecap="round"
+                        className="transition-all duration-500 ease-out"
+                      />
+                      <circle cx="50" cy="50" r="28" fill="#101c26" stroke="rgba(199,176,154,0.15)" strokeWidth="2" />
+                      <line
+                        x1="50" y1="22" x2="50" y2="34"
+                        stroke={bassBoost ? "#f59e0b" : "#c9b09a"}
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        transform={`rotate(${bassBoost ? 135 : -135} 50 50)`}
+                        className="transition-transform duration-500 ease-out origin-[50px_50px]"
+                      />
+                    </svg>
+                    <span className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all duration-300 ${
+                      bassBoost ? "bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.85)] scale-110" : "bg-transparent scale-0"
+                    }`} />
+                  </button>
+                  <span className={`text-[7px] font-mono mt-2 tracking-widest uppercase transition-colors font-bold ${bassBoost ? 'text-amber-400' : 'text-brand-secondary/40'}`}>
+                    {bassBoost ? "ACTIVE +12dB" : "BYPASS"}
+                  </span>
+                </div>
+
+                {/* SPACE REVERB POTENTIOMETER */}
+                <div className="flex flex-col items-center justify-center text-center">
+                  <span className="text-[8px] font-bold text-brand-secondary/50 tracking-wider uppercase mb-2">SPACE REVERB</span>
+                  <button
+                    onClick={() => applyFilter(reverb ? "clear" : "reverb")}
+                    disabled={!isPlaying}
+                    className="relative cursor-pointer transition-transform duration-250 hover:scale-105 active:scale-95 group focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none"
+                    title="Toggle Reverb Space Modulator"
+                  >
+                    <svg className="w-14 h-14 md:w-16 md:h-16 transform -rotate-90" viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" fill="transparent" stroke="#182836" strokeWidth="8" />
+                      <circle
+                        cx="50"
+                        cy="50"
+                        r="40"
+                        fill="transparent"
+                        stroke={reverb ? "#14b8a6" : "#c9b09a"}
+                        strokeWidth="8"
+                        strokeDasharray="251.2"
+                        strokeDashoffset={reverb ? "62.8" : "188.4"}
+                        strokeLinecap="round"
+                        className="transition-all duration-500 ease-out"
+                      />
+                      <circle cx="50" cy="50" r="28" fill="#101c26" stroke="rgba(199,176,154,0.15)" strokeWidth="2" />
+                      <line
+                        x1="50" y1="22" x2="50" y2="34"
+                        stroke={reverb ? "#14b8a6" : "#c9b09a"}
+                        strokeWidth="4"
+                        strokeLinecap="round"
+                        transform={`rotate(${reverb ? 135 : -135} 50 50)`}
+                        className="transition-transform duration-500 ease-out origin-[50px_50px]"
+                      />
+                    </svg>
+                    <span className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full transition-all duration-300 ${
+                      reverb ? "bg-teal-400 shadow-[0_0_10px_rgba(20,184,166,0.85)] scale-110" : "bg-transparent scale-0"
+                    }`} />
+                  </button>
+                  <span className={`text-[7px] font-mono mt-2 tracking-widest uppercase transition-colors font-bold ${reverb ? 'text-teal-400' : 'text-brand-secondary/40'}`}>
+                    {reverb ? "WET ROOM ON" : "BYPASS"}
+                  </span>
+                </div>
+
+              </div>
+
+              {/* Silk-screen console segment boundary line */}
+              <div className="h-[1px] bg-gradient-to-r from-transparent via-brand-secondary/15 to-transparent" />
+
+              {/* Row 2B: Master Volume Linear Fader */}
+              <div className="flex flex-col items-center justify-center w-full px-2">
+                <span className="text-[8px] font-bold text-brand-secondary/50 tracking-wider uppercase mb-3 flex items-center gap-1"><Volume2 className="w-3 h-3"/> VOLUME FADER</span>
+                <div className="w-full flex items-center gap-2">
+                  <span className="text-[7px] font-mono text-brand-secondary/45">MIN</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    disabled={!isPlaying}
+                    value={isMuted ? 0 : volume}
+                    onChange={(e) => setVolume(Number(e.target.value))}
+                    className="flex-grow h-1.5 accent-brand-secondary bg-white/10 rounded-full cursor-pointer appearance-none outline-none transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                    style={{
+                      background: `linear-gradient(to right, #c9b09a 0%, #c9b09a ${isMuted ? 0 : volume}%, rgba(255,255,255,0.1) ${isMuted ? 0 : volume}%, rgba(255,255,255,0.1) 100%)`
+                    }}
+                  />
+                  <span className="text-[8px] font-mono text-brand-secondary/90 font-bold min-w-8 text-right">{isMuted ? "0" : volume}%</span>
+                </div>
+                <div className="flex justify-between w-full px-7 mt-1.5 text-[5px] font-mono text-brand-secondary/30">
+                  <span>|</span><span>|</span><span>|</span><span>|</span><span>|</span>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Row 3: 1U Rack DSP Presets Selectors */}
+            <div className="flex flex-col gap-2 relative">
+              {/* Monospace Spec Silk-Screen Header */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-[8px] font-bold text-brand-secondary/50 tracking-widest uppercase font-mono">
+                  1U RACK-MOUNT ACTIVE DSP DECK // MODEL DSP-400X
+                </span>
+                <span className="text-[7px] font-mono text-brand-secondary/30 tracking-widest uppercase hidden sm:inline">
+                  DYNAMIC AUDIO ROUTER
+                </span>
+              </div>
+
+              {/* Physical Rack Chassis Mount Frame */}
+              <div className="relative pl-6 pr-6 py-4 bg-gradient-to-b from-[#141d26] to-[#0c131a] border border-[#22313d]/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_10px_25px_rgba(0,0,0,0.65)] rounded-2xl overflow-hidden select-none">
+                {/* Brushed metal/casing line overlay */}
+                <div className="absolute inset-0 bg-grid-white/[0.01] pointer-events-none" />
+                <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-white/5 to-transparent" />
+                
+                {/* Silk-screen dashed grid margin line */}
+                <div className="absolute inset-y-1.5 left-5 right-5 border border-dashed border-[#22313d]/30 pointer-events-none rounded-lg" />
+
+                {/* Left Bracket Ear with Mount Screws */}
+                <div className="absolute left-0 top-0 bottom-0 w-[18px] bg-gradient-to-r from-[#18232e] to-[#0f171e] border-r border-[#22313d]/60 flex flex-col justify-between py-3 items-center">
+                  <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-zinc-600 via-zinc-400 to-zinc-700 border border-zinc-800 shadow-[0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center relative" title="Chassis Mount Bolt">
+                    <div className="w-1.5 h-[1px] bg-zinc-800 transform rotate-[45deg]" />
+                  </div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-zinc-600 via-zinc-400 to-zinc-700 border border-zinc-800 shadow-[0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center relative" title="Chassis Mount Bolt">
+                    <div className="w-1.5 h-[1px] bg-zinc-800 transform rotate-[135deg]" />
+                  </div>
+                </div>
+
+                {/* Right Bracket Ear with Mount Screws */}
+                <div className="absolute right-0 top-0 bottom-0 w-[18px] bg-gradient-to-l from-[#18232e] to-[#0f171e] border-l border-[#22313d]/60 flex flex-col justify-between py-3 items-center">
+                  <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-zinc-600 via-zinc-400 to-zinc-700 border border-zinc-800 shadow-[0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center relative" title="Chassis Mount Bolt">
+                    <div className="w-1.5 h-[1px] bg-zinc-800 transform rotate-[30deg]" />
+                  </div>
+                  <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-zinc-600 via-zinc-400 to-zinc-700 border border-zinc-800 shadow-[0_1px_1px_rgba(255,255,255,0.1)] flex items-center justify-center relative" title="Chassis Mount Bolt">
+                    <div className="w-1.5 h-[1px] bg-zinc-800 transform rotate-[110deg]" />
+                  </div>
+                </div>
+
+                {/* Main Selector Grid */}
+                <div className="grid grid-cols-5 gap-3.5 px-1">
+                  {[
+                    { id: "nightcore", name: "Nightcore", chan: "CH-A", color: "purple", ledColor: "bg-purple-500 shadow-[0_0_12px_rgba(168,85,247,0.95)]" },
+                    { id: "vaporwave", name: "Vaporwave", chan: "CH-B", color: "cyan", ledColor: "bg-cyan-500 shadow-[0_0_12px_rgba(6,182,212,0.95)]" },
+                    { id: "8d", name: "8D Spatial", chan: "CH-C", color: "pink", ledColor: "bg-pink-500 shadow-[0_0_12px_rgba(236,72,153,0.95)]" },
+                    { id: "lowpass", name: "Low Pass", chan: "CH-D", color: "yellow", ledColor: "bg-yellow-500 shadow-[0_0_12px_rgba(234,179,8,0.95)]" },
+                    { id: "karaoke", name: "Karaoke", chan: "CH-E", color: "red", ledColor: "bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.95)]" },
+                    { id: "tremolo", name: "Tremolo", chan: "CH-F", color: "orange", ledColor: "bg-orange-500 shadow-[0_0_12px_rgba(249,115,22,0.95)]" },
+                    { id: "vibrato", name: "Vibrato", chan: "CH-G", color: "emerald", ledColor: "bg-emerald-500 shadow-[0_0_12px_rgba(16,185,129,0.95)]" },
+                    { id: "bassboost", name: "Bass Boost", chan: "CH-H", color: "amber", ledColor: "bg-amber-500 shadow-[0_0_12px_rgba(245,158,11,0.95)]" },
+                    { id: "reverb", name: "Reverb", chan: "CH-I", color: "teal", ledColor: "bg-teal-500 shadow-[0_0_12px_rgba(20,184,166,0.95)]" },
+                    { id: "clear", name: "Bypass All", chan: "BYP", color: "slate", ledColor: "bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.95)]" }
+                  ].map(dsp => {
+                    const isActive = dsp.id === "clear"
+                      ? (activeFilter === "clear" && !bassBoost && !reverb)
+                      : (activeFilter === dsp.id || 
+                         (dsp.id === "bassboost" && bassBoost) || 
+                         (dsp.id === "reverb" && reverb));
+                    return (
+                      <div
+                        key={dsp.id}
+                        className="bg-[#05080c] border border-black p-1.5 rounded-xl shadow-[inset_0_2px_4px_rgba(0,0,0,0.85)] flex flex-col items-center justify-between min-h-[64px]"
+                      >
+                        {/* Tactile LED Light */}
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className="text-[5px] font-mono font-bold text-brand-secondary/30 uppercase tracking-[0.1em]">{dsp.chan}</span>
+                          <span className={`w-1.5 h-1.5 rounded-full border border-black/85 transition-all duration-300 ${
+                            isActive ? `${dsp.ledColor} scale-110` : "bg-[#181d24] border-[#222933]/50 shadow-[inset_0_1px_1px_rgba(0,0,0,0.8)] scale-90"
+                          }`} />
+                        </div>
+
+                        {/* Push Button Keycap */}
+                        <button
+                          onClick={() => {
+                            if (dsp.id === "clear") {
+                              applyFilter("clear");
+                            } else {
+                              const nextId = isActive ? "clear" : dsp.id;
+                              applyFilter(nextId);
+                            }
+                          }}
+                          disabled={!isPlaying}
+                          className={`w-full py-1.5 px-0.5 rounded-lg text-center border font-bold text-[8.5px] font-mono tracking-wider uppercase select-none transition-all duration-150 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none ${
+                            isActive
+                              ? `bg-gradient-to-b from-[#223141] to-[#17222c] border-brand-secondary/50 text-white translate-y-[3px] shadow-[0_1px_0_#060a0f,inset_0_1px_2px_rgba(0,0,0,0.4),0_0_8px_rgba(199,176,154,0.15)]`
+                              : `bg-gradient-to-b from-[#1b2631] to-[#121c25] border-[#293d50]/70 text-brand-secondary/65 hover:text-white shadow-[0_3.5px_0_#060a0f,0_4px_8px_rgba(0,0,0,0.5)] active:translate-y-[2px] active:shadow-[0_1.5px_0_#060a0f]`
+                          }`}
+                          style={{ WebkitTapHighlightColor: "transparent" }}
+                        >
+                          {dsp.name}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+
+              </div>
+            </div>
+
+
+
           </div>
         </div>
 
         {/* RIGHT PANE: Queue */}
-        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-l border-brand-secondary/10 flex-col bg-black/40 transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
+        <div className={`w-[240px] xl:w-[260px] min-w-[240px] flex-shrink-0 border-l border-brand-secondary/10 flex-col bg-[#080d14]/90 backdrop-blur-xl transition-all duration-300 xl:flex h-full max-h-full min-h-0 min-w-0 ${
           isRightPaneOpen 
-            ? "flex absolute inset-y-0 right-0 z-40 bg-[#0b141d]/95 backdrop-blur-3xl w-[260px] shadow-2xl" 
+            ? "flex absolute inset-y-0 right-0 z-40 w-[260px] shadow-2xl" 
             : "hidden"
         }`}>
           <div className="p-5 border-b border-brand-secondary/10 flex items-center justify-between">
@@ -801,7 +1336,17 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 return (
                   <div key={i} className="p-2.5 rounded-xl border border-transparent hover:border-brand-secondary/20 hover:bg-white/5 transition flex items-center gap-3 relative group/item cursor-pointer">
                     <span className="text-[8px] font-mono text-brand-secondary/40 w-3 text-right flex-shrink-0">{i + 1}</span>
-                    <div className={`w-8 h-8 rounded-lg bg-gradient-to-tr ${grad} flex-shrink-0 opacity-80 group-hover/item:opacity-100 transition`} />
+                    <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 opacity-80 group-hover/item:opacity-100 transition border border-white/5 relative bg-[#04080c]">
+                      {getTrackThumbnail(track) ? (
+                        <img
+                          src={getTrackThumbnail(track)!}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className={`w-full h-full bg-gradient-to-tr ${grad}`} />
+                      )}
+                    </div>
                     <div className="flex-grow overflow-hidden pr-6">
                       <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/item:text-brand-secondary transition">{track.title}</h4>
                       <span className="text-[8px] font-mono text-brand-secondary/50 mt-1 block">{formatDuration(track.duration || 0)}</span>
@@ -819,70 +1364,173 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
       </div>
 
       {/* BOTTOM CONTROL BAR */}
-      <div className="h-24 flex-shrink-0 bg-black/60 border-t border-brand-secondary/15 relative z-30 flex items-center px-4 md:px-8 gap-4 md:gap-8 backdrop-blur-2xl">
+      <div className="h-24 flex-shrink-0 bg-[#080d14]/90 border-t border-brand-secondary/15 relative z-30 flex items-center px-4 md:px-8 gap-4 md:gap-8 backdrop-blur-xl">
         
         {/* Left: Quick Track Info */}
-        <div className="hidden md:flex w-[200px] xl:w-[280px] items-center gap-3 overflow-hidden">
+        <div className="flex w-[120px] xs:w-[150px] sm:w-[180px] md:w-[200px] xl:w-[280px] items-center gap-2 md:gap-3 overflow-hidden flex-shrink-0">
           {currentTrack ? (
              <>
-               <div className={`w-11 h-11 rounded-lg bg-gradient-to-tr ${currentGradient} shadow-md flex-shrink-0`} />
-               <div className="overflow-hidden">
-                  <h4 className="text-xs font-bold text-white truncate">{currentTrack.title}</h4>
-                  <p className="text-[9px] text-brand-secondary/60 truncate mt-0.5 uppercase tracking-wider">{currentTrack.artist || "Discord Voice Stream"}</p>
+               <div className="w-9 h-9 md:w-11 md:h-11 rounded-lg overflow-hidden flex-shrink-0 shadow-md border border-white/10 relative bg-[#04080c]">
+                 {getTrackThumbnail(currentTrack) ? (
+                   <img
+                     src={getTrackThumbnail(currentTrack)!}
+                     alt=""
+                     className="w-full h-full object-cover"
+                   />
+                 ) : (
+                   <div className={`w-full h-full bg-gradient-to-tr ${currentGradient}`} />
+                 )}
+               </div>
+               <div className="overflow-hidden flex-grow min-w-0">
+                  <MarqueeText text={currentTrack.title} className="text-[10px] md:text-xs font-bold text-white" />
+                  <MarqueeText text={currentTrack.artist || "Discord Voice Stream"} className="text-[8px] md:text-[9px] text-brand-secondary/60 mt-0.5 uppercase tracking-wider block" />
                </div>
              </>
           ) : (
-            <div className="text-[10px] text-brand-secondary/40 font-mono uppercase">Idle Console</div>
+            <div className="text-[9px] md:text-[10px] text-brand-secondary/40 font-mono uppercase tracking-wider">Idle Console</div>
           )}
         </div>
 
         {/* Center: Playback Controls & Scrubber */}
         <div className="flex-grow flex flex-col items-center justify-center max-w-2xl mx-auto w-full">
-          <div className="flex items-center gap-4 sm:gap-6 mb-2">
-            <button onClick={() => {
-              const nextMode = loopModeState === "off" ? "track" : loopModeState === "track" ? "queue" : "off";
-              setLoopModeState(nextMode); setLoopMode(nextMode);
-            }} className={`relative p-2 transition hover:scale-115 active:scale-95 cursor-pointer ${loopModeState !== "off" ? "text-brand-secondary" : "text-brand-secondary/40 hover:text-white"}`}>
+          <div className={`flex items-center gap-4 sm:gap-6 ${isIcecastRadio || isLiveStream ? "" : "mb-2"}`}>
+            <motion.button 
+              onClick={() => {
+                const nextMode = loopModeState === "off" ? "track" : loopModeState === "track" ? "queue" : "off";
+                setLoopModeState(nextMode); setLoopMode(nextMode);
+              }} 
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.95 }}
+              className={`relative p-2 cursor-pointer transition-colors ${loopModeState !== "off" ? "text-brand-secondary" : "text-brand-secondary/40 hover:text-white"}`}
+            >
               <Repeat className="w-4 h-4" />
               {loopModeState !== "off" && <span className="absolute text-[7px] font-bold -top-0.5 -right-0.5 bg-brand-primary text-white w-3 h-3 rounded-full flex items-center justify-center scale-90">{loopModeState === "track" ? "1" : "Q"}</span>}
-            </button>
-            <button onClick={stopTrack} className="p-2 text-brand-secondary/70 hover:text-white hover:scale-115 active:scale-95 transition cursor-pointer"><Square className="w-4 h-4 fill-current" /></button>
-            
-            <button 
-              onClick={togglePlay} 
-              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 active:scale-90 transition-all shadow-[0_0_15px_rgba(255,255,255,0.25)] cursor-pointer"
+            </motion.button>
+            <motion.button 
+              onClick={stopTrack} 
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 text-brand-secondary/70 hover:text-white transition-colors cursor-pointer"
             >
-              {isPlaying ? <Pause className="w-4.5 h-4.5 fill-current" /> : <Play className="w-4.5 h-4.5 fill-current translate-x-0.5" />}
-            </button>
+              <Square className="w-4 h-4 fill-current" />
+            </motion.button>
             
-            <button onClick={skipTrack} className="p-2 text-brand-secondary/70 hover:text-white hover:scale-115 active:scale-95 transition cursor-pointer"><SkipForward className="w-4 h-4 fill-current" /></button>
-            <button className="p-2 text-brand-secondary/40 hover:text-white hover:scale-115 active:scale-95 transition cursor-pointer"><Heart className="w-4 h-4" /></button>
+            <motion.button 
+              onClick={togglePlay} 
+              disabled={isActionPending || isPlaybackLoading}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.95 }}
+              className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.25)] cursor-pointer relative overflow-hidden disabled:opacity-85"
+            >
+              {(isActionPending || isPlaybackLoading) ? (
+                <div className="w-4.5 h-4.5 rounded-full border-2 border-black/30 border-t-black animate-spin" />
+              ) : (
+                <AnimatePresence mode="wait" initial={false}>
+                  {isPlaying ? (
+                    <motion.div
+                      key="pause"
+                      initial={{ opacity: 0, rotate: -90, scale: 0.8 }}
+                      animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                      exit={{ opacity: 0, rotate: 90, scale: 0.8 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <Pause className="w-4.5 h-4.5 fill-current text-black" />
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="play"
+                      initial={{ opacity: 0, rotate: 90, scale: 0.8 }}
+                      animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                      exit={{ opacity: 0, rotate: -90, scale: 0.8 }}
+                      transition={{ duration: 0.2 }}
+                      className="translate-x-0.5"
+                    >
+                      <Play className="w-4.5 h-4.5 fill-current text-black" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              )}
+            </motion.button>
+            
+            <motion.button 
+              onClick={skipTrack} 
+              disabled={isActionPending}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.95 }}
+              className="p-2 text-brand-secondary/70 hover:text-white transition-colors cursor-pointer relative disabled:opacity-50"
+            >
+              {isActionPending ? (
+                <div className="w-4 h-4 rounded-full border border-brand-secondary/30 border-t-brand-secondary animate-spin" />
+              ) : (
+                <SkipForward className="w-4 h-4 fill-current" />
+              )}
+            </motion.button>
+            <motion.button 
+              onClick={toggleFavoriteTrack}
+              whileHover={{ scale: 1.15 }}
+              whileTap={{ scale: 0.95 }}
+              className={`p-2 transition-colors cursor-pointer ${isFavorited ? "text-red-400" : "text-brand-secondary/40 hover:text-white"}`}
+            >
+              <Heart className={`w-4 h-4 ${isFavorited ? "fill-current" : ""}`} />
+            </motion.button>
+
+            {(isIcecastRadio || isLiveStream) && (
+              <div className="flex items-center gap-2 select-none ml-2 flex-shrink-0">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500/70 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </span>
+                <span className="text-[9px] font-bold text-red-500 tracking-[0.25em] uppercase font-mono animate-pulse">LIVE</span>
+              </div>
+            )}
           </div>
           
-          <div className="w-full flex items-center gap-3">
-            <span className="text-[9px] font-mono text-brand-secondary/60 w-8 text-right">00:00</span>
-            <div className="flex-grow h-1 bg-white/10 rounded-full overflow-hidden cursor-pointer group relative">
-              <div className="absolute inset-y-0 left-0 w-1/3 bg-brand-secondary rounded-full group-hover:bg-emerald-400 transition-colors" />
+          {!(isIcecastRadio || isLiveStream) && (
+            <div className="w-full flex items-center gap-3">
+              <span className="text-[9px] font-mono text-brand-secondary/60 w-8 text-right">{formatDuration(positionMs)}</span>
+              <input 
+                type="range" 
+                min="0" 
+                max={currentTrack?.duration || 1} 
+                value={positionMs} 
+                onChange={(e) => seekTrack(Number(e.target.value))} 
+                className="flex-grow h-1 accent-brand-secondary bg-white/10 rounded-full cursor-pointer appearance-none outline-none focus:outline-none transition-all" 
+                style={{
+                  background: `linear-gradient(to right, #c9b09a 0%, #c9b09a ${(positionMs / (currentTrack?.duration || 1)) * 100}%, rgba(255,255,255,0.1) ${(positionMs / (currentTrack?.duration || 1)) * 100}%, rgba(255,255,255,0.1) 100%)`
+                }}
+              />
+              <span className="text-[9px] font-mono text-brand-secondary/60 w-8">{currentTrack ? formatDuration(currentTrack.duration || 0) : "00:00"}</span>
             </div>
-            <span className="text-[9px] font-mono text-brand-secondary/60 w-8">{currentTrack ? formatDuration(currentTrack.duration || 0) : "00:00"}</span>
-          </div>
+          )}
         </div>
 
         {/* Right: Volume & Audio Engine Toggle */}
         <div className="hidden md:flex w-[200px] xl:w-[280px] items-center justify-end gap-3.5 relative">
-          <button onClick={toggleMute} className="text-brand-secondary/60 hover:text-white transition cursor-pointer">
+          <motion.button 
+            onClick={toggleMute} 
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.95 }}
+            className="text-brand-secondary/60 hover:text-white transition-colors cursor-pointer"
+          >
             <Volume2 className="w-4 h-4"/>
-          </button>
-          <input 
+          </motion.button>
+          <motion.input 
             type="range" 
             min="0" 
             max="100" 
             value={isMuted ? 0 : volume} 
             onChange={(e) => setVolume(Number(e.target.value))} 
-            className="w-20 lg:w-24 h-1 accent-white bg-white/20 rounded-full cursor-pointer" 
+            animate={{
+              width: isMuted ? 0 : 96,
+              opacity: isMuted ? 0.3 : 1
+            }}
+            transition={{ duration: 0.3, ease: "easeInOut" }}
+            className="h-1 accent-white bg-white/20 rounded-full cursor-pointer origin-right overflow-hidden" 
           />
-          <button 
+          <motion.button 
             onClick={() => setIsAudioEngineOpen(!isAudioEngineOpen)}
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.95 }}
             className={`p-2 rounded-full transition-all border cursor-pointer ${
               isAudioEngineOpen || activeFilter !== "clear" 
                 ? "bg-brand-secondary/20 border-brand-secondary/50 text-brand-secondary shadow-[0_0_12px_rgba(var(--brand-secondary-rgb),0.35)] scale-105" 
@@ -890,7 +1538,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
             }`}
           >
             <Settings2 className="w-4 h-4" />
-          </button>
+          </motion.button>
 
           {/* Audio Engine Popover */}
           <AnimatePresence>
@@ -907,26 +1555,44 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { id: "clear", name: "Clear", desc: "No filters" }, { id: "nightcore", name: "Nightcore", desc: "Pitch & Fast" },
-                    { id: "vaporwave", name: "Vaporwave", desc: "Slow Reverb" }, { id: "8d", name: "8D Audio", desc: "Rotational" },
-                    { id: "karaoke", name: "Karaoke", desc: "No Vocals" }, { id: "tremolo", name: "Tremolo", desc: "Vol Osc" },
-                    { id: "vibrato", name: "Vibrato", desc: "Pitch Osc" }, { id: "lowpass", name: "Low Pass", desc: "Muffled" },
-                  ].map(filter => (
-                    <button
-                      key={filter.id}
-                      onClick={() => { setActiveFilter(filter.id); applyFilter(filter.id); }}
-                      className={`p-2.5 rounded-xl border transition-all text-left flex flex-col justify-center cursor-pointer ${
-                        activeFilter === filter.id ? "bg-brand-secondary/15 border-brand-secondary/50 shadow-inner" : "bg-black/30 border-white/5 hover:border-brand-secondary/30 hover:bg-white/5"
-                      }`}
-                    >
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${activeFilter === filter.id ? "text-brand-secondary" : "text-white"}`}>{filter.name}</span>
-                      <span className={`text-[8px] font-mono uppercase tracking-widest ${activeFilter === filter.id ? "text-brand-secondary/80" : "text-brand-secondary/40"}`}>{filter.desc}</span>
-                    </button>
-                  ))}
+                    { id: "clear", name: "Clear", desc: "No filters" }, 
+                    { id: "nightcore", name: "Nightcore", desc: "Pitch & Fast" },
+                    { id: "vaporwave", name: "Vaporwave", desc: "Slow Reverb" }, 
+                    { id: "8d", name: "8D Audio", desc: "Rotational" },
+                    { id: "karaoke", name: "Karaoke", desc: "No Vocals" }, 
+                    { id: "tremolo", name: "Tremolo", desc: "Vol Osc" },
+                    { id: "vibrato", name: "Vibrato", desc: "Pitch Osc" }, 
+                    { id: "lowpass", name: "Low Pass", desc: "Muffled" },
+                    { id: "bassboost", name: "Bass Boost", desc: "High EQ" },
+                    { id: "reverb", name: "Space Reverb", desc: "Reverb Space" }
+                  ].map(filter => {
+                    const isActive = activeFilter === filter.id || 
+                      (filter.id === "bassboost" && bassBoost) || 
+                      (filter.id === "reverb" && reverb);
+                    return (
+                      <motion.button
+                        key={filter.id}
+                        onClick={() => {
+                          const nextId = isActive ? "clear" : filter.id;
+                          applyFilter(nextId);
+                        }}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className={`p-2.5 rounded-xl border transition-all text-left flex flex-col justify-center cursor-pointer ${
+                          isActive ? "bg-brand-secondary/15 border-brand-secondary/50 shadow-inner" : "bg-black/30 border-white/5 hover:border-brand-secondary/30 hover:bg-white/5"
+                        }`}
+                      >
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${isActive ? "text-brand-secondary" : "text-white"}`}>{filter.name}</span>
+                        <span className={`text-[8px] font-mono uppercase tracking-widest ${isActive ? "text-brand-secondary/80" : "text-brand-secondary/40"}`}>{filter.desc}</span>
+                      </motion.button>
+                    );
+                  })}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
+
+
         </div>
 
       </div>
