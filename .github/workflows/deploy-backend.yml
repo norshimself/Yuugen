@@ -24,7 +24,21 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_PORT }}
           script: |
-            cd /root/yuugen
+            set -e
+
+            # Navigate to the project directory (robustly checking case and location)
+            if [ -d "/root/Yuugen" ]; then
+              cd /root/Yuugen
+            elif [ -d "/root/yuugen" ]; then
+              cd /root/yuugen
+            elif [ -d "$HOME/Yuugen" ]; then
+              cd "$HOME/Yuugen"
+            elif [ -d "$HOME/yuugen" ]; then
+              cd "$HOME/yuugen"
+            else
+              echo "❌ Error: Project directory not found in /root or $HOME"
+              exit 1
+            fi
 
             echo "📥 Pulling latest changes..."
             git pull origin main
