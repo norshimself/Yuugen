@@ -35,7 +35,9 @@ import { SettingsModule } from './api/settings/settings.module';
           configService.get<string>('DATABASE_URL') ||
           'postgres://postgres:password@postgres:5432/discord_bot',
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: process.env.NODE_ENV !== 'production',
+        synchronize:
+          process.env.NODE_ENV !== 'production' ||
+          process.env.TYPEORM_SYNCHRONIZE === 'true',
       }),
       inject: [ConfigService],
     }),
