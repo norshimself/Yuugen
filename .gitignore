@@ -6,3 +6,5 @@ dist/
 *.log
 nginx/certs/
 nginx/certbot/
+.vercel
+.env*.local
