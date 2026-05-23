@@ -23,4 +23,30 @@ plugins:
     allowSearch: true
     allowDirectVideoIds: true
     allowDirectPlaylistIds: true
+    clients:
+      - TVHTML5EMBEDDED
+      - ANDROID_VR
+      - MUSIC
+      - M_WEB
+      - WEB
+      - WEBEMBEDDED
+      - ANDROID_MUSIC
+      - IOS
+    clientOptions:
+      M_WEB:
+        searching: true
+      MUSIC:
+        searching: false
+      ANDROID_VR:
+        searching: false
+      WEBEMBEDDED:
+        searching: false
+      WEB:
+        searching: true
+      TVHTML5EMBEDDED:
+        searching: false
+      ANDROID_MUSIC:
+        searching: false
+      IOS:
+        searching: false
 
