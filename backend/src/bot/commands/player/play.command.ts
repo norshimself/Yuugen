@@ -103,7 +103,7 @@ export class PlayCommand {
 
         const embed = new EmbedBuilder()
           .setTitle(isPlayingNow ? '✦ Playlist Playing Now' : '✦ Playlist Added to Queue')
-          .setDescription(`**[${playlist.name}](${playlist.uri})**`)
+          .setDescription(playlist.uri ? `**[${playlist.name}](${playlist.uri})**` : `**${playlist.name}**`)
           .setThumbnail(playlist.thumbnail || finalTracks[0]?.info.artworkUrl || null)
           .addFields(
             {
@@ -118,7 +118,9 @@ export class PlayCommand {
             },
             {
               name: 'First Song',
-              value: finalTracks[0] ? `[${finalTracks[0].info.title}](${finalTracks[0].info.uri})` : 'Unknown',
+              value: finalTracks[0] 
+                ? (finalTracks[0].info.uri ? `[${finalTracks[0].info.title}](${finalTracks[0].info.uri})` : finalTracks[0].info.title)
+                : 'Unknown',
               inline: false,
             }
           )
@@ -172,7 +174,7 @@ export class PlayCommand {
       const embed = new EmbedBuilder()
         .setTitle(isPlayingNow ? '✦ Playing Now' : '✦ Added to Queue')
         .setDescription(
-          `**[${track.info.title}](${track.info.uri})**\n\n` +
+          (track.info.uri ? `**[${track.info.title}](${track.info.uri})**\n\n` : `**${track.info.title}**\n\n`) +
             (isPlayingNow
               ? ''
               : `**Position in Queue:** \`#${queuePosition}\`\n**Estimated Time:** \`${this.formatDuration(estimatedTimeMs)}\`\n`),
