@@ -8,6 +8,13 @@ export interface QueueTrack {
   isStream?: boolean;
   artworkUrl?: string;
   position?: number;
+  userData?: {
+    playlist?: {
+      id: string;
+      name: string;
+      uri?: string;
+    };
+  };
 }
 
 export interface RecommendationTrack {

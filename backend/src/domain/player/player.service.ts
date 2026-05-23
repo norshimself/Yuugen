@@ -199,7 +199,10 @@ export class PlayerService {
     }
   }
 
-  private setupLavalinkListeners() {
+   private setupLavalinkListeners() {
+    this.lavalinkManager.nodeManager.on('error', (node, error) => {
+      console.warn(`Lavalink Node ${node.id} encountered an error:`, error);
+    });
     this.lavalinkManager.on('trackStart', (player) =>
       this.broadcastUpdate(player.guildId),
     );
@@ -241,6 +244,7 @@ export class PlayerService {
                 artist: current.track.author || 'Discord Voice Stream',
                 isStream: current.track.isStream || false,
                 artworkUrl: current.track.artworkUrl,
+                userData: current.track.userData,
               }
             : null,
         serverQueue: queue.success && queue.tracks ? queue.tracks : [],
@@ -300,16 +304,76 @@ export class PlayerService {
       await player.connect();
     }
 
-    const result = await player.search(
-      { query },
+    let finalQuery = query ? query.trim() : '';
+    const isUrl = finalQuery.startsWith('http://') || finalQuery.startsWith('https://');
+    let playlistFallbackQuery: string | null = null;
+    if (isUrl && (finalQuery.includes('youtube.com') || finalQuery.includes('youtu.be')) && finalQuery.includes('list=')) {
+      const listParam = finalQuery.match(/[&?]list=([^&]+)/);
+      if (listParam && listParam[1]) {
+        playlistFallbackQuery = finalQuery.replace(/[&?]list=[^&]+/, '');
+        finalQuery = `https://www.youtube.com/playlist?list=${listParam[1]}`;
+      }
+    }
+
+    let result = await player.search(
+      { query: finalQuery },
       {
         id: 'api',
         username: 'API',
       },
     );
 
+    if ((!result || result.loadType === 'error' || result.loadType === 'empty' || !result.tracks?.length) && playlistFallbackQuery) {
+      console.log(`Play playlist search failed, falling back to single video: ${playlistFallbackQuery}`);
+      result = await player.search(
+        { query: playlistFallbackQuery },
+        {
+          id: 'api',
+          username: 'API',
+        },
+      );
+    }
+
     if (!result.tracks.length) {
       return { success: false, message: 'No tracks found!' };
+    }
+
+    if (result.loadType === 'playlist' && result.playlist) {
+      const playlist = result.playlist;
+      const playlistId = 'pl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+      
+      const tracksToAdd = result.tracks.map(t => {
+        t.userData = {
+          ...t.userData,
+          playlist: {
+            id: playlistId,
+            name: playlist.name,
+            uri: playlist.uri || '',
+          }
+        };
+        return t;
+      });
+
+      const finalTracks = tracksToAdd.slice(0, 100);
+      player.queue.add(finalTracks);
+
+      if (!player.playing) {
+        await player.play();
+      }
+
+      this.broadcastUpdate(guildId);
+
+      return {
+        success: true,
+        message: `Added playlist to queue: ${playlist.name} (${finalTracks.length} songs${result.tracks.length > 100 ? ' - capped at 100' : ''})`,
+        playlist: {
+          name: playlist.name,
+          uri: playlist.uri,
+          duration: playlist.duration,
+          trackCount: finalTracks.length,
+          id: playlistId,
+        },
+      };
     }
 
     const track = result.tracks[0];
@@ -401,7 +465,7 @@ export class PlayerService {
     const player = this.lavalinkManager.players.get(guildId);
     if (!player) return { success: false, message: 'No player found.' };
 
-    await player.skip();
+    await player.skip(1, false);
     this.broadcastUpdate(guildId);
     return { success: true, message: 'Track skipped.' };
   }
@@ -443,6 +507,7 @@ export class PlayerService {
             artworkUrl: player.queue.current.info.artworkUrl,
             artist: player.queue.current.info.author,
             isStream: player.queue.current.info.isStream,
+            userData: player.queue.current.userData,
           }
         : null,
       tracks: player.queue.tracks.map((t) => ({
@@ -452,6 +517,7 @@ export class PlayerService {
         artworkUrl: t.info.artworkUrl,
         artist: t.info.author,
         isStream: t.info.isStream,
+        userData: t.userData,
       })),
     };
   }
@@ -490,6 +556,27 @@ export class PlayerService {
     return {
       success: true,
       message: `Removed track: ${removedTrack.info.title}`,
+    };
+  }
+
+  async removePlaylist(guildId: string, playlistId: string) {
+    const player = this.lavalinkManager.players.get(guildId);
+    if (!player) return { success: false, message: 'No player found.' };
+
+    const tracksToKeep = player.queue.tracks.filter(
+      (t) => (t.userData as any)?.playlist?.id !== playlistId,
+    );
+
+    await player.queue.splice(0, player.queue.tracks.length);
+    if (tracksToKeep.length > 0) {
+      player.queue.add(tracksToKeep);
+    }
+
+    this.broadcastUpdate(guildId);
+
+    return {
+      success: true,
+      message: 'Removed playlist from queue.',
     };
   }
 
@@ -635,6 +722,7 @@ export class PlayerService {
         artworkUrl: current.info.artworkUrl,
         author: radioMeta ? radioMeta.artist : current.info.author,
         isStream: current.info.isStream,
+        userData: current.userData,
       },
     };
   }
@@ -785,21 +873,67 @@ export class PlayerService {
   }
 
   async search(query: string) {
+    const trimmedQuery = query ? query.trim() : '';
     try {
       const node = this.lavalinkManager.nodeManager.nodes.get('main_node');
       if (node) {
-        const result = (await node.search(
-          { query: `ytsearch:${query}` },
+        let isUrl = trimmedQuery.startsWith('http://') || trimmedQuery.startsWith('https://');
+        let queryToSearch = trimmedQuery;
+        if (!isUrl && (/^(www\.)?youtube\.com/i.test(trimmedQuery) || /^(www\.)?youtu\.be/i.test(trimmedQuery) || /^(www\.)?soundcloud\.com/i.test(trimmedQuery))) {
+          queryToSearch = `https://${trimmedQuery}`;
+          isUrl = true;
+        }
+
+        let searchQuery = isUrl ? queryToSearch : `ytsearch:${queryToSearch}`;
+        let playlistFallbackQuery: string | null = null;
+        if (isUrl && (searchQuery.includes('youtube.com') || searchQuery.includes('youtu.be')) && searchQuery.includes('list=')) {
+          const listParam = searchQuery.match(/[&?]list=([^&]+)/);
+          if (listParam && listParam[1]) {
+            playlistFallbackQuery = searchQuery.replace(/[&?]list=[^&]+/, '');
+            searchQuery = `https://www.youtube.com/playlist?list=${listParam[1]}`;
+          }
+        }
+
+        let result = (await node.search(
+          { query: searchQuery },
           {
             id: 'api',
             username: 'API',
           },
         )) as any;
 
+        if ((!result || result.loadType === 'error' || result.loadType === 'empty' || !result.tracks?.length) && playlistFallbackQuery) {
+          console.log(`Search playlist load failed, falling back to single video: ${playlistFallbackQuery}`);
+          result = (await node.search(
+            { query: playlistFallbackQuery },
+            {
+              id: 'api',
+              username: 'API',
+            },
+          )) as any;
+        }
+
         if (result && result.tracks && result.tracks.length > 0) {
+          if (result.loadType === 'playlist' && result.playlist) {
+            return {
+              success: true,
+              playlist: {
+                name: result.playlist.name,
+                uri: result.playlist.uri || query,
+                trackCount: result.tracks.length,
+              },
+              tracks: result.tracks.map((t: any) => ({
+                title: t.info.title,
+                uri: t.info.uri,
+                duration: t.info.duration,
+                author: t.info.author || 'YouTube',
+              })),
+            };
+          }
+
           return {
             success: true,
-            tracks: result.tracks.slice(0, 5).map((t: any) => ({
+            tracks: result.tracks.slice(0, 10).map((t: any) => ({
               title: t.info.title,
               uri: t.info.uri,
               duration: t.info.duration,

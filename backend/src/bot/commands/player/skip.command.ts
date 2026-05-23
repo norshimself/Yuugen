@@ -20,7 +20,7 @@ export class SkipCommand {
     await interaction.deferReply();
 
     const skippedTrack = player.queue.current;
-    await player.skip();
+    await player.skip(1, false);
 
     setTimeout(async () => {
       const nextTrack = player.queue.current;

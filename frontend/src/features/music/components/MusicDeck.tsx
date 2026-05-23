@@ -1,7 +1,7 @@
 // src/features/music/components/MusicDeck.tsx
 "use client";
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Play, Pause, SkipForward, Volume2,
@@ -111,6 +111,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
     shuffleQueue,
     clearQueue,
     removeTrack,
+    removePlaylist,
     voiceChannelId,
     setVoiceChannelId,
     joinVoiceChannel,
@@ -151,6 +152,60 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
   // Mobile Sidebar Toggle States
   const [isLeftPaneOpen, setIsLeftPaneOpen] = useState(false);
   const [isRightPaneOpen, setIsRightPaneOpen] = useState(false);
+
+  // Playlist Explorer State
+  const [activePlaylistPopup, setActivePlaylistPopup] = useState<{
+    playlistId: string;
+    playlistName: string;
+    tracks: { track: any; originalIndex: number }[];
+  } | null>(null);
+
+  // Stored search playlist results
+  const [searchPlaylistResult, setSearchPlaylistResult] = useState<{ name: string; uri: string; trackCount: number } | null>(null);
+
+  // Dynamic queue grouping useMemo
+  const groupedQueue = useMemo(() => {
+    const grouped: (
+      | { type: "track"; track: any; originalIndex: number }
+      | {
+          type: "playlist";
+          playlistId: string;
+          playlistName: string;
+          playlistUri?: string;
+          tracks: { track: any; originalIndex: number }[];
+          totalDuration: number;
+        }
+    )[] = [];
+
+    for (let i = 0; i < serverQueue.length; i++) {
+      const track = serverQueue[i];
+      const playlistMeta = track.userData?.playlist;
+
+      if (playlistMeta && playlistMeta.id) {
+        const lastItem = grouped[grouped.length - 1];
+        if (lastItem && lastItem.type === "playlist" && lastItem.playlistId === playlistMeta.id) {
+          lastItem.tracks.push({ track, originalIndex: i });
+          lastItem.totalDuration += track.duration || 0;
+        } else {
+          grouped.push({
+            type: "playlist",
+            playlistId: playlistMeta.id,
+            playlistName: playlistMeta.name,
+            playlistUri: playlistMeta.uri,
+            tracks: [{ track, originalIndex: i }],
+            totalDuration: track.duration || 0,
+          });
+        }
+      } else {
+        grouped.push({
+          type: "track",
+          track,
+          originalIndex: i,
+        });
+      }
+    }
+    return grouped;
+  }, [serverQueue]);
 
 
 
@@ -486,7 +541,10 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                 try {
                   if (discoverTab === "recommendations") {
                     const res = await musicService.searchTracks(searchQuery);
-                    if (res.success && res.tracks) setSearchResults(res.tracks);
+                    if (res.success) {
+                      setSearchResults(res.tracks || []);
+                      setSearchPlaylistResult(res.playlist || null);
+                    }
                   } else if (discoverTab === "radio") {
                     const res = await musicService.searchRadio(searchQuery, selectedCountry || undefined);
                     if (res.success && res.stations) setRadioSearchResults(res.stations);
@@ -620,6 +678,33 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
                     <button onClick={() => setSearchResults([])} className="text-[8px] hover:text-white transition uppercase tracking-widest text-brand-secondary/40 cursor-pointer">Clear</button>
                   </div>
                   <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pr-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent custom-scrollbar">
+                    {searchPlaylistResult && (
+                      <div 
+                        onClick={() => {
+                          playTrack(searchPlaylistResult.uri, searchPlaylistResult.name);
+                          setSearchResults([]);
+                          setSearchPlaylistResult(null);
+                          setSearchQuery("");
+                        }}
+                        className="mb-2 p-3 rounded-xl border border-brand-secondary/30 bg-gradient-to-r from-brand-secondary/15 via-[#c9b09a]/5 to-[#04080c] hover:border-brand-secondary/45 cursor-pointer transition flex items-center justify-between group/plcard"
+                      >
+                        <div className="flex-grow flex items-center gap-3 overflow-hidden pr-2">
+                          <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 opacity-90 border border-brand-secondary/25 bg-[#101a24] flex items-center justify-center relative">
+                            <ListMusic className="w-4 h-4 text-brand-secondary" />
+                          </div>
+                          <div className="truncate">
+                            <span className="text-[7px] font-bold text-brand-secondary/50 uppercase tracking-widest block mb-0.5 font-mono">Found Playlist</span>
+                            <h4 className="text-[10px] font-bold truncate text-white leading-tight group-hover/plcard:text-brand-secondary transition">
+                              ✦ Play Entire Playlist
+                            </h4>
+                            <span className="text-[8px] text-brand-secondary/60 block mt-0.5 truncate font-mono">
+                              {searchPlaylistResult.name} • {searchPlaylistResult.trackCount} songs
+                            </span>
+                          </div>
+                        </div>
+                        <Play className="w-3.5 h-3.5 text-brand-secondary opacity-70 group-hover/plcard:opacity-100 transition-opacity flex-shrink-0" />
+                      </div>
+                    )}
                     {searchResults.map((track, i) => {
                       const trackGradient = getGhibliGradient(track.title);
                       return (

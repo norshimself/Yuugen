@@ -9,5 +9,9 @@ export class BotGateway {
   @Once('clientReady')
   onReady(@Context() [client]: ContextOf<'clientReady'>) {
     this.logger.log(`Bot is ready! Logged in as ${client.user?.tag}`);
+
+    client.on('error', (error) => {
+      this.logger.error('Discord Client Error:', error);
+    });
   }
 }

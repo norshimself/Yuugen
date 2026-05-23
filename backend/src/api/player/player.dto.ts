@@ -109,3 +109,14 @@ export class PlayRadioDto {
   @IsOptional()
   artworkUrl?: string;
 }
+
+export class RemovePlaylistDto {
+  @IsString()
+  @IsNotEmpty()
+  guildId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  playlistId: string;
+}
+

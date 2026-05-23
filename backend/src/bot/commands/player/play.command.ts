@@ -63,11 +63,93 @@ export class PlayCommand {
         return interaction.editReply({ content: 'No tracks found!' });
       }
 
-      const track = result.tracks[0];
-      player.queue.add(track);
+      if (result.loadType === 'playlist' && result.playlist) {
+        const playlist = result.playlist;
+        const playlistId = 'pl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
+        
+        const tracksToAdd = result.tracks.map(t => {
+          t.userData = {
+            ...t.userData,
+            playlist: {
+              id: playlistId,
+              name: playlist.name,
+              uri: playlist.uri || '',
+            }
+          };
+          return t;
+        });
 
-      // Calculate estimated time and position
-      const queuePosition = player.queue.tracks.length;
+        const finalTracks = tracksToAdd.slice(0, 100);
+        
+        // Calculate estimated wait time before adding them
+        const queuePositionBefore = player.queue.tracks.length + 1;
+        let estimatedTimeMs = 0;
+
+        if (player.playing && player.queue.current) {
+          estimatedTimeMs += (player.queue.current.info.duration || 0) - player.position;
+        }
+
+        for (let i = 0; i < player.queue.tracks.length; i++) {
+          estimatedTimeMs += player.queue.tracks[i].info.duration || 0;
+        }
+
+        player.queue.add(finalTracks);
+
+        const isPlayingNow = !player.playing;
+
+        if (!player.playing) {
+          await player.play();
+        }
+
+        const embed = new EmbedBuilder()
+          .setTitle(isPlayingNow ? '✦ Playlist Playing Now' : '✦ Playlist Added to Queue')
+          .setDescription(`**[${playlist.name}](${playlist.uri})**`)
+          .setThumbnail(playlist.thumbnail || finalTracks[0]?.info.artworkUrl || null)
+          .addFields(
+            {
+              name: 'Tracks Count',
+              value: `\`${finalTracks.length} songs\`${result.tracks.length > 100 ? ' (capped at 100)' : ''}`,
+              inline: true,
+            },
+            {
+              name: 'Total Duration',
+              value: `\`${this.formatDuration(playlist.duration || 0)}\``,
+              inline: true,
+            },
+            {
+              name: 'First Song',
+              value: finalTracks[0] ? `[${finalTracks[0].info.title}](${finalTracks[0].info.uri})` : 'Unknown',
+              inline: false,
+            }
+          )
+          .setColor('#2B2D31')
+          .setFooter({
+            text: `Added by ${interaction.user.username}`,
+            iconURL: interaction.user.displayAvatarURL() || undefined,
+          });
+
+        if (!isPlayingNow) {
+          embed.addFields(
+            {
+              name: 'Position in Queue',
+              value: `\`#${queuePositionBefore}\``,
+              inline: true,
+            },
+            {
+              name: 'Estimated Wait',
+              value: `\`${this.formatDuration(estimatedTimeMs)}\``,
+              inline: true,
+            }
+          );
+        }
+
+        return interaction.editReply({ embeds: [embed] });
+      }
+
+      const track = result.tracks[0];
+      
+      // Calculate estimated time and position before adding
+      const queuePosition = player.queue.tracks.length + 1;
       let estimatedTimeMs = 0;
 
       if (player.playing && player.queue.current) {
@@ -75,11 +157,13 @@ export class PlayCommand {
           (player.queue.current.info.duration || 0) - player.position;
       }
 
-      for (let i = 0; i < queuePosition - 1; i++) {
+      for (let i = 0; i < player.queue.tracks.length; i++) {
         estimatedTimeMs += player.queue.tracks[i].info.duration || 0;
       }
 
-      const isPlayingNow = queuePosition === 0 && !player.playing;
+      player.queue.add(track);
+
+      const isPlayingNow = !player.playing;
 
       if (!player.playing) {
         await player.play();

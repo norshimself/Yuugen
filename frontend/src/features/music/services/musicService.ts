@@ -16,8 +16,8 @@ export const musicService = {
   /**
    * Search for songs/tracks via YouTube query
    */
-  async searchTracks(query: string): Promise<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string }[] }> {
-    return apiClient<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string }[] }>(
+  async searchTracks(query: string): Promise<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string }[]; playlist?: { name: string; uri: string; trackCount: number } }> {
+    return apiClient<{ success: boolean; tracks: { title: string; uri: string; duration: number; author: string }[]; playlist?: { name: string; uri: string; trackCount: number } }>(
       `/player/search?query=${encodeURIComponent(query)}`,
       { method: "GET" }
     );

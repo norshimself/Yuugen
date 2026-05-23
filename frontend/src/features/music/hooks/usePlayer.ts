@@ -441,6 +441,20 @@ export function usePlayer(guildId: string | undefined) {
     }
   }, [sendPlayerRequest, fetchQueue]);
 
+  const removePlaylist = useCallback(async (playlistId: string) => {
+    setPlayerStatusMessage({ text: "Removing playlist from queue...", success: true });
+    const data = await sendPlayerRequest("/remove-playlist", { playlistId });
+    if (data && data.success) {
+      setPlayerStatusMessage({ text: "Playlist removed from queue.", success: true });
+      await fetchQueue();
+    } else {
+      setPlayerStatusMessage({ 
+        text: `Failed to remove playlist: ${data?.message || 'Offline'}`, 
+        success: false 
+      });
+    }
+  }, [sendPlayerRequest, fetchQueue]);
+
   // Soundwave visualizer bars
   const visualizerBars = useMemo(() => {
     return Array.from({ length: 28 }, (_, i) => ({
@@ -490,6 +504,7 @@ export function usePlayer(guildId: string | undefined) {
     shuffleQueue,
     clearQueue,
     removeTrack,
+    removePlaylist,
     // Bridge settings
     voiceChannelId,
     setVoiceChannelId,

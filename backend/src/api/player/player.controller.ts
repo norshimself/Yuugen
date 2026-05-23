@@ -17,6 +17,7 @@ import {
   LoopDto,
   FilterDto,
   PlayRadioDto,
+  RemovePlaylistDto,
 } from './player.dto';
 import { ApiKeyGuard } from '../auth/api-key.guard';
 
@@ -81,6 +82,11 @@ export class PlayerController {
   @Post('remove')
   async remove(@Body() dto: RemoveDto) {
     return this.playerService.remove(dto.guildId, dto.index);
+  }
+
+  @Post('remove-playlist')
+  async removePlaylist(@Body() dto: RemovePlaylistDto) {
+    return this.playerService.removePlaylist(dto.guildId, dto.playlistId);
   }
 
   @Post('seek')
