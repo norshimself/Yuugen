@@ -22,7 +22,7 @@ export class AuthController {
 
   @Get('demo')
   async demo(@Res() res: any) {
-    if (process.env.ENABLE_DEMO_LOGIN !== 'true') {
+    if (process.env.NODE_ENV === 'production' || process.env.ENABLE_DEMO_LOGIN !== 'true') {
       throw new NotFoundException();
     }
     const demoUserId = 'demo_user_55555';

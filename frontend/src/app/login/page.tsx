@@ -179,6 +179,7 @@ export default function LoginPage() {
           <motion.div variants={itemVariants} className="mt-16 pt-8 border-t border-brand-secondary/10">
             <div className="flex items-center justify-between text-xs text-brand-secondary/70 font-serif">
               <span>Yuugen Platform Client v1.0</span>
+              {process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true' && (
               <button
                 onClick={handleDemoLogin}
                 className="font-medium text-brand-secondary hover:text-white hover:underline flex items-center gap-1 transition cursor-pointer"
@@ -186,6 +187,7 @@ export default function LoginPage() {
                 <span>Demo Music Deck</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
+              )}
             </div>
           </motion.div>
 
