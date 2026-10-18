@@ -25,6 +25,15 @@ export function usePlayer(guildId: string | undefined) {
   const [currentTrack, setCurrentTrack] = useState<QueueTrack | null>(null);
   const [isPlaybackLoading, setIsPlaybackLoading] = useState<boolean>(false);
 
+  // A guild switch must never reuse the previous server's voice channel/queue.
+  useEffect(() => {
+    setVoiceChannelId("");
+    setCurrentTrack(null);
+    setServerQueue([]);
+    setIsConnected(false);
+    setIsPlaying(false);
+  }, [guildId]);
+
   // Dynamic YouTube Recommendations state by tags (jpop, lofi, edm, rock)
   const [activeRecTag, setActiveRecTag] = useState<"jpop" | "lofi" | "edm" | "rock">("jpop");
   const [recommendations, setRecommendations] = useState<RecommendationTrack[]>([]);

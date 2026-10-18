@@ -67,8 +67,8 @@ export function useDashboard() {
             } catch (_) {}
           }
         }
-        if (!initialized && data.length > 0) {
-          setSelectedGuild(data[0]);
+        if (!initialized) {
+          setSelectedGuild(data.length > 0 ? data[0] : null);
         }
       }
     } catch (err) {

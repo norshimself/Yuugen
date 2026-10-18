@@ -10,6 +10,7 @@ import {
 import { PlayerService } from '../../domain/player/player.service';
 import {
   PlayDto,
+  JoinDto,
   GuildOnlyDto,
   VolumeDto,
   RemoveDto,
@@ -36,7 +37,7 @@ export class PlayerController {
     );
   }
   @Post('join')
-  async join(@Body() body: { guildId: string; channelId: string }) {
+  async join(@Body() body: JoinDto) {
     return this.playerService.join(body.guildId, body.channelId);
   }
 
