@@ -133,8 +133,8 @@ export class PlayerController {
   }
 
   @Get('channels')
-  async getChannels(@Query('guildId') guildId: string) {
-    return this.playerService.getVoiceChannels(guildId);
+  async getChannels(@Query('guildId') guildId: string, @Req() req: any) {
+    return this.playerService.getVoiceChannels(guildId, req.user.id);
   }
 
   @AllowGuildless()

@@ -1,7 +1,6 @@
 // src/services/apiClient.ts
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 interface FetchOptions extends RequestInit {
   bodyData?: Record<string, any> | any;
@@ -26,7 +25,6 @@ export async function refreshAccessToken(): Promise<string | null> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": API_KEY,
           ...(refreshToken ? { "x-refresh-token": refreshToken } : {}),
         },
         body: JSON.stringify({ refreshToken }),
@@ -66,7 +64,6 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
   
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");
-  headers.set("x-api-key", API_KEY);
   
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
@@ -92,7 +89,6 @@ export async function apiClient<T>(endpoint: string, options: FetchOptions = {})
       // Re-build config and retry
       const retryHeaders = new Headers(options.headers);
       retryHeaders.set("Content-Type", "application/json");
-      retryHeaders.set("x-api-key", API_KEY);
       retryHeaders.set("Authorization", `Bearer ${newToken}`);
       
       const retryConfig: RequestInit = {
