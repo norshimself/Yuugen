@@ -38,12 +38,10 @@ export function useDashboard() {
   }, []);
 
   const fetchGuilds = useCallback(async (customToken?: string) => {
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
     const storedToken = customToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) || token;
     try {
       const headers: Record<string, string> = {
-        "x-api-key": apiKey
       };
       if (storedToken) {
         headers["Authorization"] = `Bearer ${storedToken}`;
@@ -69,8 +67,8 @@ export function useDashboard() {
             } catch (_) {}
           }
         }
-        if (!initialized && data.length > 0) {
-          setSelectedGuild(data[0]);
+        if (!initialized) {
+          setSelectedGuild(data.length > 0 ? data[0] : null);
         }
       }
     } catch (err) {
@@ -107,14 +105,12 @@ export function useDashboard() {
       if (!storedToken) return null;
       
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-      const apiKey = process.env.NEXT_PUBLIC_API_KEY || "";
       try {
         let res = await fetch(`${apiUrl}${endpoint}`, {
           ...options,
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${storedToken}`,
-            "x-api-key": apiKey,
             ...(options.headers || {}),
           },
           credentials: "include",
@@ -132,7 +128,6 @@ export function useDashboard() {
               headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${newToken}`,
-                "x-api-key": apiKey,
                 ...(options.headers || {}),
               },
               credentials: "include",

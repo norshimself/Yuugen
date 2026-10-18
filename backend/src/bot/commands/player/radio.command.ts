@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Context, SlashCommand, Options, StringOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
+import { isPublicHttpUrl } from '../../../shared/public-http-url';
 import { LavalinkManager } from 'lavalink-client';
 import {
   EmbedBuilder,
@@ -125,6 +126,10 @@ export class RadioCommand {
 
         // Acknowledge the button click
         await confirmation.deferUpdate();
+
+        if (typeof streamUrl !== 'string' || !(await isPublicHttpUrl(streamUrl))) {
+          return interaction.editReply({ content: 'This station has an unsafe stream URL.', components: [] });
+        }
 
         // Create or get player
         const player = this.lavalinkManager.createPlayer({

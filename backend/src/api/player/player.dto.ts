@@ -7,6 +7,16 @@ import {
   Max,
 } from 'class-validator';
 
+export class JoinDto {
+  @IsString()
+  @IsNotEmpty()
+  guildId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  channelId: string;
+}
+
 export class PlayDto {
   @IsString()
   @IsNotEmpty()

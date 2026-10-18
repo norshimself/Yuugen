@@ -3,6 +3,7 @@ import { Context, SlashCommand, Options, StringOption } from 'necord';
 import type { SlashCommandContext } from 'necord';
 import { LavalinkManager } from 'lavalink-client';
 import { EmbedBuilder } from 'discord.js';
+import { hasUrlScheme, isPublicHttpUrl } from '../../../shared/public-http-url';
 
 class PlayOptions {
   @StringOption({
@@ -40,6 +41,10 @@ export class PlayCommand {
         content: 'This command can only be used in a guild!',
         ephemeral: true,
       });
+    }
+
+    if (hasUrlScheme(query) && !(await isPublicHttpUrl(query.trim()))) {
+      return interaction.reply({ content: 'Invalid or private media URL.', ephemeral: true });
     }
 
     // Create or get player

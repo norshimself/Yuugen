@@ -30,7 +30,7 @@ export const settingsService = {
    */
   async getChannels(guildId: string): Promise<DiscordChannel[]> {
     const res = await apiClient<{ success: boolean; channels: DiscordChannel[] }>(
-      `/player/channels?guildId=${guildId}`,
+      `/settings/channels?guildId=${guildId}`,
       { method: "GET" }
     );
     return res.success && res.channels ? res.channels : [];

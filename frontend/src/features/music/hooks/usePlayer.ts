@@ -2,6 +2,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { QueueTrack, RecommendationTrack, PlayerStatusMessage } from "../types/music.types";
 import { musicService } from "../services/musicService";
+import { refreshAccessToken } from "@/services/apiClient";
 
 export function usePlayer(guildId: string | undefined) {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -23,6 +24,15 @@ export function usePlayer(guildId: string | undefined) {
   const [serverQueue, setServerQueue] = useState<QueueTrack[]>([]);
   const [currentTrack, setCurrentTrack] = useState<QueueTrack | null>(null);
   const [isPlaybackLoading, setIsPlaybackLoading] = useState<boolean>(false);
+
+  // A guild switch must never reuse the previous server's voice channel/queue.
+  useEffect(() => {
+    setVoiceChannelId("");
+    setCurrentTrack(null);
+    setServerQueue([]);
+    setIsConnected(false);
+    setIsPlaying(false);
+  }, [guildId]);
 
   // Dynamic YouTube Recommendations state by tags (jpop, lofi, edm, rock)
   const [activeRecTag, setActiveRecTag] = useState<"jpop" | "lofi" | "edm" | "rock">("jpop");
@@ -120,7 +130,8 @@ export function usePlayer(guildId: string | undefined) {
     }
   }, [guildId]);
 
-  // Native WebSocket real-time updates with automatic reconnect
+  // Subscribe to the active guild only after the backend verifies the user's
+  // signed Discord identity and membership. Tokens are never put in URLs.
   useEffect(() => {
     if (!guildId) return;
 
@@ -129,19 +140,57 @@ export function usePlayer(guildId: string | undefined) {
 
     let socket: WebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout;
+    let disposed = false;
+    let shouldReconnect = true;
+
+    const subscribe = (token: string) => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({
+          event: "subscribeGuild",
+          data: { guildId, token },
+        }));
+      }
+    };
 
     const connect = () => {
+      if (disposed || !shouldReconnect) return;
       try {
         socket = new WebSocket(wsUrl);
 
-        socket.onopen = () => {
-          // Subscribe to real-time events for the active guild
-          socket?.send(JSON.stringify({ event: "subscribeGuild", data: { guildId } }));
+        socket.onopen = async () => {
+          const token = localStorage.getItem("access_token") || await refreshAccessToken();
+          if (disposed) return;
+          if (token) {
+            subscribe(token);
+          } else {
+            shouldReconnect = false;
+            socket?.close();
+          }
         };
 
-        socket.onmessage = (event) => {
+        socket.onmessage = async (event) => {
           try {
             const msg = JSON.parse(event.data);
+            if (msg.event === "subscriptionError") {
+              if (msg.code === "invalid_token") {
+                const newToken = await refreshAccessToken();
+                if (disposed) return;
+                if (newToken) {
+                  subscribe(newToken);
+                } else {
+                  shouldReconnect = false;
+                  socket?.close();
+                }
+              } else {
+                shouldReconnect = false;
+                socket?.close();
+                setPlayerStatusMessage({
+                  text: "You do not have access to this server's live player updates.",
+                  success: false,
+                });
+              }
+              return;
+            }
             if (msg.event === "playerUpdate" && msg.guildId === guildId) {
               const payload = msg.data;
               if (payload.isConnected !== undefined) setIsConnected(payload.isConnected);
@@ -162,20 +211,23 @@ export function usePlayer(guildId: string | undefined) {
         };
 
         socket.onclose = () => {
+          if (!disposed && shouldReconnect) {
+            reconnectTimeout = setTimeout(connect, 4000);
+          }
+        };
+        socket.onerror = () => socket?.close();
+      } catch {
+        if (!disposed && shouldReconnect) {
           reconnectTimeout = setTimeout(connect, 4000);
-        };
-
-        socket.onerror = () => {
-          socket?.close();
-        };
-      } catch (err) {
-        reconnectTimeout = setTimeout(connect, 4000);
+        }
       }
     };
 
     connect();
 
     return () => {
+      disposed = true;
+      shouldReconnect = false;
       if (socket) {
         socket.onclose = null;
         socket.close();

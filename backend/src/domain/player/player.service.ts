@@ -1,7 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
 import { LavalinkManager } from 'lavalink-client';
-import { Client } from 'discord.js';
+import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
+import { hasUrlScheme, isPublicHttpUrl } from '../../shared/public-http-url';
 import { PlayerGateway } from '../../api/player/player.gateway';
 import * as http from 'http';
 import * as https from 'https';
@@ -10,6 +10,7 @@ import { parse as parseUrl } from 'url';
 export async function getIcyMetadata(
   streamUrl: string,
 ): Promise<{ title?: string; artist?: string } | null> {
+  if (!(await isPublicHttpUrl(streamUrl))) return null;
   return new Promise((resolve) => {
     try {
       const parsed = parseUrl(streamUrl);
@@ -139,7 +140,6 @@ export class PlayerService {
     private readonly client: Client,
     @Inject(forwardRef(() => PlayerGateway))
     private readonly playerGateway: PlayerGateway,
-    private readonly jwtService: JwtService,
   ) {
     this.setupLavalinkListeners();
   }
@@ -258,6 +258,9 @@ export class PlayerService {
   }
 
   async play(guildId: string, query: string, channelId?: string) {
+    if (hasUrlScheme(query) && !(await isPublicHttpUrl(query.trim()))) {
+      return { success: false, message: 'Playback URL must be public HTTP(S)' };
+    }
     this.radioMetadataMap.delete(guildId);
     if (this.radioMetadataMap.size === 0) {
       this.stopRadioPoller();
@@ -727,108 +730,36 @@ export class PlayerService {
     };
   }
 
-  async getGuilds(token?: string) {
-    let userId: string | null = null;
-    if (token) {
-      try {
-        const payload = await this.jwtService.verifyAsync(token);
-        userId = payload.userId;
-      } catch (err) {
-        console.warn('Invalid JWT token supplied to getGuilds:', err);
-      }
-    }
+  async getGuilds(userId: string) {
+    // Only return actual mutual Discord guilds. Offline and unauthenticated
+    // states are represented as an empty list, never synthetic server data.
+    if (!/^\d{17,20}$/.test(userId)) return [];
 
     try {
-      if (
-        this.client &&
-        this.client.guilds &&
-        this.client.guilds.cache &&
-        this.client.guilds.cache.size > 0
-      ) {
-        if (userId && !userId.startsWith('demo_user')) {
-          const promises = this.client.guilds.cache.map(async (guild) => {
-            if (guild.members.cache.has(userId)) {
-              return { guild, isMember: true };
-            }
-            try {
-              const member = await guild.members
-                .fetch(userId)
-                .catch(() => null);
-              return { guild, isMember: !!member };
-            } catch (err) {
-              return { guild, isMember: false };
-            }
-          });
+      const memberships = await Promise.all(
+        this.client.guilds.cache.map(async (guild) => {
+          const member = await guild.members
+            .fetch({ user: userId, force: true })
+            .catch(() => null);
+          if (!member) return null;
 
-          const results = await Promise.all(promises);
-          const clientGuilds = results
-            .filter((r) => r.isMember)
-            .map((r) => ({
-              id: r.guild.id,
-              name: r.guild.name,
-              memberCount: r.guild.memberCount,
-              isActive: true,
-              iconURL: r.guild.iconURL() || null,
-            }));
-
-          return clientGuilds;
-        } else {
-          // Demo user or unauthenticated request: return all bot guilds
-          const clientGuilds = this.client.guilds.cache.map((g) => ({
-            id: g.id,
-            name: g.name,
-            memberCount: g.memberCount,
+          return {
+            id: guild.id,
+            name: guild.name,
+            memberCount: guild.memberCount,
             isActive: true,
-            iconURL: g.iconURL() || null,
-          }));
-          return clientGuilds;
-        }
-      }
-    } catch (err) {
-      console.warn(
-        'Discord client guilds starting up, using default mock guilds:',
-        err,
+            iconURL: guild.iconURL() || null,
+          };
+        }),
       );
-    }
 
-    // Aesthetic Fallback Mock Guilds
-    return [
-      {
-        id: '584917332447592488',
-        name: 'Yuugen Harmony',
-        memberCount: 1542,
-        isActive: true,
-        iconURL: null,
-      },
-      {
-        id: '2',
-        name: 'Lofi & Cafe',
-        memberCount: 843,
-        isActive: true,
-        iconURL: null,
-      },
-      {
-        id: '3',
-        name: 'Ghibli Garden',
-        memberCount: 2311,
-        isActive: true,
-        iconURL: null,
-      },
-      {
-        id: '4',
-        name: 'The Anime Lounge',
-        memberCount: 4298,
-        isActive: false,
-        iconURL: null,
-      },
-      {
-        id: '5',
-        name: 'Developer Hub',
-        memberCount: 120,
-        isActive: true,
-        iconURL: null,
-      },
-    ];
+      return memberships.filter(
+        (guild): guild is NonNullable<typeof guild> => guild !== null,
+      );
+    } catch (error) {
+      console.warn('Failed to list mutual Discord guilds:', error);
+      return [];
+    }
   }
 
   async getRecommendations(tag: string) {
@@ -884,6 +815,9 @@ export class PlayerService {
           isUrl = true;
         }
 
+        if (hasUrlScheme(queryToSearch) && !(await isPublicHttpUrl(queryToSearch))) {
+          return { success: false, tracks: [] };
+        }
         let searchQuery = isUrl ? queryToSearch : `ytsearch:${queryToSearch}`;
         let playlistFallbackQuery: string | null = null;
         if (isUrl && (searchQuery.includes('youtube.com') || searchQuery.includes('youtu.be')) && searchQuery.includes('list=')) {
@@ -949,38 +883,38 @@ export class PlayerService {
     return { success: false, tracks: [] };
   }
 
-  async getVoiceChannels(guildId: string) {
+  async getVoiceChannels(guildId: string, userId: string) {
     try {
-      if (this.client) {
-        const guild = this.client.guilds.cache.get(guildId);
-        if (guild) {
-          // Filter for voice channels (Type 2 is GuildVoice in Discord.js v14)
-          const channels = guild.channels.cache
-            .filter((c: any) => c.type === 2 || c.isVoiceBased?.())
-            .map((c: any) => ({
-              id: c.id,
-              name: c.name,
-            }));
-
-          if (channels.length > 0) {
-            return { success: true, channels };
-          }
-        }
+      const guild = this.client.guilds.cache.get(guildId);
+      if (!guild) {
+        return { success: false, channels: [] };
       }
-    } catch (err) {
-      console.warn(`Failed to fetch channels for guild ${guildId}:`, err);
-    }
+      const member = await guild.members
+        .fetch({ user: userId, force: true })
+        .catch(() => null);
+      if (!member) {
+        return { success: false, channels: [] };
+      }
 
-    // Fallback aesthetic mock channels if bot is not in the guild or starting up
-    return {
-      success: true,
-      channels: [
-        { id: '1123389644764090544', name: 'General Voice' },
-        { id: '2', name: 'Music Lounge' },
-        { id: '3', name: 'Gaming Room' },
-        { id: '4', name: 'Chilled Cafe' },
-      ],
-    };
+      const channels = guild.channels.cache
+        .filter((channel) => {
+          if (
+            channel.type !== ChannelType.GuildVoice &&
+            channel.type !== ChannelType.GuildStageVoice
+          ) {
+            return false;
+          }
+          const permissions = channel.permissionsFor(member);
+          return !!permissions?.has(PermissionFlagsBits.ViewChannel) &&
+            !!permissions?.has(PermissionFlagsBits.Connect);
+        })
+        .map((channel) => ({ id: channel.id, name: channel.name }));
+
+      return { success: true, channels };
+    } catch (error) {
+      console.warn('Unable to load voice channels:', error);
+      return { success: false, channels: [] };
+    }
   }
 
   async getRadioCountries() {
@@ -1127,6 +1061,9 @@ export class PlayerService {
     channelId?: string,
     artworkUrl?: string,
   ) {
+    if (!(await isPublicHttpUrl(streamUrl))) {
+      return { success: false, message: 'Radio URL must be public HTTP(S)' };
+    }
     let player = this.lavalinkManager.players.get(guildId);
 
     if (!player) {

@@ -1,5 +1,4 @@
-import { settingsService } from '@/features/settings/services/settingsService';
-import { UpdateGuildSettingsForm } from '@/components/guild-settings/UpdateGuildSettingsForm';
+import { GuildSettingsLoader } from '@/components/guild-settings/GuildSettingsLoader';
 
 interface GuildSettingsPageProps {
   searchParams: Promise<{ guildId?: string }>;
@@ -17,9 +16,6 @@ export default async function GuildSettingsPage({ searchParams }: GuildSettingsP
     );
   }
 
-  // Direct, server-side secure fetch for this guild using domain service
-  const settings = await settingsService.getSettings(guildId).catch(() => null);
-
   return (
     <main className="p-6 max-w-4xl mx-auto space-y-6 text-white bg-[#04080c] min-h-screen font-sans">
       <div className="flex flex-col gap-1.5 border-b border-white/5 pb-4">
@@ -27,27 +23,7 @@ export default async function GuildSettingsPage({ searchParams }: GuildSettingsP
         <p className="text-xs text-brand-secondary/50 font-light font-mono">Guild Context: {guildId}</p>
       </div>
       
-      {settings ? (
-        <UpdateGuildSettingsForm initialSettings={settings} guildId={guildId} />
-      ) : (
-        <div className="p-8 text-brand-secondary/50 text-sm font-light italic text-center border border-brand-secondary/15 rounded-[1.5rem] bg-[#080d14]/90 backdrop-blur-xl">
-          No configurations active. Generating default settings for Guild ID: {guildId}...
-          <div className="mt-4">
-            <UpdateGuildSettingsForm 
-              initialSettings={{
-                guildId,
-                prefix: 'y!',
-                welcomeChannelId: '',
-                welcomeMessage: 'Welcome {user} to the server!',
-                antiSpamEnabled: false,
-                profanityFilterEnabled: false,
-                blacklistedWords: []
-              }} 
-              guildId={guildId} 
-            />
-          </div>
-        </div>
-      )}
+      <GuildSettingsLoader guildId={guildId} />
     </main>
   );
 }

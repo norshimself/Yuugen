@@ -272,7 +272,7 @@ export function MusicDeck({ selectedGuild }: MusicDeckProps) {
       const res = await musicService.getVoiceChannels(selectedGuild.id);
       if (res.success && res.channels) {
         setChannels(res.channels);
-        if (res.channels.length > 0 && voiceChannelId === "1123389644764090544") {
+        if (res.channels.length > 0 && !voiceChannelId) {
           setVoiceChannelId(res.channels[0].id);
         }
       }

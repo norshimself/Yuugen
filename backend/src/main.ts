@@ -16,12 +16,18 @@ async function bootstrap() {
   app.useWebSocketAdapter(new WsAdapter(app));
 
   // Enable CORS for frontend interaction
-  const corsOrigin = process.env.CORS_ORIGIN;
+  const allowedOrigins = (process.env.CORS_ORIGIN || process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
+    throw new Error('CORS_ORIGIN or FRONTEND_URL must be configured in production');
+  }
   app.enableCors({
-    origin: corsOrigin || true,
+    origin: allowedOrigins.length > 0 ? allowedOrigins : true,
     credentials: true,
     allowedHeaders:
-      'Content-Type, Accept, Authorization, x-api-key, x-refresh-token',
+      'Content-Type, Accept, Authorization, x-refresh-token',
   });
 
   // Set global prefix
