@@ -61,24 +61,13 @@ export function UpdateGuildSettingsForm({ initialSettings, guildId }: UpdateGuil
   const watchedProfanityFilterEnabled = watch('profanityFilterEnabled');
   const watchedBlacklistedWords = (watch('blacklistedWords') || []) as string[];
 
-  // Fetch discord text channels
+  // Read text channels through the authenticated guild settings API.
   const fetchChannels = useCallback(async () => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-    const apiKey = process.env.NEXT_PUBLIC_API_KEY || '4029c9b9b5ad007d8c24a2a51b458dce46674bbbc2ce1acfed1cfcd3cad2623f';
     try {
-      const res = await fetch(`${apiUrl}/player/channels?guildId=${guildId}`, {
-        headers: {
-          'x-api-key': apiKey,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.channels) {
-          setChannels(data.channels);
-        }
-      }
+      setChannels(await settingsService.getChannels(guildId));
     } catch (err) {
-      console.warn('Failed to load text channels for selection:', err);
+      console.warn('Failed to load guild text channels:', err);
+      setChannels([]);
     }
   }, [guildId]);
 

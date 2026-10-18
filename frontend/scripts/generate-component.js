@@ -107,13 +107,11 @@ const serviceContent = `// services/${kebabSingular}.service.ts
 import { ${pascalSingular}, Create${pascalSingular}Input } from '@/types/${kebabSingular}';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || '';
 
 export const ${camelSingular}Service = {
   async getAll(): Promise<${pascalSingular}[]> {
     const res = await fetch(\`\${API_URL}/${kebabPlural}\`, {
       headers: {
-        'x-api-key': API_KEY,
         'Content-Type': 'application/json',
       },
       next: { tags: ['${kebabPlural}'] }, // Next.js Cache Tags
@@ -126,7 +124,6 @@ export const ${camelSingular}Service = {
     const res = await fetch(\`\${API_URL}/${kebabPlural}\`, {
       method: 'POST',
       headers: { 
-        'x-api-key': API_KEY,
         'Content-Type': 'application/json' 
       },
       body: JSON.stringify(data),
