@@ -20,7 +20,7 @@ import { Session } from './session.entity';
         if (!secret || secret.length < 32) {
           throw new Error('JWT_SECRET must be configured with at least 32 characters');
         }
-        return { secret, signOptions: { expiresIn: '15m' } };
+        return { secret, signOptions: { expiresIn: '15m' as const } };
       },
     }),
   ],
