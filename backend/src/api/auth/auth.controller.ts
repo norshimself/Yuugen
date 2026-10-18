@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards, Req, Res, Post } from '@nestjs/common';
+import { Controller, Get, UseGuards, Req, Res, Post, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
@@ -22,6 +22,9 @@ export class AuthController {
 
   @Get('demo')
   async demo(@Res() res: any) {
+    if (process.env.ENABLE_DEMO_LOGIN !== 'true') {
+      throw new NotFoundException();
+    }
     const demoUserId = 'demo_user_55555';
 
     const sessionId = crypto.randomUUID();

@@ -12,7 +12,7 @@ import { Session } from './session.entity';
     TypeOrmModule.forFeature([Session]),
     JwtModule.register({
       global: true,
-      secret: process.env.JWT_SECRET || 'default_jwt_secret',
+      secret: process.env.JWT_SECRET || (() => { throw new Error('JWT_SECRET must be set'); })(),
       signOptions: { expiresIn: '15m' },
     }),
   ],
