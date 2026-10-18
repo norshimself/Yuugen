@@ -42,7 +42,7 @@ export class SettingsService {
           (typeof value !== 'string' || value.length > 20)) {
         throw new BadRequestException('Invalid welcome channel ID');
       }
-      settings.welcomeChannelId = value ?? '' as string;
+      settings.welcomeChannelId = typeof value === 'string' ? value : '';
     }
     if (updateData.welcomeMessage !== undefined) {
       if (typeof updateData.welcomeMessage !== 'string' ||
