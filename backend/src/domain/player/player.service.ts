@@ -1,6 +1,7 @@
 import { Injectable, Inject, forwardRef } from '@nestjs/common';
 import { LavalinkManager } from 'lavalink-client';
 import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
+import { hasUrlScheme, isPublicHttpUrl } from '../../shared/public-http-url';
 import { PlayerGateway } from '../../api/player/player.gateway';
 import * as http from 'http';
 import * as https from 'https';
@@ -9,6 +10,7 @@ import { parse as parseUrl } from 'url';
 export async function getIcyMetadata(
   streamUrl: string,
 ): Promise<{ title?: string; artist?: string } | null> {
+  if (!(await isPublicHttpUrl(streamUrl))) return null;
   return new Promise((resolve) => {
     try {
       const parsed = parseUrl(streamUrl);
@@ -256,6 +258,9 @@ export class PlayerService {
   }
 
   async play(guildId: string, query: string, channelId?: string) {
+    if (hasUrlScheme(query) && !(await isPublicHttpUrl(query.trim()))) {
+      return { success: false, message: 'Playback URL must be public HTTP(S)' };
+    }
     this.radioMetadataMap.delete(guildId);
     if (this.radioMetadataMap.size === 0) {
       this.stopRadioPoller();
@@ -810,6 +815,9 @@ export class PlayerService {
           isUrl = true;
         }
 
+        if (hasUrlScheme(queryToSearch) && !(await isPublicHttpUrl(queryToSearch))) {
+          return { success: false, tracks: [] };
+        }
         let searchQuery = isUrl ? queryToSearch : `ytsearch:${queryToSearch}`;
         let playlistFallbackQuery: string | null = null;
         if (isUrl && (searchQuery.includes('youtube.com') || searchQuery.includes('youtu.be')) && searchQuery.includes('list=')) {
@@ -1053,6 +1061,9 @@ export class PlayerService {
     channelId?: string,
     artworkUrl?: string,
   ) {
+    if (!(await isPublicHttpUrl(streamUrl))) {
+      return { success: false, message: 'Radio URL must be public HTTP(S)' };
+    }
     let player = this.lavalinkManager.players.get(guildId);
 
     if (!player) {
