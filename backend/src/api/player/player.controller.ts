@@ -19,10 +19,11 @@ import {
   PlayRadioDto,
   RemovePlaylistDto,
 } from './player.dto';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { AllowGuildless, GuildAccessGuard } from '../auth/guild-access.guard';
 
 @Controller('player')
-@UseGuards(ApiKeyGuard)
+@UseGuards(JwtAuthGuard, GuildAccessGuard)
 export class PlayerController {
   constructor(private readonly playerService: PlayerService) {}
 
@@ -113,21 +114,19 @@ export class PlayerController {
     return this.playerService.getNowPlaying(query.guildId);
   }
 
+  @AllowGuildless()
   @Get('guilds')
   async getGuilds(@Req() req: any) {
-    const authHeader = req.headers['authorization'];
-    let token: string | undefined;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      token = authHeader.substring(7);
-    }
-    return this.playerService.getGuilds(token);
+    return this.playerService.getGuilds(req.user.id);
   }
 
+  @AllowGuildless()
   @Get('recommendations')
   async getRecommendations(@Query('tag') tag: string) {
     return this.playerService.getRecommendations(tag);
   }
 
+  @AllowGuildless()
   @Get('search')
   async search(@Query('query') query: string) {
     return this.playerService.search(query);
@@ -138,11 +137,13 @@ export class PlayerController {
     return this.playerService.getVoiceChannels(guildId);
   }
 
+  @AllowGuildless()
   @Get('radio/countries')
   async getRadioCountries() {
     return this.playerService.getRadioCountries();
   }
 
+  @AllowGuildless()
   @Get('radio/search')
   async searchRadio(
     @Query('query') query?: string,
@@ -151,6 +152,7 @@ export class PlayerController {
     return this.playerService.searchRadio(query, country);
   }
 
+  @AllowGuildless()
   @Get('live/atmospheres')
   async getLiveAtmospheres() {
     return this.playerService.getLiveAtmospheres();

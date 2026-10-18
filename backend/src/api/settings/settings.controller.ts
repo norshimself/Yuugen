@@ -1,10 +1,12 @@
 import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { SettingsService } from '../../domain/settings/settings.service';
 import { GuildSettings } from '../../domain/settings/guild-settings.entity';
-import { ApiKeyGuard } from '../auth/api-key.guard';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { GuildAccessGuard, RequireGuildManager } from '../auth/guild-access.guard';
 
 @Controller('settings')
-@UseGuards(ApiKeyGuard)
+@RequireGuildManager()
+@UseGuards(JwtAuthGuard, GuildAccessGuard)
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) {}
 
