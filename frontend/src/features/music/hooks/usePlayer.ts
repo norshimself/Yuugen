@@ -16,7 +16,7 @@ export function usePlayer(guildId: string | undefined) {
   const [isFavorited, setIsFavorited] = useState<boolean>(false);
   
   // Bridge inputs
-  const [voiceChannelId, setVoiceChannelId] = useState<string>("1123389644764090544"); // Default sample channel ID
+  const [voiceChannelId, setVoiceChannelId] = useState<string>(""); // Set only after selecting or syncing a real voice channel
   const [playerStatusMessage, setPlayerStatusMessage] = useState<PlayerStatusMessage | null>(null);
 
   // Dynamic server queue and currently playing track

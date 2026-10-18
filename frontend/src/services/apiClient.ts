@@ -1,7 +1,7 @@
 // src/services/apiClient.ts
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "4029c9b9b5ad007d8c24a2a51b458dce46674bbbc2ce1acfed1cfcd3cad2623f";
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 interface FetchOptions extends RequestInit {
   bodyData?: Record<string, any> | any;
