@@ -3,6 +3,19 @@ import { FirstPartyRequestGuard } from './first-party-request.guard';
 
 describe('FirstPartyRequestGuard', () => {
   const guard = new FirstPartyRequestGuard();
+  const savedFrontend = process.env.FRONTEND_URL;
+  const savedCors = process.env.CORS_ORIGIN;
+
+  beforeEach(() => {
+    process.env.FRONTEND_URL = 'http://localhost:3000';
+    delete process.env.CORS_ORIGIN;
+  });
+  afterAll(() => {
+    if (savedFrontend === undefined) delete process.env.FRONTEND_URL;
+    else process.env.FRONTEND_URL = savedFrontend;
+    if (savedCors === undefined) delete process.env.CORS_ORIGIN;
+    else process.env.CORS_ORIGIN = savedCors;
+  });
 
   const makeRequest = (headers: Record<string, string>) => {
     const request = { headers };
