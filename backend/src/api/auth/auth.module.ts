@@ -5,6 +5,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { DiscordStrategy } from './discord.strategy';
+import { DiscordAuthGuard } from './discord-auth.guard';
+import { SessionGuard } from './session.guard';
+import { FirstPartyRequestGuard } from './first-party-request.guard';
 import { Session } from './session.entity';
 
 @Module({
@@ -25,6 +28,6 @@ import { Session } from './session.entity';
     }),
   ],
   controllers: [AuthController],
-  providers: [DiscordStrategy],
+  providers: [DiscordStrategy, DiscordAuthGuard, SessionGuard, FirstPartyRequestGuard],
 })
 export class AuthModule {}
