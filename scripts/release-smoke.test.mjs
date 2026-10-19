@@ -34,7 +34,6 @@ test('rejects malformed targets instead of probing arbitrary URLs', async () => 
   );
 });
 
-
 test('exercises the real HTTP transport against an isolated local server', async (t) => {
   const { createServer } = await import('node:http');
   const server = createServer((req, res) => {
