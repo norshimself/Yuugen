@@ -172,7 +172,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
             </div>
             <div>
               <h3 className="font-serif text-lg tracking-wide">Core Configurations</h3>
-              <p className="text-xs text-brand-secondary/60">Define the global commands prefix and operational behaviors.</p>
+              <p className="text-xs text-brand-secondary/60">Save welcome and moderation options. Yuugen uses Discord slash commands; the text prefix is not active.</p>
             </div>
           </div>
 
@@ -195,7 +195,7 @@ export function SettingsDeck({ selectedGuild }: SettingsDeckProps) {
                 />
               </div>
               {errors.prefix && <p className="text-red-400 text-xs mt-1 font-light">{errors.prefix.message}</p>}
-              <p className="text-[10px] text-brand-secondary/50">Example: <code className="text-brand-secondary font-mono bg-[#04080c]/30 px-1.5 py-0.5 rounded">{(watchedPrefix || 'y!')}play lofi</code></p>
+              <p className="text-[10px] text-brand-secondary/50">Stored prefix preview: <code className="text-brand-secondary font-mono bg-[#04080c]/30 px-1.5 py-0.5 rounded">{(watchedPrefix || 'y!')}play lofi</code></p>
             </div>
           </div>
         </motion.div>

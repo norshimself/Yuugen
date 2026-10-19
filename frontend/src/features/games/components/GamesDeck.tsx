@@ -214,8 +214,10 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
             </div>
           ) : (
             <div className="w-full flex flex-col items-center justify-center py-12 text-center">
-              <Loader2 className="w-6 h-6 text-brand-secondary animate-spin mb-3 opacity-50" />
-              <span className="text-[10px] text-brand-secondary/40 uppercase tracking-widest font-mono">No active session...</span>
+              <HelpCircle className="w-6 h-6 text-brand-secondary/60 mb-3" />
+              <span className="text-[10px] text-brand-secondary/60 uppercase tracking-widest font-mono">
+                No active question. Use the button below to start or retry.
+              </span>
             </div>
           )}
 
