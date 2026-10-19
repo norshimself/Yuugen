@@ -27,7 +27,7 @@ async function bootstrap() {
     origin: allowedOrigins.length > 0 ? allowedOrigins : true,
     credentials: true,
     allowedHeaders:
-      'Content-Type, Accept, Authorization, x-refresh-token',
+      'Content-Type, Accept, Authorization, x-yuugen-client',
   });
 
   // Set global prefix

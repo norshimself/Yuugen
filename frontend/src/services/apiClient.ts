@@ -30,7 +30,7 @@ export async function exchangeLoginCode(code: string): Promise<boolean> {
   try {
     const response = await fetch(`${API_URL}/auth/exchange`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
       body: JSON.stringify({ code }),
       credentials: 'same-origin',
       cache: 'no-store',
@@ -55,7 +55,7 @@ export async function refreshAccessToken(): Promise<string | null> {
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
         credentials: 'same-origin',
         cache: 'no-store',
       });
@@ -91,7 +91,7 @@ export async function logoutSession(): Promise<void> {
   try {
     await fetch(`${API_URL}/auth/logout`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
       credentials: 'same-origin',
       cache: 'no-store',
     });

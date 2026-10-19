@@ -8,6 +8,7 @@ import {
   UseGuards,
   NotFoundException,
   UnauthorizedException,
+  Header,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
@@ -15,6 +16,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'node:crypto';
 import { DiscordAuthGuard } from './discord-auth.guard';
 import { SessionGuard } from './session.guard';
+import { FirstPartyRequestGuard } from './first-party-request.guard';
 import { Session } from './session.entity';
 
 const SESSION_COOKIE = 'yuugen_session';
@@ -73,6 +75,8 @@ export class AuthController {
       this.sessionRepository.create({ id, userId, expiresAt }),
     );
 
+    response.setHeader('Cache-Control', 'no-store');
+
     // Fragments are not sent in HTTP requests or Referer headers. The client
     // removes the fragment immediately and exchanges the grant once.
     const frontend = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -85,6 +89,8 @@ export class AuthController {
     return `oauth-code:${crypto.createHash('sha256').update(code).digest('hex')}`;
   }
 
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(FirstPartyRequestGuard)
   @Post('exchange')
   async exchange(
     @Body('code') code: unknown,
@@ -135,8 +141,9 @@ export class AuthController {
     };
   }
 
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(FirstPartyRequestGuard, SessionGuard)
   @Post('refresh')
-  @UseGuards(SessionGuard)
   async refresh(@Req() request: any) {
     return {
       success: true,
@@ -144,6 +151,8 @@ export class AuthController {
     };
   }
 
+  @Header('Cache-Control', 'no-store')
+  @UseGuards(FirstPartyRequestGuard)
   @Post('logout')
   async logout(@Req() request: any, @Res({ passthrough: true }) response: any) {
     const sessionId = request.cookies?.[SESSION_COOKIE];
