@@ -35,7 +35,7 @@ describe('EconomyService transactional invariants', () => {
                 userId: incoming.userId,
                 coins: 100, bank: 0, xp: 0, level: 1, inventory: [],
                 lastDaily: null, lastWork: null, lastCrime: null,
-                lastRob: null, lastRps: null,
+                lastRob: null, lastRps: null, lastTrivia: null,
               });
             }
           },

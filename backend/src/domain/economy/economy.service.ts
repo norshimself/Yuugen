@@ -92,6 +92,7 @@ export class EconomyService implements OnModuleInit {
   private readonly maxCoins = 2_147_483_647;
   private readonly triviaLifetimeMs = 15 * 60 * 1000;
   private readonly rpsCooldownMs = 60 * 1000;
+  private readonly triviaCooldownMs = 2 * 60 * 1000;
 
   /** Insert-or-ignore makes first-time account creation safe under concurrency. */
   private async lockProfile(
@@ -393,7 +394,10 @@ export class EconomyService implements OnModuleInit {
    * Resumes any unexpired question after page reload or a second /trivia call.
    * Older sessions without a questionId are cleaned up automatically.
    */
-  async getOrStartTrivia(userId: string): Promise<{
+  async getOrStartTrivia(
+    userId: string,
+    source: 'web' | 'discord' = 'web',
+  ): Promise<{
     success: boolean;
     question?: string;
     options?: string[];
@@ -402,7 +406,7 @@ export class EconomyService implements OnModuleInit {
     resumed?: boolean;
     message?: string;
   }> {
-    return this.withProfileLock(userId, async (manager) => {
+    return this.withProfileLock(userId, async (manager, profile) => {
       const sessions = manager.getRepository(TriviaSession);
       const questions = manager.getRepository(TriviaQuestion);
       const existing = await sessions.findOne({ where: { userId } });
@@ -414,6 +418,12 @@ export class EconomyService implements OnModuleInit {
             where: { id: existing.questionId },
           });
           if (question) {
+            if (source === 'web' && existing.messageId) {
+              return {
+                success: false,
+                message: 'Answer your active trivia question in Discord.',
+              };
+            }
             return {
               success: true,
               question: question.question,
@@ -425,6 +435,16 @@ export class EconomyService implements OnModuleInit {
           }
         }
         await sessions.delete({ userId });
+      }
+
+      const now = new Date();
+      if (profile.lastTrivia &&
+          now.getTime() - profile.lastTrivia.getTime() < this.triviaCooldownMs) {
+        const retryAt = new Date(profile.lastTrivia.getTime() + this.triviaCooldownMs);
+        return {
+          success: false,
+          message: `Trivia is cooling down. Try again at ${retryAt.toISOString()}.`,
+        };
       }
 
       const available = await questions.find();
@@ -441,6 +461,8 @@ export class EconomyService implements OnModuleInit {
         correctIndex: chosen.correctIndex,
         reward,
       }));
+      profile.lastTrivia = now;
+      await manager.getRepository(UserProfile).save(profile);
       return {
         success: true,
         question: chosen.question,

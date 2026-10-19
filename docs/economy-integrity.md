@@ -30,6 +30,7 @@ existing balances or inventory.
 New columns:
 
 - `user_profiles.lastRps` — last rock-paper-scissors play timestamp.
+- `user_profiles.lastTrivia` — last trivia start timestamp (two-minute cooldown).
 - `trivia_sessions.questionId` — trivia question used in the session.
 - `trivia_sessions.messageId` — Discord message containing the buttons,
   so old messages cannot answer a later question.
@@ -47,6 +48,7 @@ automatically discards them and starts a new session.
   duplicate-key races when several bot/API events arrive simultaneously.
 - The same transaction that resolves a trivia answer also deletes the session
   and (only if correct) credits coins; duplicate answers cannot pay twice.
+- Starting a new trivia question has a two-minute per-user cooldown to limit reward farming. An active unexpired question can still be resumed immediately.
 - A trivia question can resume after a browser refresh for up to 15 minutes.
   Expired sessions automatically reset; no admin cleanup is necessary.
 - Discord trivia replies are bound to the Discord prompt message ID; stale

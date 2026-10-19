@@ -6,7 +6,7 @@ export class RpsDto {
   @IsString()
   @IsNotEmpty()
   @IsIn(['rock', 'paper', 'scissors'])
-  choice: string;
+  choice: 'rock' | 'paper' | 'scissors';
 }
 
 export class TriviaAnswerDto {

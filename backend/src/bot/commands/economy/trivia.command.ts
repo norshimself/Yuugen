@@ -21,6 +21,7 @@ export class TriviaCommand {
     await interaction.deferReply();
     const game = await this.economyService.getOrStartTrivia(
       interaction.user.id,
+      'discord',
     );
 
     if (!game.success || !game.question || !game.options) {
