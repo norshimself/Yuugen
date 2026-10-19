@@ -9,7 +9,7 @@ import { StatusService } from '../src/shared/status.service';
 describe('Health endpoints (isolated e2e)', () => {
   let app: INestApplication<App>;
   const status = {
-    getStatus: jest.fn().mockReturnValue('Bot is online and responding!'),
+    getStatus: jest.fn().mockReturnValue('Yuugen API is responding.'),
     checkReadiness: jest.fn().mockResolvedValue({
       status: 'ready',
       dependencies: { database: 'up', discord: 'up', lavalink: 'up' },
@@ -41,7 +41,7 @@ describe('Health endpoints (isolated e2e)', () => {
     return request(app.getHttpServer())
       .get('/api/v1/status')
       .expect(200)
-      .expect('Bot is online and responding!');
+      .expect('Yuugen API is responding.');
   });
 
   it('returns ready with all dependencies up', () => {
