@@ -33,7 +33,7 @@ describe('PlayerGateway subscriptions', () => {
       close: jest.fn(),
     } as unknown as WebSocket;
 
-    return { gateway: new PlayerGateway(jwt, discord), socket };
+    return { gateway: new PlayerGateway(jwt, discord), socket, jwt };
   }
 
   it('denies subscriptions with invalid credentials', async () => {
@@ -52,6 +52,33 @@ describe('PlayerGateway subscriptions', () => {
     const messages = (socket.send as jest.Mock).mock.calls.map(([text]) =>
       JSON.parse(text as string));
     expect(messages).toEqual([{ event: 'subscriptionError', code: 'forbidden' }]);
+  });
+
+  it('rejects an expired JWT without opening a player subscription', async () => {
+    const { gateway, socket, jwt } = setup();
+    (jwt.verifyAsync as jest.Mock).mockResolvedValue({
+      userId,
+      exp: Math.floor(Date.now() / 1000) - 30,
+    });
+    await gateway.handleSubscribeGuild(socket, { guildId, token: 'expired' });
+    gateway.broadcastPlayerState(guildId, { playing: true });
+    const messages = (socket.send as jest.Mock).mock.calls.map(([text]) =>
+      JSON.parse(text as string));
+    expect(messages).toEqual([{ event: 'subscriptionError', code: 'invalid_token' }]);
+  });
+
+  it('drops an existing guild subscription when a new auth attempt fails', async () => {
+    const { gateway, socket, jwt } = setup();
+    await gateway.handleSubscribeGuild(socket, { guildId, token: 'signed' });
+    (jwt.verifyAsync as jest.Mock).mockRejectedValueOnce(new Error('expired'));
+    await gateway.handleSubscribeGuild(socket, { guildId, token: 'expired' });
+    gateway.broadcastPlayerState(guildId, { playing: true });
+    const messages = (socket.send as jest.Mock).mock.calls.map(([text]) =>
+      JSON.parse(text as string));
+    expect(messages).toEqual([
+      { event: 'subscribed', guildId },
+      { event: 'subscriptionError', code: 'invalid_token' },
+    ]);
   });
 
   it('only broadcasts to an authenticated guild subscriber', async () => {

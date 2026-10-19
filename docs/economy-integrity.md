@@ -49,6 +49,7 @@ automatically discards them and starts a new session.
 - The same transaction that resolves a trivia answer also deletes the session
   and (only if correct) credits coins; duplicate answers cannot pay twice.
 - Starting a new trivia question has a two-minute per-user cooldown to limit reward farming. An active unexpired question can still be resumed immediately.
+- The trivia start/resume API now uses `POST /api/v1/games/trivia/question`, because it can create a persisted session. The web app and backend must be deployed together.
 - A trivia question can resume after a browser refresh for up to 15 minutes.
   Expired sessions automatically reset; no admin cleanup is necessary.
 - Discord trivia replies are bound to the Discord prompt message ID; stale

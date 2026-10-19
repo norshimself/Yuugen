@@ -1,4 +1,4 @@
-.PHONY: dev build up down restart logs clean prod prod-down prod-logs prod-restart verify verify-smoke-tool verify-backend verify-frontend smoke-api verify-prod-config
+.PHONY: dev build up down restart logs clean prod prod-down prod-logs prod-restart verify verify-smoke-tool verify-backend verify-frontend smoke-api staging-acceptance verify-prod-config
 
 # ---- Development ----
 dev:
@@ -29,7 +29,7 @@ clean:
 verify: verify-smoke-tool verify-backend verify-frontend
 
 verify-smoke-tool:
-	node --test scripts/release-smoke.test.mjs
+	node --test scripts/release-smoke.test.mjs scripts/staging-acceptance.test.mjs
 
 verify-backend:
 	cd backend && npm ci && npm run build && npm test -- --runInBand && npm run test:e2e -- --runInBand
@@ -40,6 +40,10 @@ verify-frontend:
 # Requires a running backend. Override YUUGEN_API_URL if needed.
 smoke-api:
 	node scripts/release-smoke.mjs
+
+# Authenticated acceptance checks are read-only unless explicitly opted in.
+staging-acceptance:
+	node scripts/staging-acceptance.mjs
 
 verify-prod-config:
 	docker compose -f docker-compose.prod.yml config --quiet

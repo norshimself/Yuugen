@@ -14,7 +14,9 @@ export const probes = [
   { label: 'Guild listing requires a JWT', path: '/player/guilds', status: 401 },
   { label: 'Guild settings require a JWT', path: '/settings?guildId=123456789012345678', status: 401 },
   { label: 'Economy profile requires a JWT', path: '/economy/profile', status: 401 },
-  { label: 'Trivia requires a JWT', path: '/games/trivia/question', status: 401 },
+  { label: 'Trivia start requires a JWT', path: '/games/trivia/question', status: 401,
+    init: { method: 'POST', headers: json },
+  },
   {
     label: 'Refresh requires first-party header', path: '/auth/refresh', status: 403,
     init: { method: 'POST', headers: json },

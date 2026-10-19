@@ -17,6 +17,7 @@ are feature-flagged until their staging acceptance checks pass.
 ## Local release checks
 
 - `make verify`: Node smoke-tool tests, backend build/unit+isolated e2e tests, and frontend build.
+- `make staging-acceptance`: opt-in authenticated guild/WebSocket tests (read-only by default, see guide).
 - `make smoke-api`: harmless unauthenticated health/authorization probes against
   the running backend (default localhost:3001). Use `YUUGEN_API_URL` to override.
 - `make verify-prod-config`: validates Compose configuration without deploying;
@@ -29,6 +30,7 @@ database. Never enable TypeORM auto-synchronization in production.
 ## Operator guides
 
 - [Release-readiness matrix and test plan](docs/release-readiness.md)
+- [Staging OAuth, WebSocket, voice and economy acceptance](docs/staging-acceptance.md)
 - [Manual authentication deployment](docs/manual-auth-deployment.md)
 - [Guild welcome and moderation](docs/guild-welcome-moderation.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
