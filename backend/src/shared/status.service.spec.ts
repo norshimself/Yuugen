@@ -69,6 +69,20 @@ describe('StatusService readiness', () => {
     expect(report.status).toBe('unavailable');
   });
 
+  it('reuses concurrent checks and short-lived cached results', async () => {
+    const { service, data } = setup();
+    const [first, second, third] = await Promise.all([
+      service.checkReadiness(),
+      service.checkReadiness(),
+      service.checkReadiness(),
+    ]);
+    expect(first).toEqual(second);
+    expect(second).toEqual(third);
+    await service.checkReadiness();
+    expect(data.query).toHaveBeenCalledTimes(1);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('handles failed database queries and Lavalink connection errors', async () => {
     const { service, data } = setup();
     jest.spyOn(data, 'query').mockRejectedValue(new Error('DB unavailable'));
