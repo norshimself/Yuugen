@@ -1,37 +1,35 @@
 "use client";
 
-import { useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, Suspense } from "react";
+import { useRouter } from "next/navigation";
+import { exchangeLoginCode, refreshAccessToken } from "@/services/apiClient";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
 function CallbackHandler() {
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const handled = useRef(false);
 
   useEffect(() => {
-    const accessToken = searchParams.get("access_token");
-    const refreshToken = searchParams.get("refresh_token");
+    // In development React can run effects twice; a login code is single-use.
+    if (handled.current) return;
+    handled.current = true;
 
-    if (accessToken) {
-      // Store token securely in localStorage for authentication validation
-      localStorage.setItem("access_token", accessToken);
-      if (refreshToken) {
-        localStorage.setItem("refresh_token", refreshToken);
-      }
-      
-      // Delay briefly for a premium, smooth transition effect
-      const timer = setTimeout(() => {
-        router.push("/player");
-      }, 1500);
+    const code = new URLSearchParams(window.location.hash.slice(1)).get("code");
+    // Erase the one-time grant immediately, before any further navigation.
+    window.history.replaceState(window.history.state, "", window.location.pathname);
 
-      return () => clearTimeout(timer);
-    } else {
-      // No token found, bounce back to login
-      router.push("/login");
-    }
-  }, [searchParams, router]);
+    const finishLogin = async () => {
+      const authenticated = code
+        ? await exchangeLoginCode(code)
+        : !!(await refreshAccessToken());
+
+      router.replace(authenticated ? "/player" : "/login?error=sign_in");
+    };
+
+    void finishLogin();
+  }, [router]);
 
   return (
     <div className="min-h-screen w-full bg-[#04080c] flex flex-col items-center justify-center relative overflow-hidden font-serif">

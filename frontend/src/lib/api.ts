@@ -1,75 +1,38 @@
 import axios from 'axios';
+import { getAccessToken, refreshAccessToken } from '@/services/apiClient';
 
+// Kept for legacy callers. All browser requests remain same-origin so the
+// server-issued refresh cookie is never made available to JavaScript.
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-  withCredentials: true, // Send cookies with requests (for refresh token!)
+  baseURL: '/api/v1',
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
-// Add a request interceptor to attach the JWT token if available
-api.interceptors.request.use((config) => {
-  if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers['Authorization'] = `Bearer ${token}`;
-    }
-  }
+api.interceptors.request.use(async (config) => {
+  const token = getAccessToken() || await refreshAccessToken();
+  if (token) config.headers.set('Authorization', `Bearer ${token}`);
   return config;
 });
 
-// Add a response interceptor to handle token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
-    // If error is 401 and we haven't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry
+    ) {
       originalRequest._retry = true;
-      
-      try {
-        const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
-        
-        // Call refresh endpoint to get a new access token
-        const response = await axios.post(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/refresh`,
-          { refreshToken },
-          { 
-            headers: {
-              ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
-            },
-            withCredentials: true 
-          } // Ensure cookies are sent
-        );
-        
-        const newToken = response.data.access_token;
-        const newRefreshToken = response.data.refresh_token;
-        
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('access_token', newToken);
-          if (newRefreshToken) {
-            localStorage.setItem('refresh_token', newRefreshToken);
-          }
-        }
-        
-        // Update header and retry
-        originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+      const token = await refreshAccessToken();
+      if (token) {
+        originalRequest.headers.set('Authorization', `Bearer ${token}`);
         return api(originalRequest);
-      } catch (refreshError) {
-        // Refresh failed, redirect to login or clear token
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
-        }
-        return Promise.reject(refreshError);
       }
     }
-    
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;

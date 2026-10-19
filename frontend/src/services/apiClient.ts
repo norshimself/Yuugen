@@ -1,53 +1,79 @@
-// src/services/apiClient.ts
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
+// Yuugen's browser API uses a same-origin Next.js rewrite. The refresh
+// session is an HttpOnly cookie; the short-lived JWT exists only in memory.
+const API_URL = '/api/v1';
 
 interface FetchOptions extends RequestInit {
-  bodyData?: Record<string, any> | any;
+  bodyData?: unknown;
 }
 
+let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
-/**
- * Shared function to refresh the JWT access token using the refresh token
- * (either from cookie or localStorage fallback). Supports queuing multiple concurrent requests.
- */
-export async function refreshAccessToken(): Promise<string | null> {
-  if (refreshPromise) {
-    return refreshPromise;
+function clearLegacyTokens() {
+  if (typeof window === 'undefined') return;
+  // Previous releases stored long-lived tokens here. Never read them again.
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+}
+
+export function getAccessToken(): string | null {
+  return accessToken;
+}
+
+export function clearAccessToken() {
+  accessToken = null;
+  clearLegacyTokens();
+}
+
+export async function exchangeLoginCode(code: string): Promise<boolean> {
+  clearAccessToken();
+  try {
+    const response = await fetch(`${API_URL}/auth/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
+      body: JSON.stringify({ code }),
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    if (data?.success && typeof data.access_token === 'string') {
+      accessToken = data.access_token;
+      return true;
+    }
+  } catch (error) {
+    console.error('Discord sign-in exchange failed:', error);
   }
+  return false;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
 
   refreshPromise = (async () => {
-    const refreshToken = typeof window !== "undefined" ? localStorage.getItem("refresh_token") : null;
-    
+    clearLegacyTokens();
     try {
       const response = await fetch(`${API_URL}/auth/refresh`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(refreshToken ? { "x-refresh-token": refreshToken } : {}),
-        },
-        body: JSON.stringify({ refreshToken }),
-        credentials: "include",
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
+        credentials: 'same-origin',
+        cache: 'no-store',
       });
-
       if (!response.ok) {
-        throw new Error("Failed to refresh token");
+        accessToken = null;
+        return null;
       }
 
       const data = await response.json();
-      if (data.success && data.access_token) {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("access_token", data.access_token);
-          if (data.refresh_token) {
-            localStorage.setItem("refresh_token", data.refresh_token);
-          }
-        }
-        return data.access_token;
+      if (data?.success && typeof data.access_token === 'string') {
+        accessToken = data.access_token;
+        return accessToken;
       }
+      accessToken = null;
       return null;
     } catch (error) {
-      console.error("Token refresh failed:", error);
+      console.warn('Unable to refresh session:', error);
+      accessToken = null;
       return null;
     }
   })();
@@ -59,64 +85,73 @@ export async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
-export async function apiClient<T>(endpoint: string, options: FetchOptions = {}): Promise<T> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
-  
-  const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
-  
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
+export async function logoutSession(): Promise<void> {
+  // Clear JavaScript credentials immediately even if the network is offline.
+  clearAccessToken();
+  try {
+    await fetch(`${API_URL}/auth/logout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-yuugen-client': 'web' },
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
+  } catch (error) {
+    console.warn('Logout request failed:', error);
+  }
+}
+
+export async function authenticatedFetch(
+  endpoint: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  if (!endpoint.startsWith('/') || endpoint.startsWith('//')) {
+    throw new Error('API endpoints must be relative paths');
   }
 
-  const config: RequestInit = {
-    ...options,
-    headers,
-    credentials: "include", // Ensure cookies are sent
+  // No session token is read from localStorage or passed as a URL parameter.
+  let token = accessToken || await refreshAccessToken();
+  if (!token) {
+    clearAccessToken();
+    throw new Error('Sign in required');
+  }
+
+  const send = (jwt: string) => {
+    const headers = new Headers(options.headers);
+    headers.set('Authorization', `Bearer ${jwt}`);
+    if (options.body !== undefined && !headers.has('Content-Type')) {
+      headers.set('Content-Type', 'application/json');
+    }
+    return fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: 'same-origin',
+      cache: 'no-store',
+    });
   };
 
-  if (options.bodyData !== undefined) {
-    config.body = JSON.stringify(options.bodyData);
-  }
-
-  let response = await fetch(`${API_URL}${endpoint}`, config);
-
-  // If unauthorized and it's not the refresh endpoint itself
-  if (response.status === 401 && endpoint !== "/auth/refresh") {
-    const newToken = await refreshAccessToken();
-    
-    if (newToken) {
-      // Re-build config and retry
-      const retryHeaders = new Headers(options.headers);
-      retryHeaders.set("Content-Type", "application/json");
-      retryHeaders.set("Authorization", `Bearer ${newToken}`);
-      
-      const retryConfig: RequestInit = {
-        ...options,
-        headers: retryHeaders,
-        credentials: "include",
-      };
-
-      if (options.bodyData !== undefined) {
-        retryConfig.body = JSON.stringify(options.bodyData);
-      }
-
-      response = await fetch(`${API_URL}${endpoint}`, retryConfig);
-    } else {
-      // Clear tokens and redirect to login if refresh fails
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
-        window.location.href = "/login";
-      }
-      throw new Error("Unauthorized session. Redirecting to login...");
+  let response = await send(token);
+  if (response.status === 401) {
+    token = await refreshAccessToken();
+    if (!token) {
+      throw new Error('Session expired; please sign in again');
     }
+    response = await send(token);
   }
+  return response;
+}
 
+export async function apiClient<T>(
+  endpoint: string,
+  options: FetchOptions = {},
+): Promise<T> {
+  const { bodyData, ...requestOptions } = options;
+  if (bodyData !== undefined) {
+    requestOptions.body = JSON.stringify(bodyData);
+  }
+  const response = await authenticatedFetch(endpoint, requestOptions);
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.message || `API request failed with status: ${response.status}`);
   }
-
   return response.json() as Promise<T>;
 }

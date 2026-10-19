@@ -1,20 +1,20 @@
-"use client";
+'use client';
+
+// OAuth begins directly on the backend so its short-lived state cookie is
+// available to Discord's redirect back to the same backend origin.
+const backendApi =
+  process.env.NEXT_PUBLIC_BACKEND_URL ||
+  (process.env.NEXT_PUBLIC_API_URL?.startsWith('http') ? process.env.NEXT_PUBLIC_API_URL : null) ||
+  'http://localhost:3001/api/v1';
 
 export function useLogin() {
   const handleLogin = () => {
-    // Dynamically retrieve backend API URL from env and redirect to NestJS Discord OAuth Login
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-    window.location.href = `${apiUrl}/auth/login`;
+    window.location.assign(`${backendApi}/auth/login`);
   };
 
   const handleDemoLogin = () => {
-    // Redirect to NestJS Demo Login endpoint
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-    window.location.href = `${apiUrl}/auth/demo`;
+    window.location.assign(`${backendApi}/auth/demo`);
   };
 
-  return {
-    handleLogin,
-    handleDemoLogin,
-  };
+  return { handleLogin, handleDemoLogin };
 }
