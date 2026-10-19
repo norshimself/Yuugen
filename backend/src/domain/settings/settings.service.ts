@@ -79,7 +79,7 @@ export class SettingsService {
       const words: unknown = updateData.blacklistedWords;
       if (!Array.isArray(words) || words.length > 100 ||
           !words.every((word) => typeof word === 'string' &&
-            word.length >= 1 && word.length <= 100)) {
+            word.trim().length >= 1 && word.length <= 100 && !word.includes(','))) {
         throw new BadRequestException('Invalid word blacklist');
       }
       settings.blacklistedWords = [...new Set(words.map((word: string) =>

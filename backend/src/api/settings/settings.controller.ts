@@ -45,7 +45,11 @@ export class SettingsController {
   ): Promise<GuildSettings> {
     // A submitted text channel must belong to this guild and be writable by
     // Yuugen. Guard checks that the signed-in user manages the guild.
-    const selected: unknown = body.settings?.welcomeChannelId;
+    if (!body?.settings || typeof body.settings !== 'object' ||
+        Array.isArray(body.settings)) {
+      throw new BadRequestException('Settings payload is required');
+    }
+    const selected: unknown = body.settings.welcomeChannelId;
     if (selected !== undefined && selected !== null && selected !== '') {
       if (typeof selected !== 'string' || !/^\d{17,20}$/.test(selected)) {
         throw new BadRequestException('Invalid welcome channel');

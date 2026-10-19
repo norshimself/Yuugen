@@ -3,7 +3,8 @@ import { Context, On } from 'necord';
 import type { ContextOf } from 'necord';
 import { EconomyService } from '../../domain/economy/economy.service';
 import { SettingsService } from '../../domain/settings/settings.service';
-import { inspectMessage, MessageActivity } from './moderation';
+import { inspectMessage } from './moderation';
+import type { MessageActivity } from './moderation';
 
 @Injectable()
 export class MessageListener {
