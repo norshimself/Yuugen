@@ -22,7 +22,7 @@ export class StatusService {
 
   // Liveness: the Nest HTTP process can respond.
   getStatus(): string {
-    return 'Bot is online and responding!';
+    return 'Yuugen API is responding.';
   }
 
   // Readiness: essential external services are usable. No credentials,
