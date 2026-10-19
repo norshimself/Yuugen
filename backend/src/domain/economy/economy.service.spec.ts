@@ -158,16 +158,36 @@ describe('EconomyService transactional invariants', () => {
   });
 
   it('discards expired trivia sessions and pre-migration sessions', async () => {
-    const { service, triviaSessions } = makeService();
+    const { service, triviaSessions, profiles } = makeService();
     await service.getOrStartTrivia(user);
     triviaSessions.get(user).createdAt = new Date(Date.now() - 20 * 60 * 1000);
+    profiles.get(user).lastTrivia = new Date(Date.now() - 20 * 60 * 1000);
     const replacement = await service.getOrStartTrivia(user);
     expect(replacement.success).toBe(true);
     expect(replacement.resumed).toBe(false);
     triviaSessions.get(user).questionId = null;
+    profiles.get(user).lastTrivia = new Date(Date.now() - 20 * 60 * 1000);
     const legacyReplacement = await service.getOrStartTrivia(user);
     expect(legacyReplacement.success).toBe(true);
     expect(legacyReplacement.resumed).toBe(false);
+  });
+
+  it('limits new trivia rewards to one question every two minutes', async () => {
+    const { service } = makeService();
+    await service.getOrStartTrivia(user);
+    await service.answerTrivia(user, 0);
+    const retry = await service.getOrStartTrivia(user);
+    expect(retry.success).toBe(false);
+    expect(retry.message).toContain('cooling down');
+  });
+
+  it('does not offer browser answers for a Discord-owned trivia prompt', async () => {
+    const { service } = makeService();
+    await service.getOrStartTrivia(user, 'discord');
+    await service.bindTriviaMessage(user, firstPrompt);
+    const browser = await service.getOrStartTrivia(user);
+    expect(browser.success).toBe(false);
+    expect(browser.message).toContain('Discord');
   });
 
   it('deletes a trivia session and pays its reward only once', async () => {
