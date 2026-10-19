@@ -72,16 +72,22 @@ import { SettingsModule } from './api/settings/settings.module';
     }),
     NecordLavalinkModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        nodes: [
-          {
-            id: 'main_node',
-            host: 'lavalink',
-            port: 2333,
-            authorization: configService.get<string>('LAVALINK_PASSWORD') || '',
-          },
-        ],
-      }),
+      useFactory: (configService: ConfigService) => {
+        const port = Number(configService.get<string>('LAVALINK_PORT') || '2333');
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          throw new Error('LAVALINK_PORT must be between 1 and 65535');
+        }
+        return {
+          nodes: [
+            {
+              id: 'main_node',
+              host: configService.get<string>('LAVALINK_HOST') || 'lavalink',
+              port,
+              authorization: configService.get<string>('LAVALINK_PASSWORD') || '',
+            },
+          ],
+        };
+      },
       inject: [ConfigService],
     }),
   ],

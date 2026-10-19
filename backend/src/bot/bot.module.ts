@@ -33,7 +33,6 @@ import { BuyCommand } from './commands/economy/buy.command';
 import { TriviaCommand } from './commands/economy/trivia.command';
 import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
-import { StatusService } from '../shared/status.service';
 
 @Module({
   imports: [EconomyModule, SettingsModule],
@@ -69,7 +68,6 @@ import { StatusService } from '../shared/status.service';
     TriviaCommand,
     RpsCommand,
     WelcomeListener,
-    StatusService,
   ],
 })
 export class BotModule {}
