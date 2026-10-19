@@ -136,7 +136,9 @@ export function usePlayer(guildId: string | undefined) {
     if (!guildId) return;
 
     // Native WebSockets connect to the API origin, not the Next.js rewrite.
-    const backendApi = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001/api/v1";
+    const backendApi = process.env.NEXT_PUBLIC_BACKEND_URL ||
+      (process.env.NEXT_PUBLIC_API_URL?.startsWith("http") ? process.env.NEXT_PUBLIC_API_URL : null) ||
+      "http://localhost:3001/api/v1";
     const wsUrl = backendApi.replace(/^http/, "ws") + "/player/ws";
 
     let socket: WebSocket | null = null;
