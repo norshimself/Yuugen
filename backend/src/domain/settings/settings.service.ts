@@ -5,12 +5,20 @@ import { GuildSettings } from './guild-settings.entity';
 
 @Injectable()
 export class SettingsService {
+  private readonly cache = new Map<
+    string,
+    { settings: GuildSettings; expiresAt: number }
+  >();
   constructor(
     @InjectRepository(GuildSettings)
     private settingsRepository: Repository<GuildSettings>,
   ) {}
 
   async getSettings(guildId: string): Promise<GuildSettings> {
+    const cached = this.cache.get(guildId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.settings;
+    }
     let settings = await this.settingsRepository.findOne({
       where: { guildId },
     });
@@ -18,6 +26,7 @@ export class SettingsService {
       settings = this.settingsRepository.create({ guildId });
       await this.settingsRepository.save(settings);
     }
+    this.cache.set(guildId, { settings, expiresAt: Date.now() + 30_000 });
     return settings;
   }
 
@@ -25,7 +34,9 @@ export class SettingsService {
     guildId: string,
     updateData: Partial<GuildSettings>,
   ): Promise<GuildSettings> {
-    const settings = await this.getSettings(guildId);
+    const current = await this.getSettings(guildId);
+    // Validate and save a copy so invalid payloads cannot mutate the cache.
+    const settings = { ...current } as GuildSettings;
 
     // Explicit allowlist: never copy guildId (a primary key) or arbitrary
     // client-supplied properties into a persisted settings entity.
@@ -68,12 +79,14 @@ export class SettingsService {
       const words: unknown = updateData.blacklistedWords;
       if (!Array.isArray(words) || words.length > 100 ||
           !words.every((word) => typeof word === 'string' &&
-            word.length >= 1 && word.length <= 100)) {
+            word.trim().length >= 1 && word.length <= 100 && !word.includes(','))) {
         throw new BadRequestException('Invalid word blacklist');
       }
       settings.blacklistedWords = [...new Set(words.map((word: string) =>
         word.trim().toLowerCase()))];
     }
-    return this.settingsRepository.save(settings);
+    const saved = await this.settingsRepository.save(settings);
+    this.cache.set(guildId, { settings: saved, expiresAt: Date.now() + 30_000 });
+    return saved;
   }
 }

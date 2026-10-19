@@ -19,6 +19,7 @@ import { RadioCommand } from './commands/player/radio.command';
 import { FilterCommand } from './commands/player/filter.command';
 
 import { EconomyModule } from '../domain/economy/economy.module';
+import { SettingsModule } from '../api/settings/settings.module';
 import { RankCommand } from './commands/economy/rank.command';
 import { DailyCommand } from './commands/economy/daily.command';
 import { LeaderboardCommand } from './commands/economy/leaderboard.command';
@@ -35,7 +36,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
 import { StatusService } from '../shared/status.service';
 
 @Module({
-  imports: [EconomyModule],
+  imports: [EconomyModule, SettingsModule],
   providers: [
     BotGateway,
     PingCommand,

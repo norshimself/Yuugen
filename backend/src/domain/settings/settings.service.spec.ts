@@ -30,7 +30,19 @@ describe('SettingsService authorization invariants', () => {
       welcomeMessage: 'Hello!',
     });
     expect(result.guildId).toBe(guildId);
-    expect(settings.welcomeMessage).toBe('Hello!');
+    expect(result.welcomeMessage).toBe('Hello!');
+    expect(settings.welcomeMessage).toBe('Welcome!');
+  });
+
+  it('reflects saved settings immediately without re-querying the database', async () => {
+    const { service } = createService();
+    const updated = await service.updateSettings(guildId, {
+      antiSpamEnabled: true,
+      blacklistedWords: ['Spam'],
+    });
+    const reloaded = await service.getSettings(guildId);
+    expect(reloaded).toEqual(updated);
+    expect(reloaded.blacklistedWords).toEqual(['spam']);
   });
 
   it('rejects invalid values without saving them', async () => {
