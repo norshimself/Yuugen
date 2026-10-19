@@ -58,7 +58,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         {/* Level and XP */}
         <div className="bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl flex flex-col justify-between">
           <div className="flex items-center justify-between text-brand-secondary">
-            <span className="text-[10px] font-bold tracking-widest uppercase">Guild Level</span>
+            <span className="text-[10px] font-bold tracking-widest uppercase">Global Level</span>
             <Shield className="w-4 h-4 text-brand-secondary" />
           </div>
           <div className="mt-4">
@@ -102,7 +102,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
               <span className="text-4xl font-serif font-normal text-white">{profile.bank}</span>
               <span className="text-xs text-white/30 font-semibold tracking-wider uppercase">Coins</span>
             </div>
-            <span className="text-[9px] text-brand-secondary/40 font-light mt-3 block tracking-wide">Protected from active server rob operations</span>
+            <span className="text-[9px] text-brand-secondary/40 font-light mt-3 block tracking-wide">Separate from the spendable wallet</span>
           </div>
         </div>
 
@@ -157,7 +157,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
           <div>
             <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
               <Briefcase className="w-4 h-4" />
-              <span>Guild Activities Panel</span>
+              <span>Global Activities Panel</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -173,7 +173,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
                 <div className="mt-8">
                   <span className="text-xs font-bold text-white tracking-widest uppercase block mb-1">Apply for Work</span>
                   <span className="text-[10px] text-brand-secondary/60 font-light leading-relaxed block">
-                    Earn 50 to 100 gold coins per hour in random administrative server roles.
+                    Earn 50 to 100 gold coins per hour in random part-time jobs.
                   </span>
                 </div>
               </button>
@@ -190,7 +190,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
                 <div className="mt-8">
                   <span className="text-xs font-bold text-white tracking-widest uppercase block mb-1">Pull off a Crime</span>
                   <span className="text-[10px] text-brand-secondary/60 font-light leading-relaxed block">
-                    High risk, high yield. Earn up to 500 coins or pay hefty fines to the server guard.
+                    High risk, high yield. Earn up to 500 coins or pay hefty fines to the authorities.
                   </span>
                 </div>
               </button>
@@ -201,7 +201,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
           <div className="mt-6 pt-6 border-t border-brand-secondary/10 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div>
               <span className="text-xs font-bold text-white uppercase tracking-wider block">Daily Coin Distribution</span>
-              <span className="text-[9px] text-brand-secondary/60 font-light mt-0.5 block">Claim 100 free server coins every 24 hours.</span>
+              <span className="text-[9px] text-brand-secondary/60 font-light mt-0.5 block">Claim 100 global coins every 24 hours.</span>
             </div>
             <button
               onClick={claimDailyReward}
@@ -285,7 +285,7 @@ export function EconomyDeck({ selectedGuildId }: EconomyDeckProps) {
         <div className="lg:col-span-7 bg-[#080d14]/90 backdrop-blur-xl border border-brand-secondary/10 p-6 rounded-3xl">
           <h3 className="text-xs font-bold tracking-widest text-brand-secondary uppercase border-b border-brand-secondary/10 pb-3 flex items-center gap-2 mb-6">
             <ShoppingBag className="w-4 h-4" />
-            <span>Virtual Server Shop</span>
+            <span>Virtual Item Shop</span>
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

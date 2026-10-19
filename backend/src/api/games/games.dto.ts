@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, IsNumber, IsIn } from 'class-validator';
+import { IsNotEmpty, IsString, IsInt, Min, Max, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RpsDto {
@@ -6,11 +6,13 @@ export class RpsDto {
   @IsString()
   @IsNotEmpty()
   @IsIn(['rock', 'paper', 'scissors'])
-  choice: string;
+  choice: 'rock' | 'paper' | 'scissors';
 }
 
 export class TriviaAnswerDto {
   @ApiProperty({ description: 'The index of the answer (0-3)' })
-  @IsNumber()
+  @IsInt()
+  @Min(0)
+  @Max(3)
   answerIndex: number;
 }

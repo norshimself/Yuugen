@@ -29,6 +29,12 @@ export class UserProfile {
   @Column({ type: 'timestamp', nullable: true })
   lastRob: Date;
 
+  @Column({ type: 'timestamp', nullable: true })
+  lastRps: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastTrivia: Date | null;
+
   @Column('simple-array', { default: '' })
   inventory: string[];
 }

@@ -21,7 +21,7 @@ export class RpsCommand {
     const embed = new EmbedBuilder()
       .setColor('#f1c40f')
       .setTitle('✊ Rock Paper Scissors ✋')
-      .setDescription('Choose your weapon!')
+      .setDescription('Choose your weapon! One rewarded round per minute.')
       .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -60,44 +60,40 @@ export class RpsCommand {
     return this.handleRps(interaction, 'scissors');
   }
 
-  private async handleRps(interaction: any, userChoice: string) {
-    const choices = ['rock', 'paper', 'scissors'];
-    const botChoice = choices[Math.floor(Math.random() * choices.length)];
-
-    let result = '';
-    let won = false;
-    let tie = false;
-
-    if (userChoice === botChoice) {
-      result = `It's a tie! We both chose **${userChoice}**.`;
-      tie = true;
-    } else if (
-      (userChoice === 'rock' && botChoice === 'scissors') ||
-      (userChoice === 'paper' && botChoice === 'rock') ||
-      (userChoice === 'scissors' && botChoice === 'paper')
-    ) {
-      result = `You won! Your **${userChoice}** beats my **${botChoice}**!`;
-      won = true;
-    } else {
-      result = `You lost! My **${botChoice}** beats your **${userChoice}**!`;
+  private async handleRps(
+    interaction: any,
+    userChoice: 'rock' | 'paper' | 'scissors',
+  ) {
+    const game = await this.economyService.playRps(
+      interaction.user.id,
+      userChoice,
+    );
+    if (!game.success) {
+      const retryAt = game.nextPlay
+        ? ` Try again <t:${Math.floor(game.nextPlay.getTime() / 1000)}:R>.`
+        : '';
+      return interaction.reply({
+        content: `Rock Paper Scissors is on cooldown.${retryAt}`,
+        ephemeral: true,
+      });
     }
 
-    const reward = 20;
+    const result = game.result === 'tie'
+      ? `It's a tie! We both chose **${userChoice}**.`
+      : game.result === 'win'
+        ? `You won! Your **${userChoice}** beats my **${game.botChoice}**!`
+        : `You lost! My **${game.botChoice}** beats your **${userChoice}**!`;
 
     const embed = new EmbedBuilder()
       .setTitle('✊ Rock Paper Scissors Results ✋')
+      .setColor(game.result === 'win' ? '#2ecc71'
+        : game.result === 'tie' ? '#f1c40f' : '#e74c3c')
+      .setDescription(
+        game.reward > 0
+          ? `${result}\nYou earned **${game.reward}** coins!`
+          : result,
+      )
       .setTimestamp();
-
-    if (won) {
-      await this.economyService.addCoins(interaction.user.id, reward);
-      embed
-        .setColor('#2ecc71')
-        .setDescription(`${result}\nYou earned **${reward}** coins!`);
-    } else if (tie) {
-      embed.setColor('#f1c40f').setDescription(result);
-    } else {
-      embed.setColor('#e74c3c').setDescription(result);
-    }
 
     return interaction.update({ embeds: [embed], components: [] });
   }

@@ -17,4 +17,7 @@ export interface RPSResponse {
   botChoice: string;
   result: "win" | "lose" | "tie";
   reward: number;
+  nextPlay?: string;
+  newBalance?: number;
+  message?: string;
 }

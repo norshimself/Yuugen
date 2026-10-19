@@ -6,7 +6,7 @@ export const gamesService = {
   /**
    * Fetch current or new trivia question riddle
    */
-  async getTriviaQuestion(): Promise<{ success: boolean; question?: string; options?: string[]; reward?: number; message?: string }> {
+  async getTriviaQuestion(): Promise<{ success: boolean; question?: string; options?: string[]; reward?: number; resumed?: boolean; expiresAt?: string; message?: string }> {
     return apiClient<{ success: boolean; question?: string; options?: string[]; reward?: number; message?: string }>(
       "/games/trivia/question",
       { method: "GET" }

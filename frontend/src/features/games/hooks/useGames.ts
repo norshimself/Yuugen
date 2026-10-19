@@ -11,6 +11,7 @@ export function useGames(guildId: string | undefined) {
   const [coinsBalance, setCoinsBalance] = useState<number | null>(null);
   const [isLoadingTrivia, setIsLoadingTrivia] = useState<boolean>(false);
   const [rpsLoading, setRpsLoading] = useState<boolean>(false);
+  const [rpsMessage, setRpsMessage] = useState<string | null>(null);
 
   const fetchBalance = useCallback(async () => {
     try {
@@ -52,8 +53,8 @@ export function useGames(guildId: string | undefined) {
     setTriviaMessage(null);
     try {
       const res = await gamesService.submitTriviaAnswer(answerIndex);
-      setIsTriviaAnswered(true);
       if (res.success) {
+        setIsTriviaAnswered(true);
         if (res.correct) {
           setTriviaMessage({ 
             text: `Correct! You answered wisely and earned +${res.reward} coins!`, 
@@ -75,6 +76,7 @@ export function useGames(guildId: string | undefined) {
   };
 
   const playRockPaperScissors = async (choice: "rock" | "paper" | "scissors"): Promise<RPSResponse | null> => {
+    setRpsMessage(null);
     setRpsLoading(true);
     try {
       const res = await gamesService.playRPS(choice);
@@ -82,9 +84,15 @@ export function useGames(guildId: string | undefined) {
         await fetchBalance();
         return res;
       }
+      if (res.nextPlay) {
+        setRpsMessage(`One game per minute. You can play again at ${new Date(res.nextPlay).toLocaleTimeString()}.`);
+      } else {
+        setRpsMessage(res.message || "Unable to play right now.");
+      }
       return null;
     } catch (err) {
       console.error("RPS error:", err);
+      setRpsMessage("Unable to connect to the game server.");
       return null;
     } finally {
       setRpsLoading(false);
@@ -105,6 +113,7 @@ export function useGames(guildId: string | undefined) {
     coinsBalance,
     isLoadingTrivia,
     rpsLoading,
+    rpsMessage,
     setTriviaMessage,
     loadTriviaQuestion,
     submitTriviaAnswer,
