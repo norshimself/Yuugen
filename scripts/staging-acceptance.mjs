@@ -263,9 +263,9 @@ export async function runAcceptance(config, {
       expect(b.data?.success === false && b.data?.reward === 0, 'second RPS call bypassed cooldown');
     });
     await check('staging trivia payout cannot be repeated', async () => {
-      // This GET currently creates a trivia session; never run in read-only mode.
-      const question = await api('GET', '/games/trivia/question');
-      status(question, 200, '/games/trivia/question');
+      // Starting trivia creates a session; never run in read-only mode.
+      const question = await api('POST', '/games/trivia/question');
+      status(question, 201, '/games/trivia/question');
       expect(question.data?.success === true && Array.isArray(question.data?.options),
         'fresh trivia question unavailable: use a disposable account');
       const first = await api('POST', '/games/trivia/answer', { answerIndex: 0 });
