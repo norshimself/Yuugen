@@ -150,6 +150,9 @@ and simple up/down component statuses otherwise (no credentials or hostnames).
 The Nginx `/health` route now forwards to this readiness endpoint instead of
 always returning a misleading success.
 
+The backend coalesces concurrent readiness requests and caches each report for
+two seconds, avoiding a database or Lavalink request per incoming health poll.
+
 An unhealthy Lavalink node can make readiness fail even when the web API is
 still serving; this is intentional for a music service. Avoid using this
 readiness route as a Docker **process-liveness** signal that restarts the whole
