@@ -9,7 +9,7 @@ builds, Jest, live API, Discord, Lavalink, and production deployments are
 | Check | Result |
 | --- | --- |
 | Source-level feature audit | Completed; issues fixed on the release-readiness branch |
-| Offline `release-smoke.mjs` unit tests | Passed (3/3), Node.js only, mocked transport |
+| Offline `release-smoke.mjs` unit tests | Passed (4/4), Node.js only, mocked transport and local HTTP test |
 | Backend `npm ci`, Nest build, Jest | Not run; GitHub/npm network access unavailable |
 | Frontend `npm ci`, Next build | Not run; GitHub/npm network access unavailable |
 | Real API smoke script | Not run; no connected running backend in the execution environment |

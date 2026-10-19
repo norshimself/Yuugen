@@ -33,3 +33,31 @@ test('rejects malformed targets instead of probing arbitrary URLs', async () => 
     /must be an HTTP\(S\) URL/,
   );
 });
+
+
+test('exercises the real HTTP transport against an isolated local server', async (t) => {
+  const { createServer } = await import('node:http');
+  const server = createServer((req, res) => {
+    const route = req.url || '';
+    let status = 401;
+    if (route === '/api/v1/status') status = 200;
+    if (route === '/api/v1/auth/refresh' && !req.headers['x-yuugen-client']) {
+      status = 403;
+    }
+    if (route === '/api/v1/auth/exchange' && req.headers.origin) {
+      status = 403;
+    }
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end('{}');
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  const address = server.address();
+  assert.equal(typeof address, 'object');
+  const ok = await runSmoke(
+    'http://127.0.0.1:' + address.port + '/api/v1',
+    fetch,
+    () => {},
+  );
+  assert.equal(ok, true);
+});
