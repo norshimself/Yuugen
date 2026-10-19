@@ -79,7 +79,7 @@ function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuth
     }
     if (path === '/games/trivia/question') {
       triviaStarted = true;
-      return respond(200, { success: true, question: 'QA?', options: ['a','b','c','d'] });
+      return respond(201, { success: true, question: 'QA?', options: ['a','b','c','d'] });
     }
     if (path === '/games/trivia/answer') {
       if (!triviaStarted) return respond(400, { message: 'No game' });
