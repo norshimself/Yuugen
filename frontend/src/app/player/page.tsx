@@ -44,11 +44,16 @@ export default function DashboardPage() {
     );
   }
 
+  // Opt-in per dashboard module after a test-guild acceptance pass.
+  // These NEXT_PUBLIC_* flags are intentionally false by default.
   const navItems = [
     { id: "music", label: "Music Deck", icon: Music, disabled: false },
-    { id: "economy", label: "Server Economy", icon: Coins, disabled: true },
-    { id: "games", label: "Guild Games", icon: Gamepad2, disabled: true },
-    { id: "settings", label: "Server Settings", icon: Settings2, disabled: true },
+    { id: "economy", label: "Global Economy", icon: Coins,
+      disabled: process.env.NEXT_PUBLIC_ENABLE_ECONOMY !== "true" },
+    { id: "games", label: "Games", icon: Gamepad2,
+      disabled: process.env.NEXT_PUBLIC_ENABLE_GAMES !== "true" },
+    { id: "settings", label: "Server Settings", icon: Settings2,
+      disabled: process.env.NEXT_PUBLIC_ENABLE_SETTINGS !== "true" },
   ] as const;
 
   // Filter guilds based on search query

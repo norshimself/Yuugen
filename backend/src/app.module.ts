@@ -29,16 +29,23 @@ import { SettingsModule } from './api/settings/settings.module';
     SettingsModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        url:
-          configService.get<string>('DATABASE_URL') ||
-          'postgres://postgres:password@postgres:5432/discord_bot',
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize:
-          process.env.NODE_ENV !== 'production' ||
-          process.env.TYPEORM_SYNCHRONIZE === 'true',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const isProduction = configService.get<string>('NODE_ENV') === 'production';
+        if (isProduction && !databaseUrl) {
+          throw new Error('DATABASE_URL is required in production');
+        }
+        return {
+          type: 'postgres' as const,
+          url: databaseUrl ||
+            'postgres://postgres:password@postgres:5432/discord_bot',
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          // Schema changes must be applied through reviewed migrations.
+          // Even an accidental TYPEORM_SYNCHRONIZE=true must not mutate prod.
+          synchronize: !isProduction &&
+            configService.get<string>('TYPEORM_SYNCHRONIZE') !== 'false',
+        };
+      },
       inject: [ConfigService],
     }),
     NecordModule.forRootAsync({
