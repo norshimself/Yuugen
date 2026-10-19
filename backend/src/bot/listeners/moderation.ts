@@ -52,7 +52,8 @@ export function inspectMessage(
 
   const repeated =
     normalized.length > 0 &&
-    previous?.lastContent === normalized &&
+    previous !== undefined &&
+    previous.lastContent === normalized &&
     now - previous.lastAt <= 12000
       ? previous.repeatCount + 1
       : 1;
