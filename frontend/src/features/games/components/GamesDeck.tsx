@@ -18,6 +18,7 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
     coinsBalance,
     isLoadingTrivia,
     rpsLoading,
+    rpsMessage,
     setTriviaMessage,
     loadTriviaQuestion,
     submitTriviaAnswer,
@@ -79,7 +80,7 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
           </h3>
 
           <p className="text-[10px] text-brand-secondary/60 leading-relaxed font-light mb-8">
-            Challenge the Yuugen bot core to a match! Winners are rewarded with 20 server gold coins.
+            Challenge the Yuugen bot core to a match! Winners are rewarded with 20 global coins. One round per minute.
           </p>
 
           {/* Interactive Choices Grid */}
@@ -100,6 +101,12 @@ export function GamesDeck({ selectedGuildId }: GamesDeckProps) {
               </button>
             ))}
           </div>
+
+          {rpsMessage && (
+            <p className="text-center mt-4 text-xs text-amber-300" role="status">
+              {rpsMessage}
+            </p>
+          )}
 
           {/* RPS Result Box */}
           <AnimatePresence mode="wait">
