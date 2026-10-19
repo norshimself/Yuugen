@@ -1,4 +1,4 @@
-.PHONY: dev build up down restart logs clean prod prod-down prod-logs prod-restart verify verify-backend verify-frontend smoke-api
+.PHONY: dev build up down restart logs clean prod prod-down prod-logs prod-restart verify verify-smoke-tool verify-backend verify-frontend smoke-api verify-prod-config
 
 # ---- Development ----
 dev:
@@ -26,7 +26,10 @@ clean:
 	rm -rf backend/dist
 
 # ---- Local checks (no GitHub Actions usage) ----
-verify: verify-backend verify-frontend
+verify: verify-smoke-tool verify-backend verify-frontend
+
+verify-smoke-tool:
+	node --test scripts/release-smoke.test.mjs
 
 verify-backend:
 	cd backend && npm ci && npm run build && npm test -- --runInBand
@@ -37,6 +40,9 @@ verify-frontend:
 # Requires a running backend. Override YUUGEN_API_URL if needed.
 smoke-api:
 	node scripts/release-smoke.mjs
+
+verify-prod-config:
+	docker compose -f docker-compose.prod.yml config --quiet
 
 # ---- Production ----
 prod:
