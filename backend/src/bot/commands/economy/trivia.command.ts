@@ -18,44 +18,46 @@ export class TriviaCommand {
     description: 'Answer a trivia question to win coins!',
   })
   public async onTrivia(@Context() [interaction]: SlashCommandContext) {
-    const activeSession = await this.economyService.getTriviaSession(
+    await interaction.deferReply();
+    const game = await this.economyService.getOrStartTrivia(
       interaction.user.id,
     );
-    if (activeSession) {
-      return interaction.reply({
-        content: 'You already have an active trivia game! Answer it first.',
-        ephemeral: true,
+
+    if (!game.success || !game.question || !game.options) {
+      return interaction.editReply({
+        content: game.message || 'Unable to start trivia right now.',
       });
     }
-
-    const question = await this.economyService.getRandomTriviaQuestion();
-    const reward = 50;
-
-    await this.economyService.startTriviaSession(
-      interaction.user.id,
-      question.correctIndex,
-      reward,
-    );
 
     const embed = new EmbedBuilder()
       .setColor('#3498db')
       .setTitle('🧠 Trivia Time!')
-      .setDescription(question.question)
-      .setFooter({ text: `Reward: ${reward} coins` })
+      .setDescription(game.question)
+      .setFooter({
+        text: `Reward: ${game.reward} coins • Question expires in 15 minutes`,
+      })
       .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>();
-
-    question.options.forEach((option, index) => {
+    game.options.forEach((option, index) => {
       row.addComponents(
         new ButtonBuilder()
           .setCustomId(`trivia-${index}`)
-          .setLabel(option)
+          .setLabel(option.slice(0, 80))
           .setStyle(ButtonStyle.Primary),
       );
     });
 
-    return interaction.reply({ embeds: [embed], components: [row] });
+    const prompt = await interaction.editReply({
+      embeds: [embed],
+      components: [row],
+    });
+    // Bind the Discord message ID in the database before it is eligible for
+    // rewards. An old button from a previous prompt can never answer it.
+    await this.economyService.bindTriviaMessage(
+      interaction.user.id,
+      prompt.id,
+    );
   }
 
   @Button('trivia-0')
@@ -79,39 +81,30 @@ export class TriviaCommand {
   }
 
   private async handleAnswer(interaction: any, answerIndex: number) {
-    const game = await this.economyService.getTriviaSession(
+    const result = await this.economyService.answerTrivia(
       interaction.user.id,
+      answerIndex,
+      interaction.message.id,
     );
 
-    if (!game) {
+    if (!result.success) {
       return interaction.reply({
-        content: 'This trivia session is not for you or has expired!',
+        content: result.message || 'This trivia session is no longer active.',
         ephemeral: true,
       });
     }
 
-    await this.economyService.deleteTriviaSession(interaction.user.id);
+    const correct = result.correct === true;
+    const embed = new EmbedBuilder()
+      .setColor(correct ? '#2ecc71' : '#e74c3c')
+      .setTitle(correct ? '🎉 Correct!' : '😢 Incorrect!')
+      .setDescription(
+        correct
+          ? `You earned **${result.reward}** coins!`
+          : 'Better luck next time!',
+      )
+      .setTimestamp();
 
-    const isCorrect = answerIndex === game.correctIndex;
-
-    if (isCorrect) {
-      await this.economyService.addCoins(interaction.user.id, game.reward);
-
-      const embed = new EmbedBuilder()
-        .setColor('#2ecc71')
-        .setTitle('🎉 Correct!')
-        .setDescription(`You got it right and earned **${game.reward}** coins!`)
-        .setTimestamp();
-
-      return interaction.update({ embeds: [embed], components: [] });
-    } else {
-      const embed = new EmbedBuilder()
-        .setColor('#e74c3c')
-        .setTitle('😢 Incorrect!')
-        .setDescription('Better luck next time!')
-        .setTimestamp();
-
-      return interaction.update({ embeds: [embed], components: [] });
-    }
+    return interaction.update({ embeds: [embed], components: [] });
   }
 }
