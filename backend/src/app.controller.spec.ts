@@ -14,7 +14,7 @@ describe('AppController', () => {
     },
   };
   const status = {
-    getStatus: jest.fn().mockReturnValue('Bot is online and responding!'),
+    getStatus: jest.fn().mockReturnValue('Yuugen API is responding.'),
     checkReadiness: jest.fn().mockResolvedValue(readiness),
   };
 
