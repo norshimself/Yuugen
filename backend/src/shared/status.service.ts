@@ -14,6 +14,11 @@ export interface ReadinessReport {
 
 @Injectable()
 export class StatusService {
+  // Health probes may be polled frequently by a load balancer. Share ongoing
+  // checks and reuse recent results to avoid multiplying DB/Lavalink requests.
+  private cachedReadiness: { expiresAt: number; report: ReadinessReport } | null = null;
+  private pendingReadiness: Promise<ReadinessReport> | null = null;
+
   constructor(
     private readonly database: DataSource,
     private readonly discord: Client,
@@ -28,6 +33,23 @@ export class StatusService {
   // Readiness: essential external services are usable. No credentials,
   // versions, hostnames, or internal exception details are exposed.
   async checkReadiness(): Promise<ReadinessReport> {
+    if (this.cachedReadiness && this.cachedReadiness.expiresAt > Date.now()) {
+      return this.cachedReadiness.report;
+    }
+    if (this.pendingReadiness) return this.pendingReadiness;
+
+    const pending = this.probeReadiness();
+    this.pendingReadiness = pending;
+    try {
+      const report = await pending;
+      this.cachedReadiness = { expiresAt: Date.now() + 2000, report };
+      return report;
+    } finally {
+      this.pendingReadiness = null;
+    }
+  }
+
+  private async probeReadiness(): Promise<ReadinessReport> {
     const [databaseUp, lavalinkUp] = await Promise.all([
       this.checkDatabase(),
       this.checkLavalink(),
