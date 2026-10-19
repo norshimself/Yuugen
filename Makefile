@@ -32,7 +32,7 @@ verify-smoke-tool:
 	node --test scripts/release-smoke.test.mjs
 
 verify-backend:
-	cd backend && npm ci && npm run build && npm test -- --runInBand
+	cd backend && npm ci && npm run build && npm test -- --runInBand && npm run test:e2e -- --runInBand
 
 verify-frontend:
 	cd frontend && npm ci && npm run build
