@@ -2,7 +2,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { QueueTrack, RecommendationTrack, PlayerStatusMessage } from "../types/music.types";
 import { musicService } from "../services/musicService";
-import { refreshAccessToken } from "@/services/apiClient";
+import { getAccessToken, refreshAccessToken } from "@/services/apiClient";
 
 export function usePlayer(guildId: string | undefined) {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -135,11 +135,13 @@ export function usePlayer(guildId: string | undefined) {
   useEffect(() => {
     if (!guildId) return;
 
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-    const wsUrl = apiUrl.replace(/^http/, "ws") + "/player/ws";
+    // Native WebSockets connect to the API origin, not the Next.js rewrite.
+    const backendApi = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001/api/v1";
+    const wsUrl = backendApi.replace(/^http/, "ws") + "/player/ws";
 
     let socket: WebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout;
+    let subscriptionInterval: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
     let shouldReconnect = true;
 
@@ -158,10 +160,23 @@ export function usePlayer(guildId: string | undefined) {
         socket = new WebSocket(wsUrl);
 
         socket.onopen = async () => {
-          const token = localStorage.getItem("access_token") || await refreshAccessToken();
+          const token = getAccessToken() || await refreshAccessToken();
           if (disposed) return;
           if (token) {
             subscribe(token);
+            // Refresh the WebSocket subscription before its 15-minute JWT
+            // expires. Each subscription revalidates current guild access.
+            if (subscriptionInterval) clearInterval(subscriptionInterval);
+            subscriptionInterval = setInterval(async () => {
+              if (disposed || socket?.readyState !== WebSocket.OPEN) return;
+              const renewed = await refreshAccessToken();
+              if (disposed) return;
+              if (renewed) subscribe(renewed);
+              else {
+                shouldReconnect = false;
+                socket?.close();
+              }
+            }, 10 * 60 * 1000);
           } else {
             shouldReconnect = false;
             socket?.close();
@@ -211,6 +226,8 @@ export function usePlayer(guildId: string | undefined) {
         };
 
         socket.onclose = () => {
+          if (subscriptionInterval) clearInterval(subscriptionInterval);
+          subscriptionInterval = undefined;
           if (!disposed && shouldReconnect) {
             reconnectTimeout = setTimeout(connect, 4000);
           }
@@ -233,6 +250,7 @@ export function usePlayer(guildId: string | undefined) {
         socket.close();
       }
       clearTimeout(reconnectTimeout);
+      if (subscriptionInterval) clearInterval(subscriptionInterval);
     };
   }, [guildId]);
 

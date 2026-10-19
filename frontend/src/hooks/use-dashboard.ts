@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { refreshAccessToken } from "@/services/apiClient";
+import { authenticatedFetch, getAccessToken, logoutSession, refreshAccessToken } from "@/services/apiClient";
 
 export type DashboardTab = "music" | "economy" | "games" | "settings";
 
@@ -37,114 +37,81 @@ export function useDashboard() {
     }
   }, []);
 
-  const fetchGuilds = useCallback(async (customToken?: string) => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
-    const storedToken = customToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : null) || token;
+  const fetchGuilds = useCallback(async () => {
     try {
-      const headers: Record<string, string> = {
-      };
-      if (storedToken) {
-        headers["Authorization"] = `Bearer ${storedToken}`;
-      }
-      const res = await fetch(`${apiUrl}/player/guilds`, {
-        headers
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setGuilds(data);
-        
-        let initialized = false;
-        if (typeof window !== "undefined") {
-          const saved = localStorage.getItem("selected_guild");
-          if (saved) {
-            try {
-              const parsed = JSON.parse(saved);
-              const exists = data.find((g: Guild) => g.id === parsed.id);
-              if (exists) {
-                setSelectedGuild(exists);
-                initialized = true;
-              }
-            } catch (_) {}
-          }
-        }
-        if (!initialized) {
-          setSelectedGuild(data.length > 0 ? data[0] : null);
+      const res = await authenticatedFetch("/player/guilds");
+      if (!res.ok) throw new Error("Unable to load mutual Discord servers");
+
+      const data: Guild[] = await res.json();
+      setGuilds(data);
+
+      let selected: Guild | null = null;
+      const saved = localStorage.getItem("selected_guild");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          selected = data.find((guild) => guild.id === parsed.id) || null;
+        } catch {
+          // An invalid saved preference must not invent a guild.
         }
       }
-    } catch (err) {
-      console.error("Error fetching guilds:", err);
+      setSelectedGuild(selected || data[0] || null);
+    } catch (error) {
+      console.warn("Failed to fetch guilds:", error);
+      setGuilds([]);
+      setSelectedGuild(null);
     }
-  }, [token]);
+  }, []);
 
   // Trivia state
   const [trivia, setTrivia] = useState<TriviaQuestion | null>(null);
   const [triviaMessage, setTriviaMessage] = useState<{ text: string; success: boolean } | null>(null);
   const [isTriviaAnswered, setIsTriviaAnswered] = useState(false);
 
-  // Initialize session and fetch data
+  // Restore a short-lived JWT from the first-party HttpOnly session cookie.
   useEffect(() => {
-    const storedToken = localStorage.getItem("access_token");
-    if (!storedToken) {
-      router.push("/login");
-    } else {
-      setToken(storedToken);
+    let active = true;
+    const initialize = async () => {
+      const currentToken = getAccessToken() || await refreshAccessToken();
+      if (!active) return;
       setIsLoading(false);
-      fetchGuilds(storedToken);
-    }
+
+      if (!currentToken) {
+        router.replace("/login");
+        return;
+      }
+
+      setToken(currentToken);
+      await fetchGuilds();
+    };
+    void initialize();
+    return () => { active = false; };
   }, [router, fetchGuilds]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("access_token");
-    router.push("/login");
+    setToken(null);
+    setGuilds([]);
+    setSelectedGuild(null);
+    void logoutSession().finally(() => router.replace("/login"));
   }, [router]);
 
-  // Generic authenticated fetch wrapper
+  // Same-origin browser requests use the access token in memory only.
   const authFetch = useCallback(
     async (endpoint: string, options: RequestInit = {}) => {
-      const storedToken = localStorage.getItem("access_token") || token;
-      if (!storedToken) return null;
-      
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001/api/v1";
       try {
-        let res = await fetch(`${apiUrl}${endpoint}`, {
-          ...options,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${storedToken}`,
-            ...(options.headers || {}),
-          },
-          credentials: "include",
-        });
-
-        if (res.status === 401 && endpoint !== "/auth/refresh") {
-          const newToken = await refreshAccessToken();
-          if (newToken) {
-            // Update token state
-            setToken(newToken);
-            
-            // Retry
-            res = await fetch(`${apiUrl}${endpoint}`, {
-              ...options,
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${newToken}`,
-                ...(options.headers || {}),
-              },
-              credentials: "include",
-            });
-          } else {
-            logout();
-            return null;
-          }
+        return await authenticatedFetch(endpoint, options);
+      } catch (error) {
+        console.warn("Authenticated request failed:", error);
+        if (
+          error instanceof Error &&
+          /sign in required|session expired/i.test(error.message)
+        ) {
+          logout();
         }
-
-        return res;
-      } catch (err) {
-        console.error("Fetch error:", err);
         return null;
       }
     },
-    [token, logout]
+    [logout],
   );
 
   // Game Arena Actions
