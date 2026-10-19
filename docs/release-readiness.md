@@ -10,6 +10,7 @@ builds, Jest, live API, Discord, Lavalink, and production deployments are
 | --- | --- |
 | Source-level feature audit | Completed; issues fixed on the release-readiness branch |
 | Offline `release-smoke.mjs` unit tests | Passed (5/5), Node.js only, mocked transport and local HTTP test |
+| Offline authenticated staging harness tests | Passed (9/9), mocked HTTP/WebSocket transport, **not** a live Yuugen deployment |
 | Backend `npm ci`, Nest build, Jest | Not run; GitHub/npm network access unavailable |
 | Frontend `npm ci`, Next build | Not run; GitHub/npm network access unavailable |
 | Real API smoke script | Not run; no connected running backend in the execution environment |
@@ -27,7 +28,7 @@ From the repository root:
 make verify
 ```
 
-This runs `node --test scripts/release-smoke.test.mjs`, the backend's
+This runs `node --test scripts/release-smoke.test.mjs scripts/staging-acceptance.test.mjs`, the backend's
 `npm ci && npm run build && npm test -- --runInBand && npm run test:e2e -- --runInBand`, and the frontend's
 `npm ci && npm run build`. Fix any failures before moving to staging.
 GitHub Actions must **not** be re-enabled just to run these tests.
@@ -130,7 +131,24 @@ These flags only control navigation visibility: they are **not** a
 server-side security boundary. The backend JWT and guild guards remain
 necessary.
 
-## 7. Release decision
+## 7. Authenticated staging acceptance
+
+Use `docs/staging-acceptance.md` for the complete OAuth browser checklist
+and the CLI's read-only and opt-in mutation modes.
+
+The default `make staging-acceptance` validates signed-in mutual guild access,
+a real player/queue read, and valid/invalid native WebSocket subscriptions.
+It needs a short-lived **staging** JWT supplied via a local environment variable,
+not pasted into issues or chats. The optional voice mode joins/plays/stops in a
+disposable staging guild. The optional economy mode starts games and checks
+RPS/trivia replay protection using a disposable staging account.
+
+Use the new `POST /api/v1/games/trivia/question` route; the old GET route
+was removed because it could create a session and update cooldown state.
+Deploy the backend and frontend changes together. This change is **not** a
+replacement for a live interactive Discord OAuth browser test.
+
+## 8. Release decision
 
 Do not mark Yuugen production-ready until the builds and tests pass,
 migration is applied and verified, authenticated browser/Discord/Lavalink
@@ -140,7 +158,7 @@ documented for the actual deployment environment.
 If Vercel access is still denied, an authorized project/team administrator
 must restore the connector's access before deployment logs can be inspected.
 
-## 8. Operational readiness
+## 9. Operational readiness
 
 Use `GET /api/v1/status` for lightweight HTTP process liveness and
 `GET /api/v1/ready` for real service readiness. Readiness returns HTTP 200
