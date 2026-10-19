@@ -11,6 +11,14 @@ export class TriviaSession {
   @Column()
   reward: number;
 
+  // Null for sessions created before the recovery migration.
+  @Column({ type: 'integer', nullable: true })
+  questionId: number | null;
+
+  // Discord prompt ID, preventing stale buttons from answering a newer game.
+  @Column({ type: 'varchar', nullable: true })
+  messageId: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }
