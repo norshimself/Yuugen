@@ -1,22 +1,51 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './api/app/app.controller';
 import { AppService } from './api/app/app.service';
+import { StatusService } from './shared/status.service';
 
 describe('AppController', () => {
-  let appController: AppController;
+  let controller: AppController;
+  const readiness = {
+    status: 'ready' as const,
+    dependencies: {
+      database: 'up' as const,
+      discord: 'up' as const,
+      lavalink: 'up' as const,
+    },
+  };
+  const status = {
+    getStatus: jest.fn().mockReturnValue('Yuugen API is responding.'),
+    checkReadiness: jest.fn().mockResolvedValue(readiness),
+  };
 
   beforeEach(async () => {
-    const app: TestingModule = await Test.createTestingModule({
+    const module: TestingModule = await Test.createTestingModule({
       controllers: [AppController],
-      providers: [AppService],
+      providers: [
+        AppService,
+        { provide: StatusService, useValue: status },
+      ],
     }).compile();
-
-    appController = app.get<AppController>(AppController);
+    controller = module.get<AppController>(AppController);
   });
 
-  describe('root', () => {
-    it('should return "Hello World!"', () => {
-      expect(appController.getHello()).toBe('Hello World!');
+  it('returns the application greeting', () => {
+    expect(controller.getHello()).toBe('Hello World!');
+  });
+
+  it('returns a successful readiness report', async () => {
+    await expect(controller.getReadiness()).resolves.toEqual(readiness);
+  });
+
+  it('rejects unready dependencies with HTTP 503', async () => {
+    status.checkReadiness.mockResolvedValueOnce({
+      status: 'unavailable',
+      dependencies: {
+        database: 'up', discord: 'down', lavalink: 'up',
+      },
+    });
+    await expect(controller.getReadiness()).rejects.toMatchObject({
+      status: 503,
     });
   });
 });

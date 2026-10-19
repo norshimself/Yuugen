@@ -10,6 +10,7 @@ const firstParty = { ...json, 'x-yuugen-client': 'web' };
 
 export const probes = [
   { label: 'API status', path: '/status', status: 200 },
+  { label: 'Postgres, Discord and Lavalink ready', path: '/ready', status: 200, checkReadiness: true },
   { label: 'Guild listing requires a JWT', path: '/player/guilds', status: 401 },
   { label: 'Guild settings require a JWT', path: '/settings?guildId=123456789012345678', status: 401 },
   { label: 'Economy profile requires a JWT', path: '/economy/profile', status: 401 },
@@ -56,6 +57,18 @@ export async function runSmoke(apiUrl, transport = fetch, print = console.log) {
         signal: AbortSignal.timeout(7000),
       });
       actual = response.status;
+      if (probe.checkReadiness && response.status === probe.status) {
+        try {
+          const body = await response.json();
+          const names = ['database', 'discord', 'lavalink'];
+          if (body?.status !== 'ready' ||
+              !names.every((name) => body?.dependencies?.[name] === 'up')) {
+            actual = `${response.status} (dependencies not ready)`;
+          }
+        } catch {
+          actual = `${response.status} (invalid readiness response)`;
+        }
+      }
     } catch (error) {
       actual = error instanceof Error ? error.message : 'network error';
     }

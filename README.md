@@ -16,7 +16,7 @@ are feature-flagged until their staging acceptance checks pass.
 
 ## Local release checks
 
-- `make verify`: Node smoke-tool tests, backend build/Jest, and frontend build.
+- `make verify`: Node smoke-tool tests, backend build/unit+isolated e2e tests, and frontend build.
 - `make smoke-api`: harmless unauthenticated health/authorization probes against
   the running backend (default localhost:3001). Use `YUUGEN_API_URL` to override.
 - `make verify-prod-config`: validates Compose configuration without deploying;
@@ -37,3 +37,6 @@ GitHub Actions workflows are intentionally removed because CI usage is paused.
 Builds, database migrations, and Discord/Lavalink acceptance tests therefore
 require manual execution. This repository should not be considered production
 verified solely because a pull request is merged.
+
+Use `/api/v1/ready` (or the Nginx `/health` proxy) to verify PostgreSQL,
+Discord, and Lavalink readiness; `/api/v1/status` is HTTP liveness only.

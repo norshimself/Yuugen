@@ -9,7 +9,7 @@ builds, Jest, live API, Discord, Lavalink, and production deployments are
 | Check | Result |
 | --- | --- |
 | Source-level feature audit | Completed; issues fixed on the release-readiness branch |
-| Offline `release-smoke.mjs` unit tests | Passed (4/4), Node.js only, mocked transport and local HTTP test |
+| Offline `release-smoke.mjs` unit tests | Passed (5/5), Node.js only, mocked transport and local HTTP test |
 | Backend `npm ci`, Nest build, Jest | Not run; GitHub/npm network access unavailable |
 | Frontend `npm ci`, Next build | Not run; GitHub/npm network access unavailable |
 | Real API smoke script | Not run; no connected running backend in the execution environment |
@@ -28,7 +28,7 @@ make verify
 ```
 
 This runs `node --test scripts/release-smoke.test.mjs`, the backend's
-`npm ci && npm run build && npm test -- --runInBand`, and the frontend's
+`npm ci && npm run build && npm test -- --runInBand && npm run test:e2e -- --runInBand`, and the frontend's
 `npm ci && npm run build`. Fix any failures before moving to staging.
 GitHub Actions must **not** be re-enabled just to run these tests.
 
@@ -64,7 +64,8 @@ Start the backend against **staging**, then run:
 YUUGEN_API_URL=https://api-staging.example.com/api/v1 make smoke-api
 ```
 
-The script checks the status endpoint, ensures guild/settings/economy/game
+The script checks liveness and live readiness (PostgreSQL, Discord, Lavalink),
+including its JSON dependency states. It ensures guild/settings/economy/game
 APIs return 401 without a JWT, validates that refresh requests require
 the expected client header and session cookie, and checks invalid OAuth
 grants and cross-origin requests are rejected. It does **not** exercise
@@ -138,3 +139,22 @@ documented for the actual deployment environment.
 
 If Vercel access is still denied, an authorized project/team administrator
 must restore the connector's access before deployment logs can be inspected.
+
+## 8. Operational readiness
+
+Use `GET /api/v1/status` for lightweight HTTP process liveness and
+`GET /api/v1/ready` for real service readiness. Readiness returns HTTP 200
+only when a PostgreSQL `SELECT 1` succeeds, Discord reports a ready client,
+and Lavalink answers its authenticated `/v4/info` route. It returns HTTP 503
+and simple up/down component statuses otherwise (no credentials or hostnames).
+The Nginx `/health` route now forwards to this readiness endpoint instead of
+always returning a misleading success.
+
+The backend coalesces concurrent readiness requests and caches each report for
+two seconds, avoiding a database or Lavalink request per incoming health poll.
+
+An unhealthy Lavalink node can make readiness fail even when the web API is
+still serving; this is intentional for a music service. Avoid using this
+readiness route as a Docker **process-liveness** signal that restarts the whole
+bot during a brief dependency outage. `LAVALINK_HOST` and `LAVALINK_PORT`
+are shared by the player connector and readiness checks.
