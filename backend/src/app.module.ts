@@ -51,6 +51,12 @@ import { SettingsModule } from './api/settings/settings.module';
             IntentsBitField.Flags.Guilds,
             IntentsBitField.Flags.GuildMessages,
             IntentsBitField.Flags.GuildVoiceStates,
+            ...(configService.get<string>('ENABLE_GUILD_MEMBERS_INTENT') === 'true'
+              ? [IntentsBitField.Flags.GuildMembers]
+              : []),
+            ...(configService.get<string>('ENABLE_MESSAGE_CONTENT_INTENT') === 'true'
+              ? [IntentsBitField.Flags.MessageContent]
+              : []),
           ],
           development: devGuild ? [devGuild] : [],
         };

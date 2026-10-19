@@ -6,9 +6,11 @@ import { TriviaQuestion } from './trivia-question.entity';
 import { TriviaSession } from './trivia-session.entity';
 import { EconomyService } from './economy.service';
 import { MessageListener } from '../../bot/listeners/message.listener';
+import { SettingsModule } from '../../api/settings/settings.module';
 
 @Module({
   imports: [
+    SettingsModule,
     TypeOrmModule.forFeature([
       UserProfile,
       ShopItem,
