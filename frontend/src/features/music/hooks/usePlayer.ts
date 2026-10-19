@@ -442,19 +442,24 @@ export function usePlayer(guildId: string | undefined) {
       setIsPlaying(nextPlayState);
       setPlayerStatusMessage({ text: data.message, success: true });
     } else {
-      setIsPlaying(nextPlayState);
-      setPlayerStatusMessage({ 
-        text: `Toggled local ambient audio. (Discord: ${data?.message || 'Offline'})`, 
-        success: false 
+      // The backend controls actual playback; don't display false success.
+      setPlayerStatusMessage({
+        text: `Playback request failed: ${data?.message || 'Player offline'}`,
+        success: false,
       });
     }
   }, [isPlaying, sendPlayerRequest]);
 
   const setVolume = useCallback(async (level: number) => {
-    setVolumeState(level);
     const data = await sendPlayerRequest("/volume", { level });
     if (data && data.success) {
+      setVolumeState(level);
       setPlayerStatusMessage({ text: data.message, success: true });
+    } else {
+      setPlayerStatusMessage({
+        text: `Volume update failed: ${data?.message || 'Player offline'}`,
+        success: false,
+      });
     }
   }, [sendPlayerRequest]);
 

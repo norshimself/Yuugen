@@ -42,7 +42,7 @@ services:
     image: postgres:17-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the repository root .env before production deployment}"
       POSTGRES_DB: discord_bot
     volumes:
       - postgres_data:/var/lib/postgresql/data
