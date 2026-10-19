@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Get,
   Header,
   Post,
   Req,
@@ -21,10 +20,11 @@ export class GamesController {
     return this.economyService.playRps(req.user.id, dto.choice);
   }
 
+  // POST may create a session or update trivia cooldown. GET would be unsafe.
   // Restores the user's existing question after a reload; expired and
   // pre-migration sessions are replaced automatically.
   @Header('Cache-Control', 'no-store')
-  @Get('trivia/question')
+  @Post('trivia/question')
   async getTriviaQuestion(@Req() req: any) {
     return this.economyService.getOrStartTrivia(req.user.id);
   }
