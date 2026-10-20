@@ -15,7 +15,7 @@ builds, Jest, live API, Discord, Lavalink, and production deployments are
 | Frontend `npm ci`, Next build | Not run; GitHub/npm network access unavailable |
 | Real API smoke script | Not run; no connected running backend in the execution environment |
 | Discord OAuth, guild permissions, voice, Lavalink, radio | Not run; test guild and runtime required |
-| PostgreSQL economy migration | Not run; requires an operator backup and database access |
+| PostgreSQL economy and moderation migrations | Not run; require an operator backup and database access |
 | Vercel deployment inspection | Blocked by 403 access to the project team scope |
 | GitHub Actions | Remain removed by request |
 
@@ -36,8 +36,9 @@ GitHub Actions must **not** be re-enabled just to run these tests.
 ## 2. Database and deployment prerequisites
 
 1. Take a verified PostgreSQL backup.
-2. Apply `backend/migrations/20261019_economy_integrity.sql` to staging
-   and then production **before** deploying the new backend.
+2. Apply `backend/migrations/20261019_economy_integrity.sql` **and**
+   `backend/migrations/20261020_moderation_warnings.sql` to staging first,
+   then production **before** deploying the new backend.
 3. Create a root `.env` from `.env.production.example` and set a unique strong
    `POSTGRES_PASSWORD` matching the password in `backend/.env` `DATABASE_URL`.
    `docker-compose.prod.yml` now fails to start if `POSTGRES_PASSWORD` is unset.
@@ -176,3 +177,11 @@ still serving; this is intentional for a music service. Avoid using this
 readiness route as a Docker **process-liveness** signal that restarts the whole
 bot during a brief dependency outage. `LAVALINK_HOST` and `LAVALINK_PORT`
 are shared by the player connector and readiness checks.
+
+## 9. Moderation warning acceptance
+
+After applying `20261020_moderation_warnings.sql` to staging, confirm a
+member without Moderate Members permission cannot run `/mod warn`,
+`/mod warnings`, or `/mod unwarn`. Verify role hierarchy and owner/bot
+restrictions, persistence after restart, revocation history, and cross-server
+case isolation using the steps in `docs/moderation-warnings.md`.
