@@ -168,11 +168,15 @@ export class ModerationCommands {
         const created = Math.floor(new Date(item.createdAt).getTime() / 1000);
         const date = Number.isFinite(created) ? '<t:' + created + ':f>' : 'unknown date';
         const state = item.revokedAt ? 'revoked' : 'active';
-        const reason = item.reason.length > 160
-          ? item.reason.slice(0, 157) + '...'
+        const reason = item.reason.length > 120
+          ? item.reason.slice(0, 117) + '...'
           : item.reason;
+        const removal = item.revokedAt
+          ? '\nRevoked by <@' + (item.revokedByUserId || 'unknown') +
+            '>: ' + (item.revocationReason || 'No reason given').slice(0, 80)
+          : '';
         return '#' + item.id + ' (' + state + ') · ' + date +
-          ' · by <@' + item.moderatorUserId + '>\n' + reason;
+          ' · by <@' + item.moderatorUserId + '>\n' + reason + removal;
       });
 
       return interaction.editReply({
