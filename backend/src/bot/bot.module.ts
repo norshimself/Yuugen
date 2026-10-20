@@ -20,6 +20,8 @@ import { FilterCommand } from './commands/player/filter.command';
 
 import { EconomyModule } from '../domain/economy/economy.module';
 import { SettingsModule } from '../api/settings/settings.module';
+import { ModerationModule } from '../domain/moderation/moderation.module';
+import { ModerationCommands } from './commands/moderation/moderation.command';
 import { RankCommand } from './commands/economy/rank.command';
 import { DailyCommand } from './commands/economy/daily.command';
 import { LeaderboardCommand } from './commands/economy/leaderboard.command';
@@ -35,7 +37,7 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule],
   providers: [
     BotGateway,
     PingCommand,
@@ -67,6 +69,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
     BuyCommand,
     TriviaCommand,
     RpsCommand,
+    ModerationCommands,
     WelcomeListener,
   ],
 })
