@@ -408,25 +408,28 @@ export class ModerationCommands {
       });
     }
 
+    let finalized = false;
     try {
-      const completed = await this.moderation.finalizeKick(
+      finalized = !!await this.moderation.finalizeKick(
         pending.guildId, record.id, 'kick',
       );
-      if (!completed) throw new Error('Missing pending case');
-      return interaction.editReply({
-        content: 'Kicked <@' + pending.targetId + '> from this server. ' +
-          'Case #' + record.id + ' has been recorded.',
-        components: [],
-        allowedMentions: { parse: [] },
-      });
     } catch (error) {
-      this.logger.error('Kick succeeded but audit case finalization failed', error);
+      this.logger.error('Kick succeeded but audit finalization failed', error);
+    }
+    if (!finalized) {
+      this.logger.warn('Kick case #' + record.id + ' needs manual reconciliation');
       return interaction.editReply({
         content: 'The member was kicked, but case #' + record.id +
           ' is still pending in the audit log. Staff must reconcile it.',
         components: [],
       });
     }
+    return interaction.editReply({
+      content: 'Kicked <@' + pending.targetId + '> from this server. ' +
+        'Case #' + record.id + ' has been recorded.',
+      components: [],
+      allowedMentions: { parse: [] },
+    });
   }
 
   @Subcommand({
