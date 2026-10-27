@@ -6,8 +6,10 @@ This builds on the guild-scoped moderation cases introduced in feature 1.
 
 - `/mod kick user:<member> reason:<text>` — preview a removal and show
   **Confirm kick** and **Cancel** buttons in a private message.
-- `/mod cases user:<user>` — show the 10 most recent warnings, kicks, failed
-  attempts and unresolved kick attempts for that member in the current guild.
+- `/mod cases user:<user>` or `/mod cases user_id:<Discord ID>` —
+  show the 10 most recent warnings, kicks, failed attempts and unresolved
+  attempts for that member in the current guild. The ID option works after
+  the member has left the server.
 
 The original `/mod warn`, `/mod warnings` and `/mod unwarn` commands are
 unchanged. Kick records cannot be revoked using `/mod unwarn`.
