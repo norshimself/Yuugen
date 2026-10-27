@@ -34,6 +34,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Manual authentication deployment](docs/manual-auth-deployment.md)
 - [Guild welcome and moderation](docs/guild-welcome-moderation.md)
 - [Moderation warnings and case history](docs/moderation-warnings.md)
+- [Confirmed kicks and moderation audit cases](docs/moderation-kicks.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
 
 GitHub Actions workflows are intentionally removed because CI usage is paused.

@@ -185,3 +185,13 @@ member without Moderate Members permission cannot run `/mod warn`,
 `/mod warnings`, or `/mod unwarn`. Verify role hierarchy and owner/bot
 restrictions, persistence after restart, revocation history, and cross-server
 case isolation using the steps in `docs/moderation-warnings.md`.
+
+## 10. Kick moderation acceptance
+
+The `/mod kick` command adds a confirmed, guild-scoped removal action.
+Run through the disposable-guild checks in `docs/moderation-kicks.md`
+before enabling it on an actual community. Verify **both** the moderator's
+and the bot's Kick Members permission and hierarchy, cancel/expiry, updated
+permissions at confirmation, and persistent `kick`, `kick_failed` and
+`kick_pending` statuses. This addition reuses the existing
+`20261020_moderation_warnings.sql` schema; no extra DDL is required.
