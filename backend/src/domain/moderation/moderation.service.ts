@@ -66,6 +66,72 @@ export class ModerationService {
     });
   }
 
+  async casesForUser(
+    guildId: string,
+    targetUserId: string,
+  ): Promise<ModerationCase[]> {
+    validateSnowflake(guildId, 'guild ID');
+    validateSnowflake(targetUserId, 'target ID');
+    return this.cases.find({
+      where: { guildId, targetUserId },
+      order: { createdAt: 'DESC', id: 'DESC' },
+      take: 10,
+    });
+  }
+
+  /**
+   * Persist an audit case BEFORE contacting Discord. If Discord rejects the
+   * kick, mark the attempt kick_failed; if the process crashes midway, its
+   * kick_pending record remains visible for staff reconciliation.
+   */
+  async beginKick(
+    guildId: string,
+    targetUserId: string,
+    moderatorUserId: string,
+    reason: string,
+  ): Promise<ModerationCase> {
+    validateSnowflake(guildId, 'guild ID');
+    validateSnowflake(targetUserId, 'target ID');
+    validateSnowflake(moderatorUserId, 'moderator ID');
+    if (targetUserId === moderatorUserId) {
+      throw new BadRequestException('You cannot kick yourself');
+    }
+    return this.cases.save(
+      this.cases.create({
+        guildId,
+        targetUserId,
+        moderatorUserId,
+        action: 'kick_pending',
+        reason: normalizedReason(reason),
+      }),
+    );
+  }
+
+  /** Guild-bound conditional transition; repeated finalization is rejected. */
+  async finalizeKick(
+    guildId: string,
+    caseId: number,
+    status: 'kick' | 'kick_failed',
+  ): Promise<ModerationCase | null> {
+    validateSnowflake(guildId, 'guild ID');
+    if (!Number.isSafeInteger(caseId) || caseId <= 0) {
+      throw new BadRequestException('Invalid kick case ID');
+    }
+    if (status !== 'kick' && status !== 'kick_failed') {
+      throw new BadRequestException('Invalid kick case status');
+    }
+
+    const result = await this.cases.createQueryBuilder()
+      .update(ModerationCase)
+      .set({ action: status })
+      .where('id = :id', { id: caseId })
+      .andWhere('"guildId" = :guildId', { guildId })
+      .andWhere('"action" = :expected', { expected: 'kick_pending' })
+      .returning('*')
+      .execute();
+    return result.raw?.[0] ?? null;
+  }
+
   async unwarn(
     guildId: string,
     caseId: number,
