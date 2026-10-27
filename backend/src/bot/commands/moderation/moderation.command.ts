@@ -445,7 +445,7 @@ export class ModerationCommands {
       );
     }
     const targetId = user?.id || userId?.trim();
-    if (!targetId || !/^\\d{17,20}$/.test(targetId)) {
+    if (!targetId || !/^\d{17,20}$/.test(targetId)) {
       return interaction.editReply(
         'Select a user or provide their 17-20 digit Discord user ID.',
       );
