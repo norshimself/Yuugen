@@ -360,20 +360,34 @@ export class ModerationCommands {
       ).slice(0, 512);
       await member.kick(auditReason);
     } catch (error) {
-      this.logger.warn('Discord rejected kick for moderation case #' + record.id);
+      // A transport timeout does not prove the action failed. Only a clear
+      // Discord 403/404 response can be logged as a definitive failure;
+      // otherwise retain kick_pending for manual membership verification.
+      const status = error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: unknown }).status : null;
+      const definitiveFailure = status === 403 || status === 404;
+      this.logger.warn(
+        'Discord kick response for case #' + record.id +
+          (definitiveFailure ? ' was rejected' : ' was inconclusive'),
+      );
+
       let recordedFailure = false;
-      try {
-        recordedFailure = !!await this.moderation.finalizeKick(
-          pending.guildId, record.id, 'kick_failed',
-        );
-      } catch (saveError) {
-        this.logger.error('Could not finalize failed kick case #' + record.id, saveError);
+      if (definitiveFailure) {
+        try {
+          recordedFailure = !!await this.moderation.finalizeKick(
+            pending.guildId, record.id, 'kick_failed',
+          );
+        } catch (saveError) {
+          this.logger.error(
+            'Could not finalize failed kick case #' + record.id, saveError,
+          );
+        }
       }
       return interaction.editReply({
         content: recordedFailure
-          ? 'Discord did not kick the member. Case #' + record.id + ' is marked failed.'
-          : 'Discord did not confirm the kick; case #' + record.id +
-            ' remains pending. Staff should investigate before retrying.',
+          ? 'Discord rejected the kick. Case #' + record.id + ' is marked failed.'
+          : 'The kick outcome is unconfirmed. Case #' + record.id +
+            ' remains pending. Check guild membership before retrying.',
         components: [],
       });
     }
