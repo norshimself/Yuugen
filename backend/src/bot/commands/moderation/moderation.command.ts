@@ -73,6 +73,22 @@ class WarningHistoryOptions {
   user: User;
 }
 
+class CaseHistoryOptions {
+  @UserOption({
+    name: 'user',
+    description: 'User to look up (may still be a current member)',
+    required: false,
+  })
+  user?: User;
+
+  @StringOption({
+    name: 'user_id',
+    description: 'Discord user ID for a member who has already left',
+    required: false,
+  })
+  userId?: string;
+}
+
 class UnwarnOptions {
   @IntegerOption({
     name: 'id',
@@ -419,7 +435,7 @@ export class ModerationCommands {
   })
   public async onCases(
     @Context() [interaction]: SlashCommandContext,
-    @Options() { user }: WarningHistoryOptions,
+    @Options() { user, userId }: CaseHistoryOptions,
   ) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const staff = await this.staffContext(interaction);
@@ -428,9 +444,15 @@ export class ModerationCommands {
         'This command requires the Moderate Members permission.',
       );
     }
+    const targetId = user?.id || userId?.trim();
+    if (!targetId || !/^\\d{17,20}$/.test(targetId)) {
+      return interaction.editReply(
+        'Select a user or provide their 17-20 digit Discord user ID.',
+      );
+    }
     try {
       const history = await this.moderation.casesForUser(
-        staff.guild.id, user.id,
+        staff.guild.id, targetId,
       );
       if (history.length === 0) {
         return interaction.editReply('No moderation cases for this user in this server.');
@@ -449,7 +471,7 @@ export class ModerationCommands {
           ' · <@' + item.moderatorUserId + '>\n' + escapeMarkdown(detail);
       });
       return interaction.editReply({
-        content: ('**Cases for <@' + user.id + '>**\n\n' +
+        content: ('**Cases for <@' + targetId + '>**\n\n' +
           entries.join('\n\n')).slice(0, 1950),
         allowedMentions: { parse: [] },
       });
