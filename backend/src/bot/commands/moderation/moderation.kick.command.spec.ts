@@ -273,6 +273,21 @@ describe('Moderation kick command', () => {
     );
   });
 
+  it('supports reviewing cases for users who already left the guild', async () => {
+    const { commands, slash, service } = setup();
+    await commands.onCases([slash] as any, { userId: targetId });
+    expect(service.casesForUser).toHaveBeenCalledWith(guildId, targetId);
+  });
+
+  it('rejects invalid user IDs in the case viewer', async () => {
+    const { commands, slash, service } = setup();
+    await commands.onCases([slash] as any, { userId: '123-not-a-snowflake' });
+    expect(service.casesForUser).not.toHaveBeenCalled();
+    expect(slash.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('Discord user ID'),
+    );
+  });
+
   it('does not expose case history to users without moderation permission', async () => {
     const { commands, slash, service, user } = setup({
       actorCanKick: false,
