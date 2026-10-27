@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
+  Button,
   Context,
   IntegerOption,
   Options,
@@ -8,21 +9,27 @@ import {
   UserOption,
   createCommandGroupDecorator,
 } from 'necord';
-import type { SlashCommandContext } from 'necord';
+import type { ButtonContext, SlashCommandContext } from 'necord';
 import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonInteraction,
+  ButtonStyle,
   ChatInputCommandInteraction,
   Guild,
   GuildMember,
   MessageFlags,
   PermissionFlagsBits,
   User,
+  escapeMarkdown,
 } from 'discord.js';
 import { ModerationService } from '../../../domain/moderation/moderation.service';
 import { getWarningDenial } from './warning-policy';
+import { getKickDenial } from './kick-policy';
 
 const ModerationGroup = createCommandGroupDecorator({
   name: 'mod',
-  description: 'Server moderation and warning history',
+  description: 'Server moderation and case history',
 });
 
 class WarnOptions {
@@ -41,6 +48,22 @@ class WarnOptions {
   reason: string;
 }
 
+class KickOptions {
+  @UserOption({
+    name: 'user',
+    description: 'Server member to remove',
+    required: true,
+  })
+  user: User;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Kick reason (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+}
+
 class WarningHistoryOptions {
   @UserOption({
     name: 'user',
@@ -48,6 +71,22 @@ class WarningHistoryOptions {
     required: true,
   })
   user: User;
+}
+
+class CaseHistoryOptions {
+  @UserOption({
+    name: 'user',
+    description: 'User to look up (may still be a current member)',
+    required: false,
+  })
+  user?: User;
+
+  @StringOption({
+    name: 'user_id',
+    description: 'Discord user ID for a member who has already left',
+    required: false,
+  })
+  userId?: string;
 }
 
 class UnwarnOptions {
@@ -71,15 +110,25 @@ interface StaffContext {
   moderator: GuildMember;
 }
 
+interface PendingKick {
+  guildId: string;
+  actorId: string;
+  targetId: string;
+  reason: string;
+  expiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
   private readonly logger = new Logger(ModerationCommands.name);
+  private readonly pendingKicks = new Map<string, PendingKick>();
 
   constructor(private readonly moderation: ModerationService) {}
 
   private async staffContext(
-    interaction: ChatInputCommandInteraction,
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
+    requiredPermission: bigint = PermissionFlagsBits.ModerateMembers,
   ): Promise<StaffContext | null> {
     const guild = interaction.guild;
     if (!guild || !interaction.guildId) return null;
@@ -87,7 +136,7 @@ export class ModerationCommands {
     const moderator = await guild.members
       .fetch({ user: interaction.user.id, force: true })
       .catch(() => null);
-    if (!moderator?.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+    if (!moderator?.permissions.has(requiredPermission)) {
       return null;
     }
     return { guild, moderator };
@@ -142,6 +191,296 @@ export class ModerationCommands {
     } catch (error) {
       this.logger.error('Failed to record moderation warning', error);
       return interaction.editReply('Could not save that warning. Ask an administrator to check the database.');
+    }
+  }
+
+  /** Re-check permissions and target status on confirmation, not only preview. */
+  private async kickEligibility(
+    staff: StaffContext,
+    actorId: string,
+    targetId: string,
+  ): Promise<{ member: GuildMember | null; denial: string | null }> {
+    const [member, botMember] = await Promise.all([
+      staff.guild.members
+        .fetch({ user: targetId, force: true })
+        .catch(() => null),
+      staff.guild.members.fetchMe().catch(() => null),
+    ]);
+
+    const denial = getKickDenial({
+      actorId,
+      targetId,
+      guildOwnerId: staff.guild.ownerId,
+      actorHasKickMembers: staff.moderator.permissions.has(
+        PermissionFlagsBits.KickMembers,
+      ),
+      targetIsMember: !!member,
+      targetIsBot: !!member?.user.bot,
+      actorRoleAboveTarget: !!member &&
+        staff.moderator.roles.highest.comparePositionTo(member.roles.highest) > 0,
+      botHasKickMembers: !!botMember?.permissions.has(
+        PermissionFlagsBits.KickMembers,
+      ),
+      targetKickable: member?.kickable === true,
+    });
+    return { member, denial };
+  }
+
+  private cleanupPendingKicks(): void {
+    const now = Date.now();
+    for (const [messageId, pending] of this.pendingKicks) {
+      if (pending.expiresAt <= now) this.pendingKicks.delete(messageId);
+    }
+  }
+
+  @Subcommand({
+    name: 'kick',
+    description: 'Request confirmation before kicking a member',
+  })
+  public async onKick(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { user, reason }: KickOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const staff = await this.staffContext(
+      interaction,
+      PermissionFlagsBits.KickMembers,
+    );
+    if (!staff) {
+      return interaction.editReply('You need the Kick Members permission in this server.');
+    }
+
+    const cleanedReason = typeof reason === 'string'
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+      : '';
+    if (!cleanedReason || cleanedReason.length > 512) {
+      return interaction.editReply('Give a kick reason between 1 and 512 characters.');
+    }
+
+    const { denial } = await this.kickEligibility(
+      staff, interaction.user.id, user.id,
+    );
+    if (denial) return interaction.editReply(denial);
+
+    this.cleanupPendingKicks();
+    if (this.pendingKicks.size >= 100) {
+      return interaction.editReply(
+        'Too many pending kick confirmations. Try again shortly.',
+      );
+    }
+
+    const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-kick-confirm')
+        .setLabel('Confirm kick')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-kick-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+
+    const message = await interaction.editReply({
+      content: '**Confirm kick of <@' + user.id + '>**\nReason: ' +
+        escapeMarkdown(cleanedReason) +
+        '\nOnly you can confirm. This request expires in 60 seconds.',
+      components: [controls],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingKicks.set(message.id, {
+      guildId: staff.guild.id,
+      actorId: interaction.user.id,
+      targetId: user.id,
+      reason: cleanedReason,
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Button('mod-kick-cancel')
+  public async onKickCancel(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingKicks.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This kick confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingKicks.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Kick canceled. No member was removed.',
+      components: [],
+    });
+  }
+
+  @Button('mod-kick-confirm')
+  public async onKickConfirm(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingKicks.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This kick confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Consume immediately so double clicks cannot cause duplicate actions.
+    this.pendingKicks.delete(interaction.message.id);
+    await interaction.deferUpdate();
+
+    if (pending.expiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Kick confirmation expired. Use /mod kick again.',
+        components: [],
+      });
+    }
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.KickMembers,
+    );
+    if (!staff || staff.guild.id !== pending.guildId) {
+      return interaction.editReply({
+        content: 'Kick canceled: you no longer have Kick Members permission.',
+        components: [],
+      });
+    }
+
+    const { member, denial } = await this.kickEligibility(
+      staff, interaction.user.id, pending.targetId,
+    );
+    if (denial || !member) {
+      return interaction.editReply({
+        content: 'Kick canceled: ' + (denial || 'Target is unavailable.'),
+        components: [],
+      });
+    }
+
+    let record: Awaited<ReturnType<ModerationService['beginKick']>>;
+    try {
+      // Never initiate a Discord kick unless an audit attempt was persisted.
+      record = await this.moderation.beginKick(
+        pending.guildId, pending.targetId, pending.actorId, pending.reason,
+      );
+    } catch (error) {
+      this.logger.error('Kick audit creation failed; Discord action skipped', error);
+      return interaction.editReply({
+        content: 'No kick attempted: Yuugen could not save the moderation case.',
+        components: [],
+      });
+    }
+
+    try {
+      const auditReason = (
+        'Yuugen case #' + record.id + ', moderator ' +
+        pending.actorId + ': ' + pending.reason
+      ).slice(0, 512);
+      await member.kick(auditReason);
+    } catch (error) {
+      // A transport timeout does not prove the action failed. Only a clear
+      // Discord 403/404 response can be logged as a definitive failure;
+      // otherwise retain kick_pending for manual membership verification.
+      const status = error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: unknown }).status : null;
+      const definitiveFailure = status === 403 || status === 404;
+      this.logger.warn(
+        'Discord kick response for case #' + record.id +
+          (definitiveFailure ? ' was rejected' : ' was inconclusive'),
+      );
+
+      let recordedFailure = false;
+      if (definitiveFailure) {
+        try {
+          recordedFailure = !!await this.moderation.finalizeKick(
+            pending.guildId, record.id, 'kick_failed',
+          );
+        } catch (saveError) {
+          this.logger.error(
+            'Could not finalize failed kick case #' + record.id, saveError,
+          );
+        }
+      }
+      return interaction.editReply({
+        content: recordedFailure
+          ? 'Discord rejected the kick. Case #' + record.id + ' is marked failed.'
+          : 'The kick outcome is unconfirmed. Case #' + record.id +
+            ' remains pending. Check guild membership before retrying.',
+        components: [],
+      });
+    }
+
+    let finalized = false;
+    try {
+      finalized = !!await this.moderation.finalizeKick(
+        pending.guildId, record.id, 'kick',
+      );
+    } catch (error) {
+      this.logger.error('Kick succeeded but audit finalization failed', error);
+    }
+    if (!finalized) {
+      this.logger.warn('Kick case #' + record.id + ' needs manual reconciliation');
+      return interaction.editReply({
+        content: 'The member was kicked, but case #' + record.id +
+          ' is still pending in the audit log. Staff must reconcile it.',
+        components: [],
+      });
+    }
+    return interaction.editReply({
+      content: 'Kicked <@' + pending.targetId + '> from this server. ' +
+        'Case #' + record.id + ' has been recorded.',
+      components: [],
+      allowedMentions: { parse: [] },
+    });
+  }
+
+  @Subcommand({
+    name: 'cases',
+    description: 'Show recent warnings and kick attempts for a user',
+  })
+  public async onCases(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { user, userId }: CaseHistoryOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const staff = await this.staffContext(interaction);
+    if (!staff) {
+      return interaction.editReply(
+        'This command requires the Moderate Members permission.',
+      );
+    }
+    const targetId = user?.id || userId?.trim();
+    if (!targetId || !/^\d{17,20}$/.test(targetId)) {
+      return interaction.editReply(
+        'Select a user or provide their 17-20 digit Discord user ID.',
+      );
+    }
+    try {
+      const history = await this.moderation.casesForUser(
+        staff.guild.id, targetId,
+      );
+      if (history.length === 0) {
+        return interaction.editReply('No moderation cases for this user in this server.');
+      }
+      const entries = history.map((item) => {
+        const timestamp = Math.floor(new Date(item.createdAt).getTime() / 1000);
+        const when = Number.isFinite(timestamp)
+          ? '<t:' + timestamp + ':f>'
+          : 'unknown date';
+        const state = item.action === 'warn' && item.revokedAt
+          ? 'warn (revoked)' : item.action.replace(/_/g, ' ');
+        const detail = item.reason.length > 150
+          ? item.reason.slice(0, 147) + '...'
+          : item.reason;
+        return '#' + item.id + ' ' + state + ' · ' + when +
+          ' · <@' + item.moderatorUserId + '>\n' + escapeMarkdown(detail);
+      });
+      return interaction.editReply({
+        content: ('**Cases for <@' + targetId + '>**\n\n' +
+          entries.join('\n\n')).slice(0, 1950),
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      this.logger.error('Failed to list moderation cases', error);
+      return interaction.editReply('Could not retrieve moderation cases.');
     }
   }
 

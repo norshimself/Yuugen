@@ -178,10 +178,20 @@ readiness route as a Docker **process-liveness** signal that restarts the whole
 bot during a brief dependency outage. `LAVALINK_HOST` and `LAVALINK_PORT`
 are shared by the player connector and readiness checks.
 
-## 9. Moderation warning acceptance
+## 10. Moderation warning acceptance
 
 After applying `20261020_moderation_warnings.sql` to staging, confirm a
 member without Moderate Members permission cannot run `/mod warn`,
 `/mod warnings`, or `/mod unwarn`. Verify role hierarchy and owner/bot
 restrictions, persistence after restart, revocation history, and cross-server
 case isolation using the steps in `docs/moderation-warnings.md`.
+
+## 11. Kick moderation acceptance
+
+The `/mod kick` command adds a confirmed, guild-scoped removal action.
+Run through the disposable-guild checks in `docs/moderation-kicks.md`
+before enabling it on an actual community. Verify **both** the moderator's
+and the bot's Kick Members permission and hierarchy, cancel/expiry, updated
+permissions at confirmation, and persistent `kick`, `kick_failed` and
+`kick_pending` statuses. This addition reuses the existing
+`20261020_moderation_warnings.sql` schema; no extra DDL is required.
