@@ -236,7 +236,7 @@ export class ModerationCommands {
     }
 
     const cleanedReason = typeof reason === 'string'
-      ? reason.replace(/[\\u0000-\\u001F\\u007F]/g, ' ').trim()
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
       : '';
     if (!cleanedReason || cleanedReason.length > 512) {
       return interaction.editReply('Give a kick reason between 1 and 512 characters.');
@@ -266,9 +266,9 @@ export class ModerationCommands {
     );
 
     const message = await interaction.editReply({
-      content: '**Confirm kick of <@' + user.id + '>**\\nReason: ' +
+      content: '**Confirm kick of <@' + user.id + '>**\nReason: ' +
         escapeMarkdown(cleanedReason) +
-        '\\nOnly you can confirm. This request expires in 60 seconds.',
+        '\nOnly you can confirm. This request expires in 60 seconds.',
       components: [controls],
       allowedMentions: { parse: [] },
     });
@@ -432,11 +432,11 @@ export class ModerationCommands {
           ? item.reason.slice(0, 147) + '...'
           : item.reason;
         return '#' + item.id + ' ' + state + ' · ' + when +
-          ' · <@' + item.moderatorUserId + '>\\n' + escapeMarkdown(detail);
+          ' · <@' + item.moderatorUserId + '>\n' + escapeMarkdown(detail);
       });
       return interaction.editReply({
-        content: ('**Cases for <@' + user.id + '>**\\n\\n' +
-          entries.join('\\n\\n')).slice(0, 1950),
+        content: ('**Cases for <@' + user.id + '>**\n\n' +
+          entries.join('\n\n')).slice(0, 1950),
         allowedMentions: { parse: [] },
       });
     } catch (error) {
