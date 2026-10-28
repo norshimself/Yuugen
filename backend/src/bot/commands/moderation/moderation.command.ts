@@ -28,6 +28,13 @@ import { getWarningDenial } from './warning-policy';
 import { getKickDenial } from './kick-policy';
 import { getBanDenial } from './ban-policy';
 import { getUnbanDenial, isUnknownBanError } from './unban-policy';
+import {
+  formatTimeoutDuration,
+  getTimeoutDenial,
+  isDefinitiveTimeoutRejection,
+  parseTimeoutDuration,
+  type TimeoutAction,
+} from './timeout-policy';
 
 const ModerationGroup = createCommandGroupDecorator({
   name: 'mod',
@@ -93,6 +100,45 @@ class UnbanOptions {
   @StringOption({
     name: 'reason',
     description: 'Reason for unbanning (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+}
+
+class TimeoutOptions {
+  @UserOption({
+    name: 'user',
+    description: 'Current guild member to temporarily time out',
+    required: true,
+  })
+  user: User;
+
+  @StringOption({
+    name: 'duration',
+    description: 'Duration from 1m to 28d, such as 10m, 2h or 7d',
+    required: true,
+  })
+  duration: string;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Reason for the timeout (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+}
+
+class UntimeoutOptions {
+  @UserOption({
+    name: 'user',
+    description: 'Current guild member whose timeout should be removed',
+    required: true,
+  })
+  user: User;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Reason for removing the timeout (1-512 characters)',
     required: true,
   })
   reason: string;
@@ -168,6 +214,16 @@ interface PendingUnban {
   expiresAt: number;
 }
 
+interface PendingTimedAction {
+  guildId: string;
+  actorId: string;
+  targetId: string;
+  reason: string;
+  action: TimeoutAction;
+  durationMs?: number;
+  confirmationExpiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
@@ -175,6 +231,7 @@ export class ModerationCommands {
   private readonly pendingKicks = new Map<string, PendingKick>();
   private readonly pendingBans = new Map<string, PendingBan>();
   private readonly pendingUnbans = new Map<string, PendingUnban>();
+  private readonly pendingTimedActions = new Map<string, PendingTimedAction>();
 
   constructor(private readonly moderation: ModerationService) {}
 
@@ -966,6 +1023,321 @@ export class ModerationCommands {
       components: [],
       allowedMentions: { parse: [] },
     });
+  }
+
+  /**
+   * Member timeout permissions/hierarchy must be reloaded from Discord on
+   * preview and confirmation. A missing or stale member fails closed.
+   */
+  private async timedActionEligibility(
+    staff: StaffContext,
+    actorId: string,
+    targetId: string,
+    action: TimeoutAction,
+  ): Promise<{ member: GuildMember | null; denial: string | null }> {
+    const [member, botMember] = await Promise.all([
+      staff.guild.members.fetch({ user: targetId, force: true })
+        .catch(() => null),
+      staff.guild.members.fetchMe().catch(() => null),
+    ]);
+    const currentlyTimedOut = !!member &&
+      typeof member.communicationDisabledUntilTimestamp === 'number' &&
+      member.communicationDisabledUntilTimestamp > Date.now();
+    const denial = getTimeoutDenial({
+      action,
+      actorId,
+      targetId,
+      guildOwnerId: staff.guild.ownerId,
+      actorHasModerateMembers: staff.moderator.permissions.has(
+        PermissionFlagsBits.ModerateMembers,
+      ),
+      botHasModerateMembers: !!botMember?.permissions.has(
+        PermissionFlagsBits.ModerateMembers,
+      ),
+      targetIsMember: !!member,
+      targetIsBot: member?.user.bot === true,
+      actorRoleAboveTarget: !!member &&
+        staff.moderator.roles.highest.comparePositionTo(member.roles.highest) > 0,
+      targetModeratable: member?.moderatable === true,
+      currentlyTimedOut,
+    });
+    return { member, denial };
+  }
+
+  private cleanPendingTimedActions(): void {
+    const now = Date.now();
+    for (const [messageId, pending] of this.pendingTimedActions) {
+      if (pending.confirmationExpiresAt <= now) {
+        this.pendingTimedActions.delete(messageId);
+      }
+    }
+  }
+
+  private async previewTimedAction(
+    interaction: ChatInputCommandInteraction,
+    user: User,
+    reason: string,
+    action: TimeoutAction,
+    durationText?: string,
+  ) {
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.ModerateMembers,
+    );
+    if (!staff) {
+      return interaction.editReply(
+        'You need the Moderate Members permission in this server.',
+      );
+    }
+    const cleanedReason = typeof reason === 'string'
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+      : '';
+    if (cleanedReason.length < 1 || cleanedReason.length > 512) {
+      return interaction.editReply('Give a reason between 1 and 512 characters.');
+    }
+
+    const durationMs = action === 'timeout'
+      ? parseTimeoutDuration(durationText)
+      : null;
+    if (action === 'timeout' && durationMs === null) {
+      return interaction.editReply(
+        'Invalid duration. Use 1m to 28d, e.g. 10m, 2h or 7d.',
+      );
+    }
+
+    const { denial } = await this.timedActionEligibility(
+      staff, interaction.user.id, user.id, action,
+    );
+    if (denial) return interaction.editReply(denial);
+
+    this.cleanPendingTimedActions();
+    if (this.pendingTimedActions.size >= 100) {
+      return interaction.editReply(
+        'Too many pending moderation confirmations. Try again shortly.',
+      );
+    }
+
+    const label = action === 'timeout' ? 'timeout' : 'remove timeout';
+    const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-' + action + '-confirm')
+        .setLabel(action === 'timeout' ? 'Confirm timeout' : 'Confirm removal')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-' + action + '-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+    const displayDuration = durationMs !== null
+      ? '\nDuration: ' + formatTimeoutDuration(durationMs)
+      : '';
+    const message = await interaction.editReply({
+      content: '**Confirm ' + label + ' for <@' + user.id + '>**' +
+        displayDuration + '\nReason: ' + escapeMarkdown(cleanedReason) +
+        '\nOnly you can confirm. Expires in 60 seconds.',
+      components: [controls],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingTimedActions.set(message.id, {
+      guildId: staff.guild.id,
+      actorId: interaction.user.id,
+      targetId: user.id,
+      reason: cleanedReason,
+      action,
+      durationMs: durationMs === null ? undefined : durationMs,
+      confirmationExpiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Subcommand({
+    name: 'timeout',
+    description: 'Temporarily restrict a member after confirmation',
+  })
+  public async onTimeout(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { user, duration, reason }: TimeoutOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return this.previewTimedAction(
+      interaction, user, reason, 'timeout', duration,
+    );
+  }
+
+  @Subcommand({
+    name: 'untimeout',
+    description: 'Remove a member timeout after confirmation',
+  })
+  public async onUntimeout(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { user, reason }: UntimeoutOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return this.previewTimedAction(
+      interaction, user, reason, 'untimeout',
+    );
+  }
+
+  private async cancelTimedAction(
+    interaction: ButtonInteraction,
+    action: TimeoutAction,
+  ) {
+    const pending = this.pendingTimedActions.get(interaction.message.id);
+    if (!pending || pending.action !== action ||
+        pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This moderation confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingTimedActions.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Moderation action canceled. No Discord timeout was changed.',
+      components: [],
+    });
+  }
+
+  @Button('mod-timeout-cancel')
+  public async onTimeoutCancel(@Context() [interaction]: ButtonContext) {
+    return this.cancelTimedAction(interaction, 'timeout');
+  }
+
+  @Button('mod-untimeout-cancel')
+  public async onUntimeoutCancel(@Context() [interaction]: ButtonContext) {
+    return this.cancelTimedAction(interaction, 'untimeout');
+  }
+
+  private async confirmTimedAction(
+    interaction: ButtonInteraction,
+    action: TimeoutAction,
+  ) {
+    const pending = this.pendingTimedActions.get(interaction.message.id);
+    if (!pending || pending.action !== action ||
+        pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This moderation confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Consume synchronously before the first async call to prevent a replay.
+    this.pendingTimedActions.delete(interaction.message.id);
+    await interaction.deferUpdate();
+    if (pending.confirmationExpiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Confirmation expired. Run the moderation command again.',
+        components: [],
+      });
+    }
+
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.ModerateMembers,
+    );
+    if (!staff || staff.guild.id !== pending.guildId) {
+      return interaction.editReply({
+        content: 'Action canceled: you no longer have Moderate Members permission.',
+        components: [],
+      });
+    }
+    const { member, denial } = await this.timedActionEligibility(
+      staff, interaction.user.id, pending.targetId, action,
+    );
+    if (denial || !member) {
+      return interaction.editReply({
+        content: 'Action canceled: ' + (denial || 'Member is unavailable.'),
+        components: [],
+      });
+    }
+
+    // The expiry will be computed by Discord from the time of the API call.
+    // The case stores an approximate intended end for audit purposes only.
+    const durationMs = action === 'timeout' ? pending.durationMs : undefined;
+    let record: Awaited<ReturnType<ModerationService['beginTimedAction']>>;
+    try {
+      record = await this.moderation.beginTimedAction(
+        pending.guildId,
+        pending.targetId,
+        pending.actorId,
+        pending.reason,
+        action,
+        durationMs,
+      );
+    } catch (error) {
+      this.logger.error('Timed moderation case could not be saved', error);
+      return interaction.editReply({
+        content: 'No timeout action attempted: Yuugen could not save the case.',
+        components: [],
+      });
+    }
+
+    try {
+      const auditReason = (
+        'Yuugen case #' + record.id + ', moderator ' +
+        pending.actorId + ': ' + pending.reason
+      ).slice(0, 512);
+      await member.timeout(action === 'timeout' ? durationMs! : null, auditReason);
+    } catch (error) {
+      // A network timeout is ambiguous: Discord may have changed the member.
+      const definitive = isDefinitiveTimeoutRejection(error);
+      let markedFailed = false;
+      if (definitive) {
+        try {
+          markedFailed = !!await this.moderation.finalizeTimedAction(
+            pending.guildId, record.id, action, 'failed',
+          );
+        } catch (saveError) {
+          this.logger.error('Failed to record Discord rejection', saveError);
+        }
+      }
+      this.logger.warn(
+        'Timed moderation case #' + record.id +
+        (definitive ? ' rejected by Discord' : ' has unknown outcome'),
+      );
+      return interaction.editReply({
+        content: markedFailed
+          ? 'Discord rejected this action. Case #' + record.id + ' is marked failed.'
+          : 'Outcome unconfirmed. Case #' + record.id +
+            ' remains pending. Verify the member timeout in Discord before retrying.',
+        components: [],
+      });
+    }
+
+    let finalized = false;
+    try {
+      finalized = !!await this.moderation.finalizeTimedAction(
+        pending.guildId, record.id, action, 'success',
+      );
+    } catch (error) {
+      this.logger.error('Timeout succeeded but case finalization failed', error);
+    }
+    if (!finalized) {
+      return interaction.editReply({
+        content: 'Discord accepted the timeout change, but case #' + record.id +
+          ' remains pending. Staff must reconcile the case.',
+        components: [],
+      });
+    }
+
+    return interaction.editReply({
+      content: (action === 'timeout' ? 'Timed out ' : 'Removed timeout for ') +
+        '<@' + pending.targetId + '>.' +
+        (action === 'timeout' && durationMs
+          ? ' Duration: ' + formatTimeoutDuration(durationMs) + '.'
+          : '') +
+        ' Case #' + record.id + ' recorded.',
+      components: [],
+      allowedMentions: { parse: [] },
+    });
+  }
+
+  @Button('mod-timeout-confirm')
+  public async onTimeoutConfirm(@Context() [interaction]: ButtonContext) {
+    return this.confirmTimedAction(interaction, 'timeout');
+  }
+
+  @Button('mod-untimeout-confirm')
+  public async onUntimeoutConfirm(@Context() [interaction]: ButtonContext) {
+    return this.confirmTimedAction(interaction, 'untimeout');
   }
 
   @Subcommand({
