@@ -1,9 +1,12 @@
-export const MAX_PURGE_COUNT = 100;
-export const MAX_SCAN_MESSAGES = 500;
+import {
+  DISCORD_SNOWFLAKE,
+  MAX_PURGE_COUNT,
+  MAX_SCAN_MESSAGES,
+} from '../../../domain/moderation/purge-constraints';
+
+export { DISCORD_SNOWFLAKE, MAX_PURGE_COUNT, MAX_SCAN_MESSAGES };
 export const BULK_DELETE_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 export const PURGE_AGE_SAFETY_BUFFER_MS = 5 * 60 * 1000;
-
-export const DISCORD_SNOWFLAKE = /^\d{17,20}$/;
 
 export interface PurgeMessage {
   id: string;

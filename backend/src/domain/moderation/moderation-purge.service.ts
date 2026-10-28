@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ModerationPurge } from './moderation-purge.entity';
-import { DISCORD_SNOWFLAKE, MAX_PURGE_COUNT, MAX_SCAN_MESSAGES } from '../../bot/commands/moderation/purge-policy';
+import { DISCORD_SNOWFLAKE, MAX_PURGE_COUNT, MAX_SCAN_MESSAGES } from './purge-constraints';
 
 export interface BeginPurgeInput {
   guildId: string;
