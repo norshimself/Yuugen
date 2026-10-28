@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Get, Post, Query, UseGuards,
+  BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { ChannelType, Client, PermissionFlagsBits } from 'discord.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -25,6 +25,17 @@ export class AntiRaidController {
   @Get('alerts')
   alerts(@Query('guildId') guildId: string) {
     return this.antiRaid.recentAlerts(guildId);
+  }
+
+  @Post('alerts/:id/review')
+  async review(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { guildId: string; disposition: 'legitimate' | 'suspicious' },
+    @Req() request: { user: { id: string } },
+  ) {
+    return this.antiRaid.reviewAlert(
+      body.guildId, id, request.user.id, body.disposition,
+    );
   }
 
   @Post()
