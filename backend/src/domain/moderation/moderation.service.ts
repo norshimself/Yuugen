@@ -240,6 +240,84 @@ export class ModerationService {
     return result.raw?.[0] ?? null;
   }
 
+  /**
+   * Persist timeout/untimeout intent BEFORE the Discord operation. A pending
+   * row survives process crashes and uncertain HTTP responses. Discord
+   * automatically expires timeouts; Yuugen does not schedule an untimeout.
+   */
+  async beginTimedAction(
+    guildId: string,
+    targetUserId: string,
+    moderatorUserId: string,
+    reason: string,
+    action: 'timeout' | 'untimeout',
+    durationMs?: number,
+  ): Promise<ModerationCase> {
+    validateSnowflake(guildId, 'guild ID');
+    validateSnowflake(targetUserId, 'target ID');
+    validateSnowflake(moderatorUserId, 'moderator ID');
+    if (targetUserId === moderatorUserId) {
+      throw new BadRequestException('You cannot moderate yourself');
+    }
+    if (action !== 'timeout' && action !== 'untimeout') {
+      throw new BadRequestException('Invalid timeout action');
+    }
+    if (action === 'timeout') {
+      if (!Number.isSafeInteger(durationMs) ||
+          durationMs! < 60_000 ||
+          durationMs! > 28 * 24 * 60 * 60 * 1000) {
+        throw new BadRequestException('Timeout must be 1 minute to 28 days');
+      }
+    } else if (durationMs !== undefined) {
+      throw new BadRequestException('Remove timeout must not specify a duration');
+    }
+
+    return this.cases.save(
+      this.cases.create({
+        guildId,
+        targetUserId,
+        moderatorUserId,
+        action: action + '_pending',
+        reason: normalizedReason(reason),
+        // Approximate requested end time; Discord owns actual expiration.
+        expiresAt: action === 'timeout'
+          ? new Date(Date.now() + durationMs!)
+          : null,
+      }),
+    );
+  }
+
+  /**
+   * Commit a terminal result only if this row still belongs to the same
+   * guild and has the expected pending action. Never erase an older case.
+   */
+  async finalizeTimedAction(
+    guildId: string,
+    caseId: number,
+    action: 'timeout' | 'untimeout',
+    outcome: 'success' | 'failed',
+  ): Promise<ModerationCase | null> {
+    validateSnowflake(guildId, 'guild ID');
+    if (!Number.isSafeInteger(caseId) || caseId <= 0) {
+      throw new BadRequestException('Invalid moderation case ID');
+    }
+    if (action !== 'timeout' && action !== 'untimeout') {
+      throw new BadRequestException('Invalid timeout action');
+    }
+    if (outcome !== 'success' && outcome !== 'failed') {
+      throw new BadRequestException('Invalid timeout outcome');
+    }
+    const result = await this.cases.createQueryBuilder()
+      .update(ModerationCase)
+      .set({ action: outcome === 'success' ? action : action + '_failed' })
+      .where('id = :id', { id: caseId })
+      .andWhere('"guildId" = :guildId', { guildId })
+      .andWhere('"action" = :expected', { expected: action + '_pending' })
+      .returning('*')
+      .execute();
+    return result.raw?.[0] ?? null;
+  }
+
   async unwarn(
     guildId: string,
     caseId: number,
