@@ -1342,7 +1342,7 @@ export class ModerationCommands {
 
   @Subcommand({
     name: 'cases',
-    description: 'Show warnings, kicks, bans and unbans'
+    description: 'Show recent guild moderation cases'
   })
   public async onCases(
     @Context() [interaction]: SlashCommandContext,
@@ -1382,8 +1382,17 @@ export class ModerationCommands {
         const detail = item.reason.length > 150
           ? item.reason.slice(0, 147) + '...'
           : item.reason;
+        const expectedEnd = item.expiresAt &&
+          (item.action === 'timeout' || item.action === 'timeout_pending')
+          ? Math.floor(new Date(item.expiresAt).getTime() / 1000)
+          : null;
+        const expiry = expectedEnd !== null && Number.isFinite(expectedEnd)
+          ? '\nIntended end: <t:' + expectedEnd + ':f>' +
+            (item.action === 'timeout_pending' ? ' (outcome unconfirmed)' : '')
+          : '';
         return '#' + item.id + ' ' + state + ' · ' + when +
-          ' · <@' + item.moderatorUserId + '>\n' + escapeMarkdown(detail);
+          ' · <@' + item.moderatorUserId + '>\n' +
+          escapeMarkdown(detail) + expiry;
       });
       return interaction.editReply({
         content: ('**Cases for <@' + targetId + '>**\n\n' +
