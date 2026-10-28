@@ -21,7 +21,7 @@ type FakeMessage = {
 
 function makeMessage(n: number, opts: Partial<FakeMessage> = {}): FakeMessage {
   return {
-    id: String(BigInt('123456789012345678') + BigInt(n)),
+    id: String(BigInt('123456789012345678') - BigInt(n)),
     author: { id: alice },
     createdTimestamp: now - n * 1000,
     pinned: false,
