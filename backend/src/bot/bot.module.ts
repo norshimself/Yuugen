@@ -22,6 +22,7 @@ import { EconomyModule } from '../domain/economy/economy.module';
 import { SettingsModule } from '../api/settings/settings.module';
 import { ModerationModule } from '../domain/moderation/moderation.module';
 import { ModerationCommands } from './commands/moderation/moderation.command';
+import { VoiceModerationCommands } from './commands/moderation/voice-moderation.command';
 import { RankCommand } from './commands/economy/rank.command';
 import { DailyCommand } from './commands/economy/daily.command';
 import { LeaderboardCommand } from './commands/economy/leaderboard.command';
@@ -70,6 +71,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
     TriviaCommand,
     RpsCommand,
     ModerationCommands,
+    VoiceModerationCommands,
     WelcomeListener,
   ],
 })
