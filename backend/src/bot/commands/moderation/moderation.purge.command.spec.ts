@@ -228,7 +228,7 @@ describe('Moderation purge Discord interactions', () => {
     await s.commands.onPurgeConfirm([s.button] as any);
     expect(s.purge.begin).toHaveBeenCalledWith(expect.objectContaining({
       guildId, channelId, moderatorUserId: actorId,
-      requestedCount: 2, selectedCount: undefined,
+      requestedCount: 2,
       selectedMessageIds: [s.rows[0].id, s.rows[1].id],
     }));
     expect(s.channel.bulkDelete).toHaveBeenCalledWith(
