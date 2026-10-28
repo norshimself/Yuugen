@@ -34,7 +34,8 @@ export class AntiNukeController {
   async configure(@Body() body: { guildId: string; settings: AntiNukeConfig }) {
     const error = validateAntiNukeConfig(body?.settings);
     if (error) throw new BadRequestException(error);
-    if (body.settings.alertChannelId) {
+    // Disabling must work even when an old alert channel was deleted.
+    if (body.settings.enabled && body.settings.alertChannelId) {
       const guild = this.discordClient.guilds.cache.get(body.guildId);
       const channel = await guild?.channels.fetch(body.settings.alertChannelId)
         .catch(() => null);
