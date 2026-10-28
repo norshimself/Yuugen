@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
+import { AutoModMessageListener } from './listeners/automod.listener';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -41,6 +42,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
   imports: [EconomyModule, SettingsModule, ModerationModule],
   providers: [
     BotGateway,
+    AutoModMessageListener,
     PingCommand,
     PlayCommand,
     QueueCommand,
