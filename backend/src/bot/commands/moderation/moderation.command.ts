@@ -21,6 +21,7 @@ import {
   Guild,
   GuildChannel,
   GuildMember,
+  Message,
   MessageFlags,
   NewsChannel,
   PermissionFlagsBits,
@@ -37,6 +38,7 @@ import {
   getPurgeDenial,
   samePurgeSelection,
   validatePurgeCount,
+  type PurgePlan,
 } from './purge-policy';
 import { getKickDenial } from './kick-policy';
 import { getBanDenial } from './ban-policy';
@@ -1507,7 +1509,7 @@ export class ModerationCommands {
     if (this.purgingChannels.has(channel.id)) {
       return interaction.editReply('A purge is already running in this channel.');
     }
-    let plan: Awaited<ReturnType<typeof buildPurgePlan>>;
+    let plan: PurgePlan<Message<true>>;
     try {
       plan = await buildPurgePlan(channel, count, filterUserId);
     } catch (error) {
@@ -1635,7 +1637,7 @@ export class ModerationCommands {
       // Re-fetch with a cold cache; do not delete messages added/replaced
       // after the preview. Pinned and age-expired messages also invalidate
       // the preview to avoid silently deleting an unexpected selection.
-      let plan: Awaited<ReturnType<typeof buildPurgePlan>>;
+      let plan: PurgePlan<Message<true>>;
       try {
         plan = await buildPurgePlan(
           channel, pending.requestedCount, pending.filterUserId,
