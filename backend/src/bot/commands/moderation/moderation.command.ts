@@ -26,6 +26,7 @@ import {
 import { ModerationService } from '../../../domain/moderation/moderation.service';
 import { getWarningDenial } from './warning-policy';
 import { getKickDenial } from './kick-policy';
+import { getBanDenial } from './ban-policy';
 
 const ModerationGroup = createCommandGroupDecorator({
   name: 'mod',
@@ -59,6 +60,22 @@ class KickOptions {
   @StringOption({
     name: 'reason',
     description: 'Kick reason (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+}
+
+class BanOptions {
+  @UserOption({
+    name: 'user',
+    description: 'Current server member to ban permanently',
+    required: true,
+  })
+  user: User;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Permanent ban reason (1-512 characters)',
     required: true,
   })
   reason: string;
@@ -118,17 +135,26 @@ interface PendingKick {
   expiresAt: number;
 }
 
+interface PendingBan {
+  guildId: string;
+  actorId: string;
+  targetId: string;
+  reason: string;
+  expiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
   private readonly logger = new Logger(ModerationCommands.name);
   private readonly pendingKicks = new Map<string, PendingKick>();
+  private readonly pendingBans = new Map<string, PendingBan>();
 
   constructor(private readonly moderation: ModerationService) {}
 
   private async staffContext(
     interaction: ChatInputCommandInteraction | ButtonInteraction,
-    requiredPermission: bigint = PermissionFlagsBits.ModerateMembers,
+    requiredPermission: bigint | bigint[] = PermissionFlagsBits.ModerateMembers,
   ): Promise<StaffContext | null> {
     const guild = interaction.guild;
     if (!guild || !interaction.guildId) return null;
@@ -136,7 +162,10 @@ export class ModerationCommands {
     const moderator = await guild.members
       .fetch({ user: interaction.user.id, force: true })
       .catch(() => null);
-    if (!moderator?.permissions.has(requiredPermission)) {
+    const permissions = typeof requiredPermission === 'bigint'
+      ? [requiredPermission]
+      : requiredPermission;
+    if (!moderator || !permissions.some((value) => moderator.permissions.has(value))) {
       return null;
     }
     return { guild, moderator };
@@ -432,19 +461,252 @@ export class ModerationCommands {
     });
   }
 
+
+  /** Fetch the latest target/member/bot state for the planned ban. */
+  private async banEligibility(
+    staff: StaffContext,
+    actorId: string,
+    targetId: string,
+  ): Promise<{ member: GuildMember | null; denial: string | null }> {
+    const [member, botMember] = await Promise.all([
+      staff.guild.members.fetch({ user: targetId, force: true })
+        .catch(() => null),
+      staff.guild.members.fetchMe().catch(() => null),
+    ]);
+    const denial = getBanDenial({
+      actorId,
+      targetId,
+      guildOwnerId: staff.guild.ownerId,
+      actorHasBanMembers: staff.moderator.permissions.has(
+        PermissionFlagsBits.BanMembers,
+      ),
+      targetIsMember: !!member,
+      targetIsBot: member?.user.bot === true,
+      actorRoleAboveTarget: !!member &&
+        staff.moderator.roles.highest.comparePositionTo(member.roles.highest) > 0,
+      botHasBanMembers: !!botMember?.permissions.has(
+        PermissionFlagsBits.BanMembers,
+      ),
+      targetBannable: member?.bannable === true,
+    });
+    return { member, denial };
+  }
+
+  private cleanupPendingBans(): void {
+    const now = Date.now();
+    for (const [messageId, pending] of this.pendingBans) {
+      if (pending.expiresAt <= now) this.pendingBans.delete(messageId);
+    }
+  }
+
+  @Subcommand({
+    name: 'ban',
+    description: 'Permanently ban a member after confirmation',
+  })
+  public async onBan(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { user, reason }: BanOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.BanMembers,
+    );
+    if (!staff) {
+      return interaction.editReply('You need the Ban Members permission in this server.');
+    }
+    const cleanedReason = typeof reason === 'string'
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+      : '';
+    if (cleanedReason.length < 1 || cleanedReason.length > 512) {
+      return interaction.editReply('Give a ban reason between 1 and 512 characters.');
+    }
+    const { denial } = await this.banEligibility(
+      staff, interaction.user.id, user.id,
+    );
+    if (denial) return interaction.editReply(denial);
+
+    this.cleanupPendingBans();
+    if (this.pendingBans.size >= 100) {
+      return interaction.editReply(
+        'Too many outstanding ban confirmations. Try again shortly.',
+      );
+    }
+    const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-ban-confirm')
+        .setLabel('Confirm permanent ban')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-ban-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+    const message = await interaction.editReply({
+      content: '**Confirm permanent ban of <@' + user.id + '>**\nReason: ' +
+        escapeMarkdown(cleanedReason) +
+        '\nThis blocks rejoining until a moderator unbans them. ' +
+        'Only you can confirm. Expires in 60 seconds. ' +
+        'No prior messages will be deleted.',
+      components: [controls],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingBans.set(message.id, {
+      guildId: staff.guild.id,
+      actorId: interaction.user.id,
+      targetId: user.id,
+      reason: cleanedReason,
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Button('mod-ban-cancel')
+  public async onBanCancel(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingBans.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This ban confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingBans.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Ban canceled. No member was banned.',
+      components: [],
+    });
+  }
+
+  @Button('mod-ban-confirm')
+  public async onBanConfirm(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingBans.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This ban confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Consume synchronously, before the first await. Concurrent clicks
+    // against the same confirmation can execute only one ban.
+    this.pendingBans.delete(interaction.message.id);
+    await interaction.deferUpdate();
+    if (pending.expiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Ban confirmation expired. Use /mod ban again.',
+        components: [],
+      });
+    }
+
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.BanMembers,
+    );
+    if (!staff || staff.guild.id !== pending.guildId) {
+      return interaction.editReply({
+        content: 'Ban canceled: you no longer have Ban Members permission.',
+        components: [],
+      });
+    }
+    const { member, denial } = await this.banEligibility(
+      staff, interaction.user.id, pending.targetId,
+    );
+    if (denial || !member) {
+      return interaction.editReply({
+        content: 'Ban canceled: ' + (denial || 'Target is unavailable.'),
+        components: [],
+      });
+    }
+
+    let record: Awaited<ReturnType<ModerationService['beginBan']>>;
+    try {
+      record = await this.moderation.beginBan(
+        pending.guildId, pending.targetId, pending.actorId, pending.reason,
+      );
+    } catch (error) {
+      this.logger.error('Ban case write failed; Discord ban was not attempted', error);
+      return interaction.editReply({
+        content: 'No ban attempted: Yuugen could not save the audit case.',
+        components: [],
+      });
+    }
+
+    try {
+      const auditReason = (
+        'Yuugen case #' + record.id + ', moderator ' +
+        pending.actorId + ': ' + pending.reason
+      ).slice(0, 512);
+      // Explicit zero avoids deleting earlier messages during a ban.
+      await member.ban({ deleteMessageSeconds: 0, reason: auditReason });
+    } catch (error) {
+      // A timeout or connection reset may mean Discord completed the ban.
+      // Only explicit 403/404 errors are treated as definitive failures.
+      const status = error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: unknown }).status : null;
+      const definitiveFailure = status === 403 || status === 404;
+      let markedFailed = false;
+      if (definitiveFailure) {
+        try {
+          markedFailed = !!await this.moderation.finalizeBan(
+            pending.guildId, record.id, 'ban_failed',
+          );
+        } catch (saveError) {
+          this.logger.error('Ban failure case finalization failed', saveError);
+        }
+      }
+      this.logger.warn(
+        'Discord ban case #' + record.id +
+        (definitiveFailure ? ' rejected' : ' has uncertain outcome'),
+      );
+      return interaction.editReply({
+        content: markedFailed
+          ? 'Discord rejected the ban. Case #' + record.id + ' is marked failed.'
+          : 'Ban outcome is unconfirmed. Case #' + record.id +
+            ' remains pending. Check the Discord guild ban list before retrying.',
+        components: [],
+      });
+    }
+
+    let finalized = false;
+    try {
+      finalized = !!await this.moderation.finalizeBan(
+        pending.guildId, record.id, 'ban',
+      );
+    } catch (error) {
+      this.logger.error('Ban succeeded; audit finalization failed', error);
+    }
+    if (!finalized) {
+      return interaction.editReply({
+        content: 'The member was banned, but case #' + record.id +
+          ' remains pending. Staff must reconcile the case.',
+        components: [],
+      });
+    }
+    return interaction.editReply({
+      content: 'Permanently banned <@' + pending.targetId +
+        '> from this server. Case #' + record.id + ' recorded.',
+      components: [],
+      allowedMentions: { parse: [] },
+    });
+  }
+
   @Subcommand({
     name: 'cases',
-    description: 'Show recent warnings and kick attempts for a user',
+    description: 'Show warnings, kicks and bans for a user',
   })
   public async onCases(
     @Context() [interaction]: SlashCommandContext,
     @Options() { user, userId }: CaseHistoryOptions,
   ) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const staff = await this.staffContext(interaction);
+    const staff = await this.staffContext(interaction, [
+      PermissionFlagsBits.ModerateMembers,
+      PermissionFlagsBits.KickMembers,
+      PermissionFlagsBits.BanMembers,
+    ]);
     if (!staff) {
       return interaction.editReply(
-        'This command requires the Moderate Members permission.',
+        'You need Moderate Members, Kick Members, or Ban Members permission.',
       );
     }
     const targetId = user?.id || userId?.trim();
