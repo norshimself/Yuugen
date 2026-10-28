@@ -39,8 +39,12 @@ CREATE TABLE IF NOT EXISTS "anti_raid_alerts" (
   "status" VARCHAR(16) NOT NULL DEFAULT 'pending',
   "failureReason" VARCHAR(32) NULL,
   "deliveredAt" TIMESTAMP WITH TIME ZONE NULL,
+  "reviewedByUserId" VARCHAR(20) NULL,
+  "reviewDisposition" VARCHAR(16) NULL,
+  "reviewedAt" TIMESTAMP WITH TIME ZONE NULL,
   "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT "CHK_anti_raid_alert_status" CHECK ("status" IN ('pending', 'sent', 'failed'))
+  CONSTRAINT "CHK_anti_raid_alert_status" CHECK ("status" IN ('pending', 'sent', 'failed')),
+  CONSTRAINT "CHK_anti_raid_review" CHECK ("reviewDisposition" IS NULL OR "reviewDisposition" IN ('legitimate', 'suspicious'))
 );
 CREATE INDEX IF NOT EXISTS "IDX_anti_raid_alerts_guild_created"
   ON "anti_raid_alerts" ("guildId", "createdAt");
