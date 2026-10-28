@@ -27,6 +27,7 @@ import { ModerationService } from '../../../domain/moderation/moderation.service
 import { getWarningDenial } from './warning-policy';
 import { getKickDenial } from './kick-policy';
 import { getBanDenial } from './ban-policy';
+import { getUnbanDenial, isUnknownBanError } from './unban-policy';
 
 const ModerationGroup = createCommandGroupDecorator({
   name: 'mod',
@@ -76,6 +77,22 @@ class BanOptions {
   @StringOption({
     name: 'reason',
     description: 'Permanent ban reason (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+}
+
+class UnbanOptions {
+  @StringOption({
+    name: 'user_id',
+    description: 'Discord user ID to unban (17-20 digits)',
+    required: true,
+  })
+  userId: string;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Reason for unbanning (1-512 characters)',
     required: true,
   })
   reason: string;
@@ -143,12 +160,21 @@ interface PendingBan {
   expiresAt: number;
 }
 
+interface PendingUnban {
+  guildId: string;
+  actorId: string;
+  targetId: string;
+  reason: string;
+  expiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
   private readonly logger = new Logger(ModerationCommands.name);
   private readonly pendingKicks = new Map<string, PendingKick>();
   private readonly pendingBans = new Map<string, PendingBan>();
+  private readonly pendingUnbans = new Map<string, PendingUnban>();
 
   constructor(private readonly moderation: ModerationService) {}
 
@@ -690,9 +716,258 @@ export class ModerationCommands {
     });
   }
 
+  /**
+   * Fail closed when we cannot confirm an actual Discord ban. The user has
+   * no server roles while banned, so the only valid hierarchy requirement
+   * is the Ban Members permission of the moderator and Yuugen.
+   */
+  private async unbanEligibility(
+    staff: StaffContext,
+    actorId: string,
+    targetId: string,
+  ): Promise<string | null> {
+    const botMember = await staff.guild.members.fetchMe().catch(() => null);
+    const denial = getUnbanDenial({
+      actorId,
+      targetId,
+      guildOwnerId: staff.guild.ownerId,
+      actorHasBanMembers: staff.moderator.permissions.has(
+        PermissionFlagsBits.BanMembers,
+      ),
+      botHasBanMembers: !!botMember?.permissions.has(
+        PermissionFlagsBits.BanMembers,
+      ),
+    });
+    if (denial) return denial;
+
+    try {
+      // GuildBanManager.fetch performs an API lookup, not a member-cache check.
+      // Do this both on preview and immediately before unbanning.
+      const ban = await staff.guild.bans.fetch(targetId);
+      if (ban.user.id !== targetId) {
+        return 'Discord returned an unexpected ban record. No unban attempted.';
+      }
+      return null;
+    } catch (error) {
+      if (isUnknownBanError(error)) {
+        return 'This user is not currently banned in this server.';
+      }
+      this.logger.warn('Failed to verify guild ban list for unban');
+      return 'Could not verify the Discord ban list. No unban attempted.';
+    }
+  }
+
+  private cleanupPendingUnbans(): void {
+    const now = Date.now();
+    for (const [messageId, pending] of this.pendingUnbans) {
+      if (pending.expiresAt <= now) this.pendingUnbans.delete(messageId);
+    }
+  }
+
+  @Subcommand({
+    name: 'unban',
+    description: 'Remove a permanent ban after confirmation',
+  })
+  public async onUnban(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { userId, reason }: UnbanOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.BanMembers,
+    );
+    if (!staff) {
+      return interaction.editReply(
+        'You need the Ban Members permission in this server.',
+      );
+    }
+
+    const targetId = typeof userId === 'string' ? userId.trim() : '';
+    const cleanedReason = typeof reason === 'string'
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+      : '';
+    if (!/^\d{17,20}$/.test(targetId)) {
+      return interaction.editReply('Provide a valid 17-20 digit Discord user ID.');
+    }
+    if (cleanedReason.length < 1 || cleanedReason.length > 512) {
+      return interaction.editReply(
+        'Give an unban reason between 1 and 512 characters.',
+      );
+    }
+
+    const denial = await this.unbanEligibility(
+      staff, interaction.user.id, targetId,
+    );
+    if (denial) return interaction.editReply(denial);
+
+    this.cleanupPendingUnbans();
+    if (this.pendingUnbans.size >= 100) {
+      return interaction.editReply(
+        'Too many outstanding unban confirmations. Try again shortly.',
+      );
+    }
+
+    const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-unban-confirm')
+        .setLabel('Confirm unban')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-unban-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+    const message = await interaction.editReply({
+      content: '**Confirm unban of <@' + targetId + '>**\nReason: ' +
+        escapeMarkdown(cleanedReason) +
+        '\nThis allows the user to join the server again. ' +
+        'Only you can confirm. Expires in 60 seconds.',
+      components: [controls],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingUnbans.set(message.id, {
+      guildId: staff.guild.id,
+      actorId: interaction.user.id,
+      targetId,
+      reason: cleanedReason,
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Button('mod-unban-cancel')
+  public async onUnbanCancel(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingUnbans.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This unban confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingUnbans.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Unban canceled. The user's ban remains in effect.',
+      components: [],
+    });
+  }
+
+  @Button('mod-unban-confirm')
+  public async onUnbanConfirm(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingUnbans.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This unban confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Consume synchronously before awaiting any network or database call.
+    this.pendingUnbans.delete(interaction.message.id);
+    await interaction.deferUpdate();
+    if (pending.expiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Unban confirmation expired. Use /mod unban again.',
+        components: [],
+      });
+    }
+
+    const staff = await this.staffContext(
+      interaction, PermissionFlagsBits.BanMembers,
+    );
+    if (!staff || staff.guild.id !== pending.guildId) {
+      return interaction.editReply({
+        content: 'Unban canceled: you no longer have Ban Members permission.',
+        components: [],
+      });
+    }
+    const denial = await this.unbanEligibility(
+      staff, interaction.user.id, pending.targetId,
+    );
+    if (denial) {
+      return interaction.editReply({
+        content: 'Unban canceled: ' + denial,
+        components: [],
+      });
+    }
+
+    let record: Awaited<ReturnType<ModerationService['beginUnban']>>;
+    try {
+      // No audit record means no external action.
+      record = await this.moderation.beginUnban(
+        pending.guildId, pending.targetId, pending.actorId, pending.reason,
+      );
+    } catch (error) {
+      this.logger.error('Unban case write failed; Discord unban skipped', error);
+      return interaction.editReply({
+        content: 'No unban attempted: Yuugen could not save the audit case.',
+        components: [],
+      });
+    }
+
+    try {
+      const auditReason = (
+        'Yuugen case #' + record.id + ', moderator ' +
+        pending.actorId + ': ' + pending.reason
+      ).slice(0, 512);
+      await staff.guild.bans.remove(pending.targetId, auditReason);
+    } catch (error) {
+      // A network timeout cannot establish whether the unban succeeded.
+      // Only an explicit forbidden or Unknown Ban response is definitive.
+      const status = error && typeof error === 'object' && 'status' in error
+        ? (error as { status?: unknown }).status : null;
+      const definitiveFailure = status === 403 || isUnknownBanError(error);
+      let recordedFailure = false;
+      if (definitiveFailure) {
+        try {
+          recordedFailure = !!await this.moderation.finalizeUnban(
+            pending.guildId, record.id, 'unban_failed',
+          );
+        } catch (saveError) {
+          this.logger.error(
+            'Unban failure case finalization failed', saveError,
+          );
+        }
+      }
+      this.logger.warn(
+        'Discord unban case #' + record.id +
+        (definitiveFailure ? ' rejected' : ' has uncertain outcome'),
+      );
+      return interaction.editReply({
+        content: recordedFailure
+          ? 'Discord rejected the unban. Case #' + record.id + ' is marked failed.'
+          : 'Unban outcome is unconfirmed. Case #' + record.id +
+            ' remains pending. Check the Discord ban list before retrying.',
+        components: [],
+      });
+    }
+
+    let finalized = false;
+    try {
+      finalized = !!await this.moderation.finalizeUnban(
+        pending.guildId, record.id, 'unban',
+      );
+    } catch (error) {
+      this.logger.error('Unban succeeded but audit finalization failed', error);
+    }
+    if (!finalized) {
+      return interaction.editReply({
+        content: 'The user was unbanned, but case #' + record.id +
+          ' is still pending. Staff must reconcile the case.',
+        components: [],
+      });
+    }
+    return interaction.editReply({
+      content: 'Unbanned <@' + pending.targetId +
+        '> from this server. Case #' + record.id + ' recorded.',
+      components: [],
+      allowedMentions: { parse: [] },
+    });
+  }
+
   @Subcommand({
     name: 'cases',
-    description: 'Show warnings, kicks and bans for a user',
+    description: 'Show warnings, kicks, bans and unbans'
   })
   public async onCases(
     @Context() [interaction]: SlashCommandContext,
