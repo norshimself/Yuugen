@@ -1,4 +1,5 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ModerationGroup } from './moderation-group';
 import {
   Button,
   ChannelOption,
@@ -8,7 +9,6 @@ import {
   StringOption,
   Subcommand,
   UserOption,
-  createCommandGroupDecorator,
 } from 'necord';
 import type { ButtonContext, SlashCommandContext } from 'necord';
 import {
@@ -63,10 +63,6 @@ import {
   type TimeoutAction,
 } from './timeout-policy';
 
-const ModerationGroup = createCommandGroupDecorator({
-  name: 'mod',
-  description: 'Server moderation and case history',
-});
 
 class WarnOptions {
   @UserOption({
