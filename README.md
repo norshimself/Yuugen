@@ -40,6 +40,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Temporary timeouts, removal and case audit](docs/moderation-timeouts.md)
 - [Safe message purge and audit log](docs/moderation-purges.md)
 - [Channel lock/unlock and permission-safe restoration](docs/moderation-channel-locks.md)
+- [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
 
 GitHub Actions workflows are intentionally removed because CI usage is paused.

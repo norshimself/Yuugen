@@ -40,7 +40,8 @@ GitHub Actions must **not** be re-enabled just to run these tests.
    `backend/migrations/20261020_moderation_warnings.sql`, and
    **`backend/migrations/20261028_moderation_timeouts.sql`, and
    `backend/migrations/20261028_moderation_purges.sql`, and
-   **`backend/migrations/20261028_moderation_channel_locks.sql`** in that order
+   `backend/migrations/20261028_moderation_channel_locks.sql`, and
+   **`backend/migrations/20261028_moderation_voice.sql`** in that order
    to staging first, then production **before** deploying the new backend.
 3. Create a root `.env` from `.env.production.example` and set a unique strong
    `POSTGRES_PASSWORD` matching the password in `backend/.env` `DATABASE_URL`.
@@ -246,3 +247,14 @@ per-channel Manage Roles / Manage Channels permissions, original overwrite
 restoration, existing role exceptions, confirmation expiry and DB/Discord
 failure reconciliation. Timed unlock depends on scheduler issue #90 and is
 **not implemented**. See `docs/moderation-channel-locks.md`.
+
+## 17. Voice moderation staging acceptance
+
+Issue #55 introduces `/mod voice` mute/unmute, deafen/undeafen,
+explicit-source disconnect, explicit-source/destination move and
+View-Audit-Log-gated history. Apply
+`backend/migrations/20261028_moderation_voice.sql` **after** channel-lock
+migration and **before** deploying the backend. Test action-specific
+moderator/bot permissions per channel, roles, state drift between preview
+and confirmation, dual-source/destination move permissions, and audit
+reconciliation in a disposable guild. See `docs/moderation-voice.md`.
