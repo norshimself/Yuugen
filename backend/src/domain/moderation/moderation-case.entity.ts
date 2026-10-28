@@ -25,7 +25,7 @@ export class ModerationCase {
   @Column({ type: 'varchar', length: 20 })
   moderatorUserId: string;
 
-  // Values: warn, kick_pending, kick, kick_failed (future actions can extend).
+  // Values: warn, kick_pending/kick/kick_failed, ban_pending/ban/ban_failed.
   @Column({ type: 'varchar', length: 24, default: 'warn' })
   action: string;
 
