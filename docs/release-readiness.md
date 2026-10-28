@@ -39,7 +39,8 @@ GitHub Actions must **not** be re-enabled just to run these tests.
 2. Apply `backend/migrations/20261019_economy_integrity.sql`,
    `backend/migrations/20261020_moderation_warnings.sql`, and
    **`backend/migrations/20261028_moderation_timeouts.sql`, and
-   **`backend/migrations/20261028_moderation_purges.sql`** in that order
+   `backend/migrations/20261028_moderation_purges.sql`, and
+   **`backend/migrations/20261028_moderation_channel_locks.sql`** in that order
    to staging first, then production **before** deploying the new backend.
 3. Create a root `.env` from `.env.production.example` and set a unique strong
    `POSTGRES_PASSWORD` matching the password in `backend/.env` `DATABASE_URL`.
@@ -235,3 +236,13 @@ Messages, the 14-day Discord bulk-delete limit, pinned-message exclusions,
 preview/confirmation revalidation, count/user/channel filters, partial
 outcomes and pending audit reconciliation in a disposable guild. See
 `docs/moderation-purges.md`.
+
+## 16. Channel lock and unlock staging acceptance
+
+Issue #54 adds `/mod lock`, `/mod unlock` and `/mod lockstatus`. Apply
+`backend/migrations/20261028_moderation_channel_locks.sql` after the
+purge migration **before deploying the backend**. Test unsynced channels,
+per-channel Manage Roles / Manage Channels permissions, original overwrite
+restoration, existing role exceptions, confirmation expiry and DB/Discord
+failure reconciliation. Timed unlock depends on scheduler issue #90 and is
+**not implemented**. See `docs/moderation-channel-locks.md`.
