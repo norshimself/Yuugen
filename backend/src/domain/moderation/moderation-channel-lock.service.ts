@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ModerationChannelLock } from './moderation-channel-lock.entity';
-import { CHANNEL_SNOWFLAKE, getChannelLockReason, type LockSnapshot } from '../../bot/commands/moderation/channel-lock-policy';
+import { CHANNEL_SNOWFLAKE, getChannelLockReason, type LockSnapshot } from './channel-lock-policy';
 
 function checkId(value: unknown, label: string): void {
   if (typeof value !== 'string' || !CHANNEL_SNOWFLAKE.test(value)) {

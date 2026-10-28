@@ -285,7 +285,7 @@ describe('Channel lock Discord interactions', () => {
     await lockChannel(s);
     await s.commands.onLockStatus([s.slash] as any, { channel: undefined });
     expect(s.slash.editReply).toHaveBeenCalledWith(expect.objectContaining({
-      content: expect.stringContaining('lock case #77'),
+      content: expect.stringContaining('Lock case #77'),
       allowedMentions: { parse: [] },
     }));
   });
