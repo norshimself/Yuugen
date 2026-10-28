@@ -195,3 +195,13 @@ and the bot's Kick Members permission and hierarchy, cancel/expiry, updated
 permissions at confirmation, and persistent `kick`, `kick_failed` and
 `kick_pending` statuses. This addition reuses the existing
 `20261020_moderation_warnings.sql` schema; no extra DDL is required.
+
+## 12. Permanent ban staging acceptance
+
+Issue #49 introduces the confirmed `/mod ban` command and durable
+`ban_pending`, `ban` and `ban_failed` cases. It **reuses the moderation
+cases schema** (no new migration). Verify the authorization and staging
+steps in `docs/moderation-bans.md`, including the Discord guild ban list,
+message-deletion behavior, confirmation expiry, and recovery from uncertain
+network outcomes. Do not enable permanent bans in production before staging
+sign-off.
