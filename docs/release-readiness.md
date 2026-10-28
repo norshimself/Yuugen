@@ -36,9 +36,10 @@ GitHub Actions must **not** be re-enabled just to run these tests.
 ## 2. Database and deployment prerequisites
 
 1. Take a verified PostgreSQL backup.
-2. Apply `backend/migrations/20261019_economy_integrity.sql` **and**
-   `backend/migrations/20261020_moderation_warnings.sql` to staging first,
-   then production **before** deploying the new backend.
+2. Apply `backend/migrations/20261019_economy_integrity.sql`,
+   `backend/migrations/20261020_moderation_warnings.sql`, and
+   **`backend/migrations/20261028_moderation_timeouts.sql`** in that order
+   to staging first, then production **before** deploying the new backend.
 3. Create a root `.env` from `.env.production.example` and set a unique strong
    `POSTGRES_PASSWORD` matching the password in `backend/.env` `DATABASE_URL`.
    `docker-compose.prod.yml` now fails to start if `POSTGRES_PASSWORD` is unset.
@@ -215,3 +216,11 @@ preview and confirmation, confirmation ownership/expiry, and retained
 original ban history. Test repeat unbans, network uncertainty, database
 failures and cross-guild isolation in a disposable staging guild before
 production use. See `docs/moderation-unbans.md`.
+
+## 14. Discord timeout and untimeout staging acceptance
+
+Issue #52 adds protected `/mod timeout` and `/mod untimeout` commands and
+requires `20261028_moderation_timeouts.sql` **before backend deployment**.
+Use the disposable-guild checklist in `docs/moderation-timeouts.md`: check
+1 minute–28 day bounds, member/role permissions, 60-second confirmation,
+Discord auto-expiration, case history, and failure/reconciliation states.
