@@ -166,4 +166,21 @@ describe('AntiRaidService durability and guild scope', () => {
     await service.observeJoin(valid);
     expect(joins.delete).toHaveBeenCalledTimes(1);
   });
+  it('records one manager disposition without permitting cross-guild replay', async () => {
+    const { service, alerts } = setup();
+    await service.reviewAlert(guildId, 11, '456789012345678901', 'legitimate');
+    expect(alerts.update).toHaveBeenCalledWith(
+      { guildId, id: 11, reviewedAt: expect.anything() },
+      expect.objectContaining({
+        reviewedByUserId: '456789012345678901',
+        reviewDisposition: 'legitimate',
+        reviewedAt: expect.any(Date),
+      }),
+    );
+    await expect(service.reviewAlert(guildId, 11, 'bad-id', 'suspicious'))
+      .rejects.toThrow('Invalid anti-raid review');
+    await expect(service.reviewAlert(guildId, 11, '456789012345678901',
+      'ban' as any)).rejects.toThrow('Invalid anti-raid review');
+  });
+
 });
