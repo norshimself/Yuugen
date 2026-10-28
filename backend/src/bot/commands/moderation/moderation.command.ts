@@ -741,9 +741,12 @@ export class ModerationCommands {
     if (denial) return denial;
 
     try {
-      // GuildBanManager.fetch performs an API lookup, not a member-cache check.
+      // Force a fresh Discord API check instead of trusting cached bans.
       // Do this both on preview and immediately before unbanning.
-      const ban = await staff.guild.bans.fetch(targetId);
+      const ban = await staff.guild.bans.fetch({
+        user: targetId,
+        force: true,
+      });
       if (ban.user.id !== targetId) {
         return 'Discord returned an unexpected ban record. No unban attempted.';
       }
