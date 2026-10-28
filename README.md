@@ -41,6 +41,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Safe message purge and audit log](docs/moderation-purges.md)
 - [Channel lock/unlock and permission-safe restoration](docs/moderation-channel-locks.md)
 - [Per-guild AutoMod rules and dry-run](docs/automod-engine.md)
+- [Opt-in anti-nuke audit monitoring (alert-only)](docs/anti-nuke-monitoring.md)
 - [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
 
