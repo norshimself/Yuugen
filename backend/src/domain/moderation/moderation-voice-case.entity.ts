@@ -1,5 +1,5 @@
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn } from 'typeorm';
-import type { VoiceAction } from '../../bot/commands/moderation/voice-policy';
+import type { VoiceAction } from './voice-policy';
 
 export type VoiceCaseStatus = 'pending' | 'completed' | 'failed';
 

@@ -17,7 +17,6 @@ import {
   ChannelType,
   ChatInputCommandInteraction,
   Guild,
-  GuildMember,
   MessageFlags,
   PermissionFlagsBits,
   User,

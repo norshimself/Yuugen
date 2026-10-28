@@ -6,7 +6,7 @@ import {
   VOICE_SNOWFLAKE,
   cleanVoiceReason,
   type VoiceAction,
-} from '../../bot/commands/moderation/voice-policy';
+} from './voice-policy';
 
 const ACTIONS: readonly VoiceAction[] = [
   'mute', 'unmute', 'deafen', 'undeafen', 'disconnect', 'move',

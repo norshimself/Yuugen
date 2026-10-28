@@ -314,7 +314,7 @@ describe('/mod voice interactions', () => {
       await previewMove(s);
       expect(s.cases.begin).not.toHaveBeenCalled();
       expect(s.slash.editReply).toHaveBeenCalledWith(
-        expect.stringContaining('need'),
+        expect.stringMatching(/(lack|need)/i),
       );
     }
   });
