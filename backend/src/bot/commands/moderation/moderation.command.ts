@@ -1,6 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import {
   Button,
+  ChannelOption,
   Context,
   IntegerOption,
   Options,
@@ -16,15 +17,29 @@ import {
   ButtonInteraction,
   ButtonStyle,
   ChatInputCommandInteraction,
+  ChannelType,
   Guild,
+  GuildChannel,
   GuildMember,
+  Message,
   MessageFlags,
+  NewsChannel,
   PermissionFlagsBits,
+  TextChannel,
   User,
   escapeMarkdown,
 } from 'discord.js';
 import { ModerationService } from '../../../domain/moderation/moderation.service';
+import { ModerationPurgeService } from '../../../domain/moderation/moderation-purge.service';
 import { getWarningDenial } from './warning-policy';
+import {
+  buildPurgePlan,
+  DISCORD_SNOWFLAKE,
+  getPurgeDenial,
+  samePurgeSelection,
+  validatePurgeCount,
+  type PurgePlan,
+} from './purge-policy';
 import { getKickDenial } from './kick-policy';
 import { getBanDenial } from './ban-policy';
 import { getUnbanDenial, isUnknownBanError } from './unban-policy';
@@ -144,6 +159,46 @@ class UntimeoutOptions {
   reason: string;
 }
 
+class PurgeOptions {
+  @IntegerOption({
+    name: 'count',
+    description: 'Number of eligible messages to delete (1-100)',
+    required: true,
+    minValue: 1,
+    maxValue: 100,
+  })
+  count: number;
+
+  @StringOption({
+    name: 'reason',
+    description: 'Required audit reason (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+
+  @UserOption({
+    name: 'user',
+    description: 'Optional author filter',
+    required: false,
+  })
+  user?: User;
+
+  @StringOption({
+    name: 'user_id',
+    description: 'Optional author ID for members who left the server',
+    required: false,
+  })
+  userId?: string;
+
+  @ChannelOption({
+    name: 'channel',
+    description: 'Text channel to purge (defaults to current channel)',
+    required: false,
+    channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+  })
+  channel?: GuildChannel;
+}
+
 class WarningHistoryOptions {
   @UserOption({
     name: 'user',
@@ -224,6 +279,17 @@ interface PendingTimedAction {
   confirmationExpiresAt: number;
 }
 
+interface PendingPurge {
+  guildId: string;
+  actorId: string;
+  channelId: string;
+  filterUserId: string | null;
+  reason: string;
+  requestedCount: number;
+  messageIds: string[];
+  expiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
@@ -231,9 +297,16 @@ export class ModerationCommands {
   private readonly pendingKicks = new Map<string, PendingKick>();
   private readonly pendingBans = new Map<string, PendingBan>();
   private readonly pendingUnbans = new Map<string, PendingUnban>();
+  private readonly pendingPurges = new Map<string, PendingPurge>();
+  private readonly purgingChannels = new Set<string>();
   private readonly pendingTimedActions = new Map<string, PendingTimedAction>();
 
-  constructor(private readonly moderation: ModerationService) {}
+  constructor(
+    private readonly moderation: ModerationService,
+    // Optional for backwards-compatible direct construction in existing
+    // moderation command unit tests; Nest injects this in the live module.
+    @Optional() private readonly purges?: ModerationPurgeService,
+  ) {}
 
   private async staffContext(
     interaction: ChatInputCommandInteraction | ButtonInteraction,
@@ -1338,6 +1411,344 @@ export class ModerationCommands {
   @Button('mod-untimeout-confirm')
   public async onUntimeoutConfirm(@Context() [interaction]: ButtonContext) {
     return this.confirmTimedAction(interaction, 'untimeout');
+  }
+
+  private async resolvePurgeChannel(
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
+    channelId: string,
+  ): Promise<TextChannel | NewsChannel | null> {
+    const guild = interaction.guild;
+    if (!guild || !DISCORD_SNOWFLAKE.test(channelId)) return null;
+    // Force Discord API fetch: cached channel overwrites may have changed.
+    const fetched = await guild.channels.fetch(channelId, {
+      force: true,
+    }).catch(() => null);
+    if (!fetched || fetched.guildId !== guild.id ||
+        (fetched.type !== ChannelType.GuildText &&
+         fetched.type !== ChannelType.GuildAnnouncement)) {
+      return null;
+    }
+    return fetched as TextChannel | NewsChannel;
+  }
+
+  private async purgePermissionDenial(
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
+    channel: TextChannel | NewsChannel,
+  ): Promise<string | null> {
+    const guild = interaction.guild;
+    if (!guild) return 'This command must be used in a server.';
+    const [actor, bot] = await Promise.all([
+      guild.members.fetch({
+        user: interaction.user.id,
+        force: true,
+      }).catch(() => null),
+      guild.members.fetchMe().catch(() => null),
+    ]);
+    const actorPerms = actor ? channel.permissionsFor(actor) : null;
+    const botPerms = bot ? channel.permissionsFor(bot) : null;
+    return getPurgeDenial({
+      actorCanView: !!actorPerms?.has(PermissionFlagsBits.ViewChannel),
+      actorCanManage: !!actorPerms?.has(PermissionFlagsBits.ManageMessages),
+      botCanView: !!botPerms?.has(PermissionFlagsBits.ViewChannel),
+      botCanReadHistory: !!botPerms?.has(PermissionFlagsBits.ReadMessageHistory),
+      botCanManage: !!botPerms?.has(PermissionFlagsBits.ManageMessages),
+    });
+  }
+
+  private cleanupPendingPurges(): void {
+    const now = Date.now();
+    for (const [id, pending] of this.pendingPurges) {
+      if (pending.expiresAt <= now) this.pendingPurges.delete(id);
+    }
+  }
+
+  @Subcommand({
+    name: 'purge',
+    description: 'Preview and remove up to 100 recent eligible messages',
+  })
+  public async onPurge(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { count, reason, user, userId, channel: selectedChannel }: PurgeOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.guildId || !interaction.guild) {
+      return interaction.editReply('Use this command inside a server.');
+    }
+    if (!this.purges) {
+      return interaction.editReply('Purge auditing is not configured.');
+    }
+    if (validatePurgeCount(count) === null) {
+      return interaction.editReply('Purge count must be from 1 to 100.');
+    }
+    const cleanedReason = typeof reason === 'string'
+      ? reason.replace(/[\u0000-\u001F\u007F]/g, ' ').trim()
+      : '';
+    if (!cleanedReason || cleanedReason.length > 512) {
+      return interaction.editReply('Give a reason between 1 and 512 characters.');
+    }
+    if (user && userId) {
+      return interaction.editReply('Provide either user or user_id, not both.');
+    }
+    const filterUserId = user?.id || (userId?.trim() || null);
+    if (filterUserId && !DISCORD_SNOWFLAKE.test(filterUserId)) {
+      return interaction.editReply('Invalid author ID (17-20 digits required).');
+    }
+    if (selectedChannel && selectedChannel.guildId !== interaction.guildId) {
+      return interaction.editReply('You can only purge channels in this server.');
+    }
+    const channelId = selectedChannel?.id || interaction.channelId;
+    const channel = await this.resolvePurgeChannel(interaction, channelId);
+    if (!channel) {
+      return interaction.editReply(
+        'Choose a server text or announcement channel (threads are not supported).',
+      );
+    }
+    const denial = await this.purgePermissionDenial(interaction, channel);
+    if (denial) return interaction.editReply(denial);
+
+    if (this.purgingChannels.has(channel.id)) {
+      return interaction.editReply('A purge is already running in this channel.');
+    }
+    let plan: PurgePlan<Message<true>>;
+    try {
+      plan = await buildPurgePlan(channel, count, filterUserId);
+    } catch (error) {
+      this.logger.error('Could not preview purge messages', error);
+      return interaction.editReply('Could not read channel history to preview the purge.');
+    }
+    if (plan.messages.length === 0) {
+      return interaction.editReply(
+        'No eligible recent messages found in <#' + channel.id +
+        '> (scanned ' + plan.scannedCount + ' messages).' +
+        ' Pinned, system, protected and older-than-two-week messages are skipped.',
+      );
+    }
+
+    this.cleanupPendingPurges();
+    if (this.pendingPurges.size >= 100) {
+      return interaction.editReply('Too many pending purge confirmations. Try later.');
+    }
+
+    const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-purge-confirm')
+        .setLabel('Delete ' + plan.messages.length + ' messages')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-purge-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+    const message = await interaction.editReply({
+      content: '**Confirm purge in <#' + channel.id + '>**\n' +
+        '**Selected:** ' + plan.messages.length + ' of ' + count + ' requested. ' +
+        '**Scanned:** ' + plan.scannedCount + '.\n' +
+        'Excluded: ' + plan.skippedProtectedCount + ' pinned/protected, ' +
+        plan.skippedOldCount + ' too old.' +
+        (plan.scanLimitReached ? ' Search capped at 500 messages.' : '') +
+        (filterUserId ? '\nAuthor: <@' + filterUserId + '>' : '') +
+        '\nReason: ' + escapeMarkdown(cleanedReason) +
+        '\nOnly you can confirm within 60 seconds. ' +
+        'If the selected messages change, this request is canceled.',
+      components: [controls],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingPurges.set(message.id, {
+      guildId: interaction.guildId,
+      actorId: interaction.user.id,
+      channelId: channel.id,
+      filterUserId,
+      reason: cleanedReason,
+      requestedCount: count,
+      messageIds: plan.messages.map(x => x.id),
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Button('mod-purge-cancel')
+  public async onPurgeCancel(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingPurges.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This purge request is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingPurges.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Purge canceled. No messages were deleted.',
+      components: [],
+    });
+  }
+
+  @Button('mod-purge-confirm')
+  public async onPurgeConfirm(@Context() [interaction]: ButtonContext) {
+    const pending = this.pendingPurges.get(interaction.message.id);
+    if (!pending || pending.actorId !== interaction.user.id ||
+        pending.guildId !== interaction.guildId) {
+      return interaction.reply({
+        content: 'This purge request is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+
+    // Consume before the first await: no duplicate deletes from double clicks.
+    this.pendingPurges.delete(interaction.message.id);
+    await interaction.deferUpdate();
+    if (pending.expiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Purge confirmation expired. Run /mod purge again.',
+        components: [],
+      });
+    }
+    if (!this.purges) {
+      return interaction.editReply({
+        content: 'Purge auditing is unavailable. No messages were deleted.',
+        components: [],
+      });
+    }
+    if (this.purgingChannels.has(pending.channelId)) {
+      return interaction.editReply({
+        content: 'Another purge is running in this channel. Run /mod purge again.',
+        components: [],
+      });
+    }
+
+    this.purgingChannels.add(pending.channelId);
+    try {
+      const channel = await this.resolvePurgeChannel(
+        interaction, pending.channelId,
+      );
+      if (!channel || channel.guildId !== pending.guildId) {
+        return interaction.editReply({
+          content: 'Purge canceled: channel is no longer available.',
+          components: [],
+        });
+      }
+      const denial = await this.purgePermissionDenial(interaction, channel);
+      if (denial) {
+        return interaction.editReply({
+          content: 'Purge canceled: ' + denial,
+          components: [],
+        });
+      }
+
+      // Re-fetch with a cold cache; do not delete messages added/replaced
+      // after the preview. Pinned and age-expired messages also invalidate
+      // the preview to avoid silently deleting an unexpected selection.
+      let plan: PurgePlan<Message<true>>;
+      try {
+        plan = await buildPurgePlan(
+          channel, pending.requestedCount, pending.filterUserId,
+        );
+      } catch (error) {
+        this.logger.error('Could not revalidate purge selection', error);
+        return interaction.editReply({
+          content: 'Purge canceled: could not re-check message history.',
+          components: [],
+        });
+      }
+      if (!samePurgeSelection(
+        pending.messageIds, plan.messages.map(x => x.id),
+      )) {
+        return interaction.editReply({
+          content: 'Purge canceled: message selection changed since preview. ' +
+            'Run /mod purge again.',
+          components: [],
+        });
+      }
+
+      let record: Awaited<ReturnType<ModerationPurgeService['begin']>>;
+      try {
+        record = await this.purges.begin({
+          guildId: pending.guildId,
+          channelId: pending.channelId,
+          moderatorUserId: pending.actorId,
+          filterUserId: pending.filterUserId,
+          reason: pending.reason,
+          requestedCount: pending.requestedCount,
+          selectedMessageIds: pending.messageIds,
+          scannedCount: plan.scannedCount,
+          skippedOldCount: plan.skippedOldCount,
+          skippedProtectedCount: plan.skippedProtectedCount,
+        });
+      } catch (error) {
+        this.logger.error('Failed to store purge audit: no Discord action attempted', error);
+        return interaction.editReply({
+          content: 'No deletion attempted: could not save the moderation audit.',
+          components: [],
+        });
+      }
+
+      let deletedIds: string[];
+      try {
+        if (plan.messages.length === 1) {
+          // Discord's bulk delete API requires at least two message IDs.
+          await plan.messages[0].delete();
+          deletedIds = [plan.messages[0].id];
+        } else {
+          // Always filter old IDs even though the selection already has a
+          // conservative age cutoff: Discord can reject IDs >14 days old.
+          const deleted = await channel.bulkDelete(plan.messages, true);
+          deletedIds = [...deleted.keys()];
+        }
+      } catch (error) {
+        const data = error && typeof error === 'object'
+          ? error as { status?: unknown; code?: unknown } : {};
+        const definitive = data.status === 403 ||
+          data.code === 50013 || data.code === 50034 ||
+          data.code === 10008 || data.code === 10003;
+        let failed = false;
+        if (definitive) {
+          try {
+            failed = !!await this.purges.finish(
+              pending.guildId, record.id, pending.messageIds.length, [],
+            );
+          } catch (saveError) {
+            this.logger.error('Could not finalize rejected purge', saveError);
+          }
+        }
+        this.logger.warn('Discord purge case #' + record.id +
+          (definitive ? ' rejected' : ' has an uncertain outcome'));
+        return interaction.editReply({
+          content: failed
+            ? 'Discord rejected the purge. Audit #' + record.id + ' is marked failed.'
+            : 'Purge outcome unconfirmed. Audit #' + record.id +
+              ' remains pending; inspect channel history before retrying.',
+          components: [],
+        });
+      }
+
+      let finished: Awaited<ReturnType<ModerationPurgeService['finish']>> = null;
+      try {
+        finished = await this.purges.finish(
+          pending.guildId, record.id, pending.messageIds.length, deletedIds,
+        );
+      } catch (error) {
+        this.logger.error('Purge completed but audit finalization failed', error);
+      }
+      if (!finished) {
+        return interaction.editReply({
+          content: 'Discord accepted the purge request, but audit #' +
+            record.id + ' remains pending. Staff must reconcile it.',
+          components: [],
+        });
+      }
+      return interaction.editReply({
+        content: 'Purge audit #' + record.id + ': deleted ' +
+          deletedIds.length + ' of ' + pending.messageIds.length +
+          ' selected messages from <#' + pending.channelId + '> (' +
+          finished.status + ').' +
+          (finished.status === 'partial'
+            ? ' Some messages were skipped; review the audit before retrying.'
+            : ''),
+        components: [],
+        allowedMentions: { parse: [] },
+      });
+    } finally {
+      this.purgingChannels.delete(pending.channelId);
+    }
   }
 
   @Subcommand({
