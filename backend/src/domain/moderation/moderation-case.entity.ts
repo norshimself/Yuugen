@@ -25,7 +25,7 @@ export class ModerationCase {
   @Column({ type: 'varchar', length: 20 })
   moderatorUserId: string;
 
-  // Values: warn; kick/ban/unban, with _pending and _failed states.
+  // Values: warn; kick/ban/unban/timeout/untimeout, with _pending/_failed states.
   @Column({ type: 'varchar', length: 24, default: 'warn' })
   action: string;
 
@@ -34,6 +34,10 @@ export class ModerationCase {
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
+
+  // Intended Discord timeout expiry (approximate). Null for other actions.
+  @Column({ type: 'timestamptz', nullable: true })
+  expiresAt: Date | null;
 
   // Warnings are revoked, not deleted, so the audit trail is preserved.
   @Column({ type: 'timestamptz', nullable: true })
