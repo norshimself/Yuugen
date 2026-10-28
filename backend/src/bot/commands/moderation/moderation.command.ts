@@ -31,7 +31,19 @@ import {
 } from 'discord.js';
 import { ModerationService } from '../../../domain/moderation/moderation.service';
 import { ModerationPurgeService } from '../../../domain/moderation/moderation-purge.service';
+import { ModerationChannelLockService } from '../../../domain/moderation/moderation-channel-lock.service';
+import type { ModerationChannelLock } from '../../../domain/moderation/moderation-channel-lock.entity';
 import { getWarningDenial } from './warning-policy';
+import {
+  getChannelLockDenial,
+  getChannelLockReason,
+  makeLockSnapshot,
+  matchesLockedSnapshot,
+  originalSendOverride,
+  readSendState,
+  type LockSnapshot,
+  type OverwriteSnapshot,
+} from './channel-lock-policy';
 import {
   buildPurgePlan,
   DISCORD_SNOWFLAKE,
@@ -199,6 +211,50 @@ class PurgeOptions {
   channel?: GuildChannel;
 }
 
+class ChannelLockOptions {
+  @StringOption({
+    name: 'reason',
+    description: 'Why posting is being locked (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+
+  @ChannelOption({
+    name: 'channel',
+    description: 'Text channel to lock (defaults to the current channel)',
+    required: false,
+    channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+  })
+  channel?: GuildChannel;
+}
+
+class ChannelUnlockOptions {
+  @StringOption({
+    name: 'reason',
+    description: 'Why posting is being unlocked (1-512 characters)',
+    required: true,
+  })
+  reason: string;
+
+  @ChannelOption({
+    name: 'channel',
+    description: 'Previously locked text channel (defaults to current)',
+    required: false,
+    channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+  })
+  channel?: GuildChannel;
+}
+
+class ChannelLockStatusOptions {
+  @ChannelOption({
+    name: 'channel',
+    description: 'Channel to inspect (defaults to current)',
+    required: false,
+    channelTypes: [ChannelType.GuildText, ChannelType.GuildAnnouncement],
+  })
+  channel?: GuildChannel;
+}
+
 class WarningHistoryOptions {
   @UserOption({
     name: 'user',
@@ -290,6 +346,19 @@ interface PendingPurge {
   expiresAt: number;
 }
 
+type ChannelLockAction = 'lock' | 'unlock';
+
+interface PendingChannelLock {
+  action: ChannelLockAction;
+  guildId: string;
+  channelId: string;
+  actorId: string;
+  reason: string;
+  snapshot?: LockSnapshot;
+  lockId?: number;
+  expiresAt: number;
+}
+
 @ModerationGroup()
 @Injectable()
 export class ModerationCommands {
@@ -299,6 +368,8 @@ export class ModerationCommands {
   private readonly pendingUnbans = new Map<string, PendingUnban>();
   private readonly pendingPurges = new Map<string, PendingPurge>();
   private readonly purgingChannels = new Set<string>();
+  private readonly pendingChannelLocks = new Map<string, PendingChannelLock>();
+  private readonly changingChannels = new Set<string>();
   private readonly pendingTimedActions = new Map<string, PendingTimedAction>();
 
   constructor(
@@ -306,6 +377,7 @@ export class ModerationCommands {
     // Optional for backwards-compatible direct construction in existing
     // moderation command unit tests; Nest injects this in the live module.
     @Optional() private readonly purges?: ModerationPurgeService,
+    @Optional() private readonly channelLocks?: ModerationChannelLockService,
   ) {}
 
   private async staffContext(
@@ -1749,6 +1821,498 @@ export class ModerationCommands {
     } finally {
       this.purgingChannels.delete(pending.channelId);
     }
+  }
+
+  private readEveryoneOverwrite(
+    channel: TextChannel | NewsChannel,
+  ): OverwriteSnapshot {
+    const found = channel.permissionOverwrites.cache.get(channel.guild.id);
+    return {
+      existed: !!found,
+      allow: found ? found.allow.bitfield.toString() : '0',
+      deny: found ? found.deny.bitfield.toString() : '0',
+    };
+  }
+
+  private async lockPermissionDenial(
+    interaction: ChatInputCommandInteraction | ButtonInteraction,
+    channel: TextChannel | NewsChannel,
+  ): Promise<string | null> {
+    const guild = interaction.guild;
+    if (!guild) return 'This command must be used in a server.';
+    const [actor, bot] = await Promise.all([
+      guild.members.fetch({
+        user: interaction.user.id,
+        force: true,
+      }).catch(() => null),
+      guild.members.fetchMe().catch(() => null),
+    ]);
+    const actorPerms = actor ? channel.permissionsFor(actor) : null;
+    const botPerms = bot ? channel.permissionsFor(bot) : null;
+    return getChannelLockDenial({
+      actorCanView: !!actorPerms?.has(PermissionFlagsBits.ViewChannel),
+      actorCanManageChannels: !!actorPerms?.has(PermissionFlagsBits.ManageChannels),
+      actorCanManageRoles: !!actorPerms?.has(PermissionFlagsBits.ManageRoles),
+      botCanView: !!botPerms?.has(PermissionFlagsBits.ViewChannel),
+      botCanManageChannels: !!botPerms?.has(PermissionFlagsBits.ManageChannels),
+      botCanManageRoles: !!botPerms?.has(PermissionFlagsBits.ManageRoles),
+    });
+  }
+
+  private clearExpiredChannelLockPrompts(): void {
+    const now = Date.now();
+    for (const [messageId, pending] of this.pendingChannelLocks) {
+      if (pending.expiresAt <= now) this.pendingChannelLocks.delete(messageId);
+    }
+  }
+
+  private async previewChannelLock(
+    interaction: ChatInputCommandInteraction,
+    selectedChannel: GuildChannel | undefined,
+    reason: string,
+    action: ChannelLockAction,
+  ) {
+    if (!interaction.guild || !interaction.guildId || !this.channelLocks) {
+      return interaction.editReply('Channel locks are not configured in this server.');
+    }
+    const cleanedReason = getChannelLockReason(reason);
+    if (!cleanedReason) {
+      return interaction.editReply('Give a reason between 1 and 512 characters.');
+    }
+    if (selectedChannel && selectedChannel.guildId !== interaction.guildId) {
+      return interaction.editReply('The selected channel belongs to another server.');
+    }
+    const channel = await this.resolvePurgeChannel(
+      interaction, selectedChannel?.id || interaction.channelId,
+    );
+    if (!channel) {
+      return interaction.editReply(
+        'Choose a server text or announcement channel; threads are unsupported.',
+      );
+    }
+    const denial = await this.lockPermissionDenial(interaction, channel);
+    if (denial) return interaction.editReply(denial);
+
+    let active: ModerationChannelLock | null;
+    try {
+      active = await this.channelLocks.getActive(interaction.guildId, channel.id);
+    } catch (error) {
+      this.logger.error('Cannot read channel lock state', error);
+      return interaction.editReply('Could not load the channel lock audit.');
+    }
+
+    let snapshot: LockSnapshot | undefined;
+    let lockId: number | undefined;
+    if (action === 'lock') {
+      if (active) {
+        return interaction.editReply(
+          'This channel has an active or unresolved Yuugen lock (case #' +
+          active.id + ', ' + active.status + '). Resolve it before locking again.',
+        );
+      }
+      // Modifying a category-synced child permanently desynchronizes it;
+      // refuse instead of promising to restore automatic category syncing.
+      if (channel.permissionsLocked === true) {
+        return interaction.editReply(
+          'This channel syncs permissions with its category. ' +
+          'Desync it deliberately in Discord first or lock the category manually.',
+        );
+      }
+      try {
+        snapshot = makeLockSnapshot(this.readEveryoneOverwrite(channel));
+      } catch (error) {
+        return interaction.editReply(
+          'Cannot lock this channel: @everyone Send Messages is already denied ' +
+          'or its overwrite is invalid.',
+        );
+      }
+    } else {
+      if (!active || active.status !== 'locked') {
+        return interaction.editReply(
+          active
+            ? 'Lock case #' + active.id + ' is ' + active.status +
+              '. Resolve it before unlocking.'
+            : 'This channel has no active Yuugen-managed lock.',
+        );
+      }
+      if (!matchesLockedSnapshot(active, this.readEveryoneOverwrite(channel))) {
+        return interaction.editReply(
+          'Channel permissions changed since lock #' + active.id +
+          '. Refusing to overwrite staff changes. Reconcile manually.',
+        );
+      }
+      lockId = active.id;
+    }
+    this.clearExpiredChannelLockPrompts();
+    if (this.pendingChannelLocks.size >= 100) {
+      return interaction.editReply('Too many pending lock confirmations. Try shortly.');
+    }
+    const components = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId('mod-channel-' + action + '-confirm')
+        .setLabel(action === 'lock' ? 'Confirm lock' : 'Confirm unlock')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('mod-channel-' + action + '-cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+    const message = await interaction.editReply({
+      content: '**Confirm channel ' + action + ' for <#' + channel.id + '>**' +
+        '\nReason: ' + escapeMarkdown(cleanedReason) +
+        (action === 'lock'
+          ? '\nChanges only @everyone Send Messages to Deny.' +
+            ' Explicit role allowances and Administrators may still post.'
+          : '\nRestores the saved @everyone Send Messages setting only.' +
+            ' Existing role/member overwrites are never modified.') +
+        '\nOnly you can confirm within 60 seconds.',
+      components: [components],
+      allowedMentions: { parse: [] },
+    });
+    this.pendingChannelLocks.set(message.id, {
+      action,
+      guildId: interaction.guildId,
+      channelId: channel.id,
+      actorId: interaction.user.id,
+      reason: cleanedReason,
+      snapshot,
+      lockId,
+      expiresAt: Date.now() + 60_000,
+    });
+  }
+
+  @Subcommand({
+    name: 'lock',
+    description: 'Lock @everyone posting in a text channel after confirmation',
+  })
+  public async onLock(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { reason, channel }: ChannelLockOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return this.previewChannelLock(interaction, channel, reason, 'lock');
+  }
+
+  @Subcommand({
+    name: 'unlock',
+    description: 'Restore a Yuugen-managed channel posting lock',
+  })
+  public async onUnlock(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { reason, channel }: ChannelUnlockOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    return this.previewChannelLock(interaction, channel, reason, 'unlock');
+  }
+
+  @Subcommand({
+    name: 'lockstatus',
+    description: 'Inspect a channel lock or unresolved permission change',
+  })
+  public async onLockStatus(
+    @Context() [interaction]: SlashCommandContext,
+    @Options() { channel: selectedChannel }: ChannelLockStatusOptions,
+  ) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (!interaction.guildId || !this.channelLocks) {
+      return interaction.editReply('Channel lock auditing is unavailable.');
+    }
+    if (selectedChannel && selectedChannel.guildId !== interaction.guildId) {
+      return interaction.editReply('Choose a channel in the current guild.');
+    }
+    const channel = await this.resolvePurgeChannel(
+      interaction, selectedChannel?.id || interaction.channelId,
+    );
+    if (!channel) return interaction.editReply('Unsupported or unavailable channel.');
+    const denial = await this.lockPermissionDenial(interaction, channel);
+    if (denial) return interaction.editReply(denial);
+    try {
+      const active = await this.channelLocks.getActive(
+        interaction.guildId, channel.id,
+      );
+      if (!active) {
+        return interaction.editReply(
+          'No active Yuugen-managed channel lock for <#' + channel.id + '>.',
+        );
+      }
+      const matches = matchesLockedSnapshot(
+        active, this.readEveryoneOverwrite(channel),
+      );
+      return interaction.editReply({
+        content: '**Channel <#' + channel.id + '>**\nLock case #' +
+          active.id + ' · ' + active.status +
+          '\nActor <@' + active.lockedByUserId + '>' +
+          '\nReason: ' + escapeMarkdown(active.lockReason) +
+          '\nOverwrite matches recorded lock: ' + (matches ? 'yes' : 'NO') +
+          (active.status === 'locked' && matches
+            ? '\nUse /mod unlock to restore the previous state.'
+            : '\nRequires moderator review before another change.'),
+        allowedMentions: { parse: [] },
+      });
+    } catch (error) {
+      this.logger.error('Could not read lock status', error);
+      return interaction.editReply('Could not load the channel lock status.');
+    }
+  }
+
+  private async cancelChannelLock(
+    interaction: ButtonInteraction,
+    action: ChannelLockAction,
+  ) {
+    const pending = this.pendingChannelLocks.get(interaction.message.id);
+    if (!pending || pending.action !== action ||
+        pending.guildId !== interaction.guildId ||
+        pending.actorId !== interaction.user.id) {
+      return interaction.reply({
+        content: 'This lock confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingChannelLocks.delete(interaction.message.id);
+    return interaction.update({
+      content: 'Channel change canceled. No permissions were modified.',
+      components: [],
+    });
+  }
+
+  @Button('mod-channel-lock-cancel')
+  public async onLockCancel(@Context() [interaction]: ButtonContext) {
+    return this.cancelChannelLock(interaction, 'lock');
+  }
+
+  @Button('mod-channel-unlock-cancel')
+  public async onUnlockCancel(@Context() [interaction]: ButtonContext) {
+    return this.cancelChannelLock(interaction, 'unlock');
+  }
+
+  private async confirmChannelLock(
+    interaction: ButtonInteraction,
+    action: ChannelLockAction,
+  ) {
+    const pending = this.pendingChannelLocks.get(interaction.message.id);
+    if (!pending || pending.action !== action ||
+        pending.guildId !== interaction.guildId ||
+        pending.actorId !== interaction.user.id) {
+      return interaction.reply({
+        content: 'This lock confirmation is not yours or has expired.',
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+    this.pendingChannelLocks.delete(interaction.message.id);
+    await interaction.deferUpdate();
+    if (pending.expiresAt <= Date.now()) {
+      return interaction.editReply({
+        content: 'Lock confirmation expired. Run the command again.',
+        components: [],
+      });
+    }
+    if (!interaction.guild || !this.channelLocks) {
+      return interaction.editReply({
+        content: 'Lock auditing is unavailable. No change attempted.',
+        components: [],
+      });
+    }
+    if (this.changingChannels.has(pending.channelId)) {
+      return interaction.editReply({
+        content: 'Another change is already underway for this channel.',
+        components: [],
+      });
+    }
+    this.changingChannels.add(pending.channelId);
+    try {
+      const channel = await this.resolvePurgeChannel(
+        interaction, pending.channelId,
+      );
+      if (!channel || channel.guildId !== pending.guildId) {
+        return interaction.editReply({
+          content: 'Channel is unavailable. No change attempted.',
+          components: [],
+        });
+      }
+      const denial = await this.lockPermissionDenial(interaction, channel);
+      if (denial) {
+        return interaction.editReply({
+          content: 'Action canceled: ' + denial, components: [],
+        });
+      }
+
+      const current = this.readEveryoneOverwrite(channel);
+      let record: ModerationChannelLock | null;
+      if (action === 'lock') {
+        if (channel.permissionsLocked === true) {
+          return interaction.editReply({
+            content: 'Channel now syncs with its category. No change attempted.',
+            components: [],
+          });
+        }
+        let snapshot: LockSnapshot;
+        try {
+          snapshot = makeLockSnapshot(current);
+        } catch (error) {
+          return interaction.editReply({
+            content: 'Channel is already denied or permissions are invalid.',
+            components: [],
+          });
+        }
+        if (!pending.snapshot ||
+            JSON.stringify(snapshot) !== JSON.stringify(pending.snapshot)) {
+          return interaction.editReply({
+            content: 'Channel permissions changed since preview. Run /mod lock again.',
+            components: [],
+          });
+        }
+        try {
+          record = await this.channelLocks.beginLock(
+            pending.guildId, pending.channelId,
+            pending.actorId, pending.reason, snapshot,
+          );
+        } catch (error) {
+          this.logger.error('Failed to reserve channel lock case', error);
+          return interaction.editReply({
+            content: 'No change attempted: could not save lock audit.',
+            components: [],
+          });
+        }
+        if (!record) {
+          return interaction.editReply({
+            content: 'A Yuugen lock is already active or pending. No change.',
+            components: [],
+          });
+        }
+      } else {
+        try {
+          record = await this.channelLocks.getActive(
+            pending.guildId, pending.channelId,
+          );
+        } catch (error) {
+          this.logger.error('Cannot inspect lock before unlock', error);
+          return interaction.editReply({
+            content: 'Could not verify lock audit. No change attempted.',
+            components: [],
+          });
+        }
+        if (!record || record.id !== pending.lockId ||
+            record.status !== 'locked' ||
+            !matchesLockedSnapshot(record, current)) {
+          return interaction.editReply({
+            content: 'Lock state or permissions changed. ' +
+              'Refusing to override staff changes; use /mod lockstatus.',
+            components: [],
+          });
+        }
+        try {
+          record = await this.channelLocks.beginUnlock(
+            pending.guildId, record.id, pending.actorId, pending.reason,
+          );
+        } catch (error) {
+          this.logger.error('Could not reserve unlock case', error);
+          return interaction.editReply({
+            content: 'No change attempted: could not save unlock audit.',
+            components: [],
+          });
+        }
+        if (!record) {
+          return interaction.editReply({
+            content: 'Another moderator is already unlocking this channel.',
+            components: [],
+          });
+        }
+      }
+
+      const auditReason = (
+        'Yuugen lock #' + record.id + ', moderator ' +
+        pending.actorId + ': ' + pending.reason
+      ).slice(0, 512);
+      try {
+        if (action === 'lock') {
+          await channel.permissionOverwrites.edit(
+            interaction.guild.roles.everyone,
+            { SendMessages: false },
+            { reason: auditReason },
+          );
+        } else if (!record.originalExisted) {
+          // Delete ONLY the overwrite that Yuugen created. The exact
+          // bitfield snapshot was verified above before this operation.
+          await channel.permissionOverwrites.delete(
+            interaction.guild.roles.everyone.id,
+            auditReason,
+          );
+        } else {
+          // Edits ONLY SendMessages, preserving unrelated permission bits.
+          await channel.permissionOverwrites.edit(
+            interaction.guild.roles.everyone,
+            { SendMessages: originalSendOverride(record) },
+            { reason: auditReason },
+          );
+        }
+      } catch (error) {
+        const e = error && typeof error === 'object'
+          ? error as { status?: unknown; code?: unknown } : {};
+        const definitive = e.status === 403 ||
+          e.code === 50013 || e.code === 50001;
+        let finalized = false;
+        if (definitive) {
+          try {
+            const updated = action === 'lock'
+              ? await this.channelLocks.finishLock(pending.guildId, record.id, 'failed')
+              : await this.channelLocks.finishUnlock(pending.guildId, record.id, 'locked');
+            finalized = !!updated;
+          } catch (saveError) {
+            this.logger.error('Could not finalize rejected lock change', saveError);
+          }
+        }
+        this.logger.warn(
+          'Lock #' + record.id + (definitive ? ' rejected' : ' outcome uncertain'),
+        );
+        return interaction.editReply({
+          content: finalized
+            ? 'Discord denied this channel change; audit #' + record.id +
+              ' records the rejection.'
+            : 'Channel permission outcome uncertain. Audit #' + record.id +
+              ' remains pending. Verify Discord permissions and reconcile manually.',
+          components: [],
+        });
+      }
+
+      let finalized = false;
+      try {
+        const updated = action === 'lock'
+          ? await this.channelLocks.finishLock(pending.guildId, record.id, 'locked')
+          : await this.channelLocks.finishUnlock(pending.guildId, record.id, 'unlocked');
+        finalized = !!updated;
+      } catch (error) {
+        this.logger.error('Channel updated but lock audit finalization failed', error);
+      }
+      if (!finalized) {
+        return interaction.editReply({
+          content: 'Discord changed the channel, but audit #' + record.id +
+            ' is still pending. Staff must reconcile it manually.',
+          components: [],
+        });
+      }
+      return interaction.editReply({
+        content: 'Channel <#' + pending.channelId + '> ' +
+          (action === 'lock' ? 'locked' : 'unlocked') +
+          '. Audit case #' + record.id + ' updated.' +
+          (action === 'lock'
+            ? ' Explicit role allowances and Administrators may still post.'
+            : ' Only the saved @everyone permission was restored.'),
+        components: [],
+        allowedMentions: { parse: [] },
+      });
+    } finally {
+      this.changingChannels.delete(pending.channelId);
+    }
+  }
+
+  @Button('mod-channel-lock-confirm')
+  public async onLockConfirm(@Context() [interaction]: ButtonContext) {
+    return this.confirmChannelLock(interaction, 'lock');
+  }
+
+  @Button('mod-channel-unlock-confirm')
+  public async onUnlockConfirm(@Context() [interaction]: ButtonContext) {
+    return this.confirmChannelLock(interaction, 'unlock');
   }
 
   @Subcommand({
