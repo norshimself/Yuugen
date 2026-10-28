@@ -61,6 +61,16 @@ describe('AntiNukeController: guild manager settings', () => {
     expect(x.antiNuke.setConfig).toHaveBeenCalledWith(guildId, body.settings);
   });
 
+  it('allows immediate disable even when an old alert channel is gone', async () => {
+    const x = setup();
+    x.guild.channels.fetch.mockResolvedValue(null);
+    await x.controller.configure({
+      guildId, settings: { ...DEFAULT_ANTI_NUKE_CONFIG, enabled: false,
+        alertChannelId: '345678901234567890' },
+    });
+    expect(x.antiNuke.setConfig).toHaveBeenCalled();
+  });
+
   it('accepts a manager review only with the JWT-bound reviewer ID', async () => {
     const x = setup();
     await x.controller.review(12, { guildId, disposition: 'suspicious' },
