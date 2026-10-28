@@ -12,8 +12,9 @@ and confirmed kicks (PR #22).
   failed and unresolved attempts.
 
 The command **only bans current server members** in this first iteration.
-Preemptive bans by raw ID, unbans, temporary bans and mass bans are separate
-backlog issues (#50 and #51 for unban/tempban). This command does not delete
+Preemptive bans by raw ID, temporary bans and mass bans are separate
+backlog items. Confirmed unbans are implemented under issue #50; see
+`docs/moderation-unbans.md` for the separate removal flow. This command does not delete
 a member's old messages: it explicitly uses `deleteMessageSeconds: 0`.
 
 ## Authorization and confirmation

@@ -205,3 +205,13 @@ steps in `docs/moderation-bans.md`, including the Discord guild ban list,
 message-deletion behavior, confirmation expiry, and recovery from uncertain
 network outcomes. Do not enable permanent bans in production before staging
 sign-off.
+
+## 13. Unban moderation acceptance
+
+Issue #50 adds `/mod unban user_id reason` using the existing
+`moderation_cases` schema; no new migration is needed. Verify both
+moderator and bot Ban Members permissions, **uncached** ban lookup on
+preview and confirmation, confirmation ownership/expiry, and retained
+original ban history. Test repeat unbans, network uncertainty, database
+failures and cross-guild isolation in a disposable staging guild before
+production use. See `docs/moderation-unbans.md`.
