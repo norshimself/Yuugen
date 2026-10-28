@@ -3,7 +3,7 @@ export type TimeoutAction = 'timeout' | 'untimeout';
 export const MIN_TIMEOUT_MS = 60_000;
 export const MAX_TIMEOUT_MS = 28 * 24 * 60 * 60 * 1000;
 
-/** Accepted inputs: 1m–40320m, 1h–672h, or 1d–28d. */
+/** Accepted inputs: 1m-40320m, 1h-672h, or 1d-28d. */
 export function parseTimeoutDuration(input: unknown): number | null {
   if (typeof input !== 'string') return null;
   const match = /^(\d{1,5})([mhd])$/i.exec(input.trim());
