@@ -16,6 +16,7 @@ export class AutoModMessageListener {
   private readonly windows = new Map<string, number[]>();
   private readonly seen = new Map<string, number>();
   private readonly lastDryRun = new Map<string, number>();
+  private readonly lastDelete = new Map<string, number>();
 
   constructor(
     private readonly rules: AutoModRulesService,
@@ -82,8 +83,13 @@ export class AutoModMessageListener {
         }
         return;
       }
+      // Bound repeat deletion for a flood; no escalating punishments.
+      const deleteKey = message.guildId + ':' + message.author.id + ':' + decision.ruleId;
+      if (now - (this.lastDelete.get(deleteKey) || 0) < 1500) return;
+      if (this.lastDelete.size > 5000) this.lastDelete.clear();
       if (message.deletable) {
         await message.delete();
+        this.lastDelete.set(deleteKey, now);
       } else {
         this.logger.warn('AutoMod matched, but message cannot be deleted');
       }
