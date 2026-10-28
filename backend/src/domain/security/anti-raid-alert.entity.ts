@@ -31,6 +31,15 @@ export class AntiRaidAlert {
   @Column({ type: 'timestamptz', nullable: true })
   deliveredAt: Date | null;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  reviewedByUserId: string | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  reviewDisposition: 'legitimate' | 'suspicious' | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  reviewedAt: Date | null;
+
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 }
