@@ -35,11 +35,11 @@ export class ModerationCase {
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
 
-  // Warnings are revoked, not deleted, so the audit trail is preserved.
   // Intended Discord timeout expiry (approximate). Null for other actions.
   @Column({ type: 'timestamptz', nullable: true })
   expiresAt: Date | null;
 
+  // Warnings are revoked, not deleted, so the audit trail is preserved.
   @Column({ type: 'timestamptz', nullable: true })
   revokedAt: Date | null;
 
