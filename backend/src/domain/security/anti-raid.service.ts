@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, LessThan, Repository } from 'typeorm';
+import { Between, IsNull, LessThan, Repository } from 'typeorm';
 import {
   DEFAULT_ANTI_RAID_CONFIG, isAntiRaidExempt, shouldAlertOnJoin,
   validateAntiRaidConfig, type AntiRaidConfig, type AntiRaidJoin,
@@ -170,6 +170,30 @@ export class AntiRaidService {
       outcome === 'sent'
         ? { status: 'sent', deliveredAt: new Date(), failureReason: null }
         : { status: 'failed', failureReason: 'missing_permissions' },
+    );
+    return (result.affected || 0) > 0;
+  }
+
+  /**
+   * Staff disposition is explicit, guild-scoped and idempotent. It never
+   * changes a member's roles or silently suppresses future alerts.
+   */
+  async reviewAlert(
+    guildId: string,
+    alertId: number,
+    reviewerUserId: string,
+    disposition: 'legitimate' | 'suspicious',
+  ): Promise<boolean> {
+    assertGuildId(guildId);
+    if (typeof reviewerUserId !== 'string' || !SNOWFLAKE.test(reviewerUserId) ||
+        !Number.isSafeInteger(alertId) || alertId < 1 ||
+        !['legitimate', 'suspicious'].includes(disposition)) {
+      throw new BadRequestException('Invalid anti-raid review');
+    }
+    const result = await this.alerts.update(
+      { guildId, id: alertId, reviewedAt: IsNull() },
+      { reviewedAt: new Date(), reviewedByUserId: reviewerUserId,
+        reviewDisposition: disposition },
     );
     return (result.affected || 0) > 0;
   }
