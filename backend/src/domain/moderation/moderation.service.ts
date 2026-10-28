@@ -132,6 +132,61 @@ export class ModerationService {
     return result.raw?.[0] ?? null;
   }
 
+  /**
+   * Save the intent to ban BEFORE calling Discord. A pending case is kept
+   * if the process exits or the network response is inconclusive.
+   */
+  async beginBan(
+    guildId: string,
+    targetUserId: string,
+    moderatorUserId: string,
+    reason: string,
+  ): Promise<ModerationCase> {
+    validateSnowflake(guildId, 'guild ID');
+    validateSnowflake(targetUserId, 'target ID');
+    validateSnowflake(moderatorUserId, 'moderator ID');
+    if (targetUserId === moderatorUserId) {
+      throw new BadRequestException('You cannot ban yourself');
+    }
+    return this.cases.save(
+      this.cases.create({
+        guildId,
+        targetUserId,
+        moderatorUserId,
+        action: 'ban_pending',
+        reason: normalizedReason(reason),
+      }),
+    );
+  }
+
+  /**
+   * Transition exactly one guild-owned pending case to a terminal state.
+   * A replay, another guild's case, or an already-finalized case is rejected.
+   */
+  async finalizeBan(
+    guildId: string,
+    caseId: number,
+    status: 'ban' | 'ban_failed',
+  ): Promise<ModerationCase | null> {
+    validateSnowflake(guildId, 'guild ID');
+    if (!Number.isSafeInteger(caseId) || caseId <= 0) {
+      throw new BadRequestException('Invalid ban case ID');
+    }
+    if (status !== 'ban' && status !== 'ban_failed') {
+      throw new BadRequestException('Invalid ban case status');
+    }
+
+    const result = await this.cases.createQueryBuilder()
+      .update(ModerationCase)
+      .set({ action: status })
+      .where('id = :id', { id: caseId })
+      .andWhere('"guildId" = :guildId', { guildId })
+      .andWhere('"action" = :expected', { expected: 'ban_pending' })
+      .returning('*')
+      .execute();
+    return result.raw?.[0] ?? null;
+  }
+
   async unwarn(
     guildId: string,
     caseId: number,
