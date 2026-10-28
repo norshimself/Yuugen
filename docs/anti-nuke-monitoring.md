@@ -79,7 +79,10 @@ joins in multiple workers share the sliding window.
 
 One alert is reserved per guild per five-minute UTC time bucket, with a
 database uniqueness index. Bursts that straddle a bucket boundary may
-generate two alerts. Before any Discord send, a pending audit is saved.
+generate two alerts. Concurrent inserts near the configured event threshold
+can briefly undercount until another qualifying event arrives: this is a
+conservative, alert-only signal, not a complete intrusion-detection guarantee.
+Before any Discord send, a pending audit is saved.
 The bot sends an aggregated, no-mentions summary with the event count,
 window and latest kind. A known channel or permission failure is stored
 as failed; network ambiguity remains pending to avoid duplicate sends.
