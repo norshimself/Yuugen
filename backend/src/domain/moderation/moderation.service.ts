@@ -187,6 +187,59 @@ export class ModerationService {
     return result.raw?.[0] ?? null;
   }
 
+  /**
+   * Save the attempted unban before contacting Discord. If the external
+   * outcome cannot be established, keep unban_pending for staff review.
+   */
+  async beginUnban(
+    guildId: string,
+    targetUserId: string,
+    moderatorUserId: string,
+    reason: string,
+  ): Promise<ModerationCase> {
+    validateSnowflake(guildId, 'guild ID');
+    validateSnowflake(targetUserId, 'target ID');
+    validateSnowflake(moderatorUserId, 'moderator ID');
+    if (targetUserId === moderatorUserId) {
+      throw new BadRequestException('You cannot unban yourself');
+    }
+
+    return this.cases.save(
+      this.cases.create({
+        guildId,
+        targetUserId,
+        moderatorUserId,
+        action: 'unban_pending',
+        reason: normalizedReason(reason),
+      }),
+    );
+  }
+
+  /** Atomically finalize exactly one pending case, without touching bans. */
+  async finalizeUnban(
+    guildId: string,
+    caseId: number,
+    status: 'unban' | 'unban_failed',
+  ): Promise<ModerationCase | null> {
+    validateSnowflake(guildId, 'guild ID');
+    if (!Number.isSafeInteger(caseId) || caseId <= 0) {
+      throw new BadRequestException('Invalid unban case ID');
+    }
+    if (status !== 'unban' && status !== 'unban_failed') {
+      throw new BadRequestException('Invalid unban case status');
+    }
+
+    const result = await this.cases.createQueryBuilder()
+      .update(ModerationCase)
+      .set({ action: status })
+      .where('id = :id', { id: caseId })
+      .andWhere('"guildId" = :guildId', { guildId })
+      .andWhere('"action" = :expected', { expected: 'unban_pending' })
+      .returning('*')
+      .execute();
+    return result.raw?.[0] ?? null;
+  }
+
   async unwarn(
     guildId: string,
     caseId: number,
