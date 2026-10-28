@@ -70,7 +70,10 @@ describe('Moderation unban Discord commands', () => {
   it('looks up the live ban and displays a private confirmation without unbanning', async () => {
     const s = setup();
     await preview(s);
-    expect(s.guild.bans.fetch).toHaveBeenCalledWith(targetId);
+    expect(s.guild.bans.fetch).toHaveBeenCalledWith({
+      user: targetId,
+      force: true,
+    });
     expect(s.guild.bans.remove).not.toHaveBeenCalled();
     expect(s.service.beginUnban).not.toHaveBeenCalled();
     expect(s.slash.editReply).toHaveBeenCalledWith(expect.objectContaining({
@@ -154,6 +157,10 @@ describe('Moderation unban Discord commands', () => {
     await preview(s);
     await s.commands.onUnbanConfirm([s.button] as any);
     expect(s.guild.bans.fetch).toHaveBeenCalledTimes(2);
+    expect(s.guild.bans.fetch).toHaveBeenNthCalledWith(2, {
+      user: targetId,
+      force: true,
+    });
     expect(s.service.beginUnban).toHaveBeenCalledWith(
       guildId, targetId, staffId, 'Appeal approved',
     );
