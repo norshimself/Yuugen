@@ -15,7 +15,7 @@ import { ModerationVoiceCase } from './moderation-voice-case.entity';
 import { ModerationVoiceCaseService } from './moderation-voice-case.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ModerationCase, ModerationPurge, ModerationChannelLock, ModerationVoiceCase])],
+  imports: [TypeOrmModule.forFeature([ModerationCase, ModerationPurge, ModerationChannelLock, ModerationVoiceCase, AutoModRule])],
   controllers: [AutoModController],
   providers: [AutoModRulesService, JwtAuthGuard, GuildAccessGuard, ModerationService, ModerationPurgeService, ModerationChannelLockService, ModerationVoiceCaseService],
   exports: [AutoModRulesService, ModerationService, ModerationPurgeService, ModerationChannelLockService, ModerationVoiceCaseService],

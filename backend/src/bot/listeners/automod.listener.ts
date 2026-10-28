@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Context, On } from 'necord';
 import type { ContextOf } from 'necord';
 import { AutoModRulesService } from '../../domain/moderation/automod-rules.service';
@@ -16,12 +17,17 @@ export class AutoModMessageListener {
   private readonly seen = new Map<string, number>();
   private readonly lastDryRun = new Map<string, number>();
 
-  constructor(private readonly rules: AutoModRulesService) {}
+  constructor(
+    private readonly rules: AutoModRulesService,
+    private readonly config: ConfigService,
+  ) {}
 
   @On('messageCreate')
   async onMessage(@Context() [message]: ContextOf<'messageCreate'>): Promise<void> {
     if (!message.guildId || message.author.bot || message.webhookId ||
         !message.channelId) return;
+    // Message content and its privileged intent are disabled by default.
+    if (this.config.get<string>('ENABLE_MESSAGE_CONTENT_INTENT') !== 'true') return;
     const now = Date.now();
     if (this.seen.has(message.id)) return;
     this.seen.set(message.id, now);
@@ -49,7 +55,12 @@ export class AutoModMessageListener {
       const rules = await this.rules.list(message.guildId);
       if (!rules.some(rule => rule.enabled)) return;
 
-      const roles = message.member?.roles.cache.keys();
+      // Unknown member roles could conceal an exemption: never delete.
+      const member = message.member || await message.guild?.members.fetch({
+        user: message.author.id, force: true,
+      }).catch(() => null);
+      if (!member) return;
+      const roles = member.roles.cache.keys();
       const decision = evaluateAutoMod(rules, {
         channelId: message.channelId,
         roleIds: roles ? [...roles] : [],
