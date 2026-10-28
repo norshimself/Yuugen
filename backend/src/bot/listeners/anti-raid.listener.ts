@@ -48,9 +48,10 @@ export class AntiRaidListener {
         content:
           'Anti-raid review requested: ' + alert.joinCount +
           ' eligible member joins in ' + alert.windowSeconds +
-          ' seconds, including a recently created account' +
+          ' seconds' +
           (alert.minAccountAgeMinutes === 0 ? ' (account-age filter disabled)' :
-            ' (age under ' + alert.minAccountAgeMinutes + ' minutes)') +
+            ', including a joining account younger than ' +
+              alert.minAccountAgeMinutes + ' minutes') +
           '. This is an alert only. Review before taking moderation action.',
         allowedMentions: { parse: [] },
       });
