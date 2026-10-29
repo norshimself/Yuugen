@@ -93,8 +93,9 @@ export class RolePanelService {
         (prerequisiteRoleId !== null && !SNOWFLAKE.test(prerequisiteRoleId))) {
       throw new BadRequestException('Invalid option role, label, group or prerequisite');
     }
-    const optionId = panel.options.reduce((max, option) =>
-      Math.max(max, option.id), 0) + 1;
+    const usedIds = new Set(panel.options.map(option => option.id));
+    const optionId = Array.from({ length: 25 }, (_, i) => i + 1)
+      .find(id => !usedIds.has(id)) ?? 26;
     const options: RolePanelOption[] = [...panel.options, {
       id: optionId, roleId, label: label.trim(), groupKey: group,
       prerequisiteRoleId,
