@@ -63,10 +63,15 @@ export class VerificationService {
    */
   async isRestricted(
     guildId: string, userId: string, joinedTimestamp: number | null,
+    heldRoles?: { has(roleId: string): boolean },
   ): Promise<boolean> {
     const [config, receipt] = await Promise.all([
       this.getConfig(guildId), this.getSession(guildId, userId),
     ]);
+    // A moderator may reapply quarantine after a prior release. Live
+    // membership always overrides the saved released marker.
+    if ((config && heldRoles?.has(config.quarantineRoleId)) ||
+        (receipt && heldRoles?.has(receipt.quarantineRoleId))) return true;
     const join = joinedTimestamp === null ? null : String(joinedTimestamp);
     if (receipt && (!join || receipt.sessionKey === join)) {
       return receipt.status !== 'released';
