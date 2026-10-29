@@ -101,6 +101,19 @@ export class GuildAuditListener {
     });
   }
 
+  @On('messageDeleteBulk')
+  async onBulkDelete(
+    @Context() [messages]: ContextOf<'messageDeleteBulk'>,
+  ): Promise<void> {
+    // A purge can contain up to 100 messages; never fan out unbounded audit
+    // sends/DB attempts. The DB additionally caps all event types per minute.
+    let attempted = 0;
+    for (const message of messages.values()) {
+      if (attempted++ >= 20) break;
+      await this.onMessageDelete([message] as ContextOf<'messageDelete'>);
+    }
+  }
+
   @On('guildMemberAdd')
   async onMemberAdd(@Context() [member]: ContextOf<'guildMemberAdd'>): Promise<void> {
     if (this.config.get<string>('ENABLE_GUILD_MEMBERS_INTENT') !== 'true' ||
