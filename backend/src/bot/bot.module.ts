@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
 import { AutoModMessageListener } from './listeners/automod.listener';
 import { GuildAuditListener } from './listeners/guild-audit.listener';
+import { GuildStructureAuditListener } from './listeners/guild-structure-audit.listener';
 import { GuildAuditModule } from '../domain/audit/guild-audit.module';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
@@ -46,6 +47,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
     BotGateway,
     AutoModMessageListener,
     GuildAuditListener,
+    GuildStructureAuditListener,
     PingCommand,
     PlayCommand,
     QueueCommand,
