@@ -42,6 +42,7 @@ export const FORBIDDEN_ROLE_PERMISSIONS =
   (1n << 1n) | (1n << 2n) | (1n << 3n) | (1n << 4n) |
   (1n << 5n) | (1n << 7n) | (1n << 13n) | (1n << 17n) |
   (1n << 18n) | (1n << 28n) | (1n << 29n) | (1n << 36n) |
+  (1n << 30n) | (1n << 37n) | (1n << 38n) |
   (1n << 40n) | (1n << 43n) | (1n << 44n);
 
 export function validatePanelTitle(value: unknown): value is string {
