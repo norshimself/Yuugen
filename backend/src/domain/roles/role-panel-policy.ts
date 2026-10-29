@@ -124,7 +124,7 @@ export function validatePanelOptions(
       visited.add(current.roleId);
       const parent = current.prerequisiteRoleId
         ? byRole.get(current.prerequisiteRoleId) : undefined;
-      if (parent && option.groupKey && option.groupKey === parent.groupKey) {
+      if (parent && current.groupKey && current.groupKey === parent.groupKey) {
         return 'An exclusive-group role cannot depend on another group member.';
       }
       current = parent;
