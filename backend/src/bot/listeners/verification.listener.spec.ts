@@ -186,6 +186,19 @@ describe('VerificationListener: join and self-service release (#64)', () => {
     );
   });
 
+  it('rechecks disabled configuration after channel inspection before adding a role', async () => {
+    const x = setup();
+    x.verification.activeConfig
+      .mockResolvedValueOnce(x.settings)
+      .mockResolvedValueOnce(x.settings)
+      .mockResolvedValueOnce(null);
+    await x.listener.onGuildMemberAdd(x.member);
+    expect(x.member.roles.add).not.toHaveBeenCalled();
+    expect(x.verification.finishJoin).toHaveBeenCalledWith(
+      guildId, userId, String(x.now), token, 'join_failed',
+    );
+  });
+
   it('records confirmed Discord permission failures without a blind retry', async () => {
     const x = setup();
     x.member.roles.add.mockRejectedValueOnce({ code: 50013 });
