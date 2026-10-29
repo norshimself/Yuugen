@@ -58,6 +58,8 @@ is removed or permissions change.
   uncached messages that have no author/content information. Do not
   guess the deleter. Bot/webhook messages with known authors are skipped,
   and destination-channel messages are always skipped to avoid recursion.
+  Bulk-delete gateway events are handled with a **20-message maximum fanout**;
+  further deletions in the bulk batch are intentionally omitted.
 - Member joins and departures: require
   \`ENABLE_GUILD_MEMBERS_INTENT=true\` and the privileged Guild Members
   intent enabled in Discord Developer Portal. \`member_departure\` is
