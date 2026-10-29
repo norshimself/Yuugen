@@ -314,6 +314,9 @@ export class VerificationService {
         !['join','verify','wrong_answer','override'].includes(action)) {
       throw new BadRequestException('Invalid verification audit key');
     }
+    // Metadata cleanup is opportunistic and bounded per guild.
+    // If cleanup cannot run, fail closed before recording a new action.
+    await this.purgeExpiredAudit(guildId);
     const result = await this.actions.createQueryBuilder()
       .insert().into(GuildVerificationAction)
       .values({
