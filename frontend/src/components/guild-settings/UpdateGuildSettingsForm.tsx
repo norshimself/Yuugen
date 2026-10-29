@@ -57,9 +57,17 @@ export function UpdateGuildSettingsForm({ initialSettings, guildId }: UpdateGuil
   const watchedPrefix = watch('prefix');
   const watchedWelcomeChannelId = watch('welcomeChannelId');
   const watchedWelcomeMessage = watch('welcomeMessage');
+  const watchedWelcomeDmEnabled = watch('welcomeDmEnabled');
+  const watchedRulesAcknowledgementEnabled = watch('rulesAcknowledgementEnabled');
   const watchedAntiSpamEnabled = watch('antiSpamEnabled');
   const watchedProfanityFilterEnabled = watch('profanityFilterEnabled');
   const watchedBlacklistedWords = (watch('blacklistedWords') || []) as string[];
+
+  useEffect(() => {
+    if (!watchedWelcomeDmEnabled && watchedRulesAcknowledgementEnabled) {
+      setValue('rulesAcknowledgementEnabled', false, { shouldDirty: true });
+    }
+  }, [watchedWelcomeDmEnabled, watchedRulesAcknowledgementEnabled, setValue]);
 
   // Read text channels through the authenticated guild settings API.
   const fetchChannels = useCallback(async () => {
@@ -217,6 +225,77 @@ export function UpdateGuildSettingsForm({ initialSettings, guildId }: UpdateGuil
                 </span>
               </div>
             </div>
+          </div>
+        </motion.div>
+
+        {/* Goodbye and first-time onboarding - all disabled unless configured */}
+        <motion.div
+          variants={cardVariants}
+          initial="hidden"
+          animate="visible"
+          className="p-8 rounded-[2rem] bg-[#080d14]/90 border border-brand-secondary/15 backdrop-blur-xl space-y-5"
+        >
+          <div className="border-b border-brand-secondary/10 pb-4">
+            <h3 className="font-serif text-lg tracking-wide">Departure &amp; first-time onboarding</h3>
+            <p className="text-xs text-brand-secondary/60">
+              Optional goodbye announcements and one-time welcome DMs. No automatic roles or punishments.
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="goodbyeChannelId" className="text-xs tracking-widest font-semibold uppercase text-brand-secondary/80">
+              Goodbye channel
+            </label>
+            <select id="goodbyeChannelId" {...register('goodbyeChannelId')}
+              className="w-full px-4 py-3 bg-[#04080c]/50 border border-brand-secondary/15 rounded-xl text-white text-sm">
+              <option value="">Disabled (do not post)</option>
+              {channels.map(chan => <option key={chan.id} value={chan.id}>#{chan.name}</option>)}
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="goodbyeMessage" className="text-xs tracking-widest font-semibold uppercase text-brand-secondary/80">
+              Goodbye template
+            </label>
+            <textarea id="goodbyeMessage" rows={2} maxLength={1500}
+              {...register('goodbyeMessage')}
+              className="w-full px-4 py-3 bg-[#04080c]/50 border border-brand-secondary/15 rounded-xl text-white text-sm"
+              placeholder="Goodbye {user} from {guild}." />
+            {errors.goodbyeMessage && <p className="text-red-400 text-xs">{errors.goodbyeMessage.message}</p>}
+          </div>
+          <label className="flex items-center gap-3 text-sm text-white">
+            <input type="checkbox" {...register('welcomeDmEnabled')} />
+            Send one welcome DM per member when first observed
+          </label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="welcomeDmMessage" className="text-xs tracking-widest font-semibold uppercase text-brand-secondary/80">
+              Welcome DM template
+            </label>
+            <textarea id="welcomeDmMessage" rows={2} maxLength={1500}
+              {...register('welcomeDmMessage')}
+              className="w-full px-4 py-3 bg-[#04080c]/50 border border-brand-secondary/15 rounded-xl text-white text-sm"
+              placeholder="Welcome to {guild}, {user}!" />
+            {errors.welcomeDmMessage && <p className="text-red-400 text-xs">{errors.welcomeDmMessage.message}</p>}
+          </div>
+          <label className="flex items-center gap-3 text-sm text-white">
+            <input type="checkbox" {...register('rulesAcknowledgementEnabled')}
+              disabled={!watchedWelcomeDmEnabled}
+              onChange={(event) => setValue('rulesAcknowledgementEnabled',
+                event.target.checked && !!watchedWelcomeDmEnabled, { shouldDirty: true })} />
+            Include a voluntary rules acknowledgement button in the DM
+          </label>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="rulesChannelId" className="text-xs tracking-widest font-semibold uppercase text-brand-secondary/80">
+              Publicly readable rules channel
+            </label>
+            <select id="rulesChannelId" {...register('rulesChannelId')}
+              disabled={!watchedWelcomeDmEnabled || !watchedRulesAcknowledgementEnabled}
+              className="w-full px-4 py-3 bg-[#04080c]/50 border border-brand-secondary/15 rounded-xl text-white text-sm disabled:opacity-40">
+              <option value="">Not configured</option>
+              {channels.map(chan => <option key={chan.id} value={chan.id}>#{chan.name}</option>)}
+            </select>
+            <p className="text-[10px] text-brand-secondary/60">
+              Members must be able to view the rules channel. Clicking acknowledgement records consent only; it never assigns a role.
+              Discord DM privacy settings are respected.
+            </p>
           </div>
         </motion.div>
 
