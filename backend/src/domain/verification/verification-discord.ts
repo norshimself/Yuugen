@@ -55,17 +55,22 @@ export async function inspectVerificationEnvironment(
   }
   for (const other of allChannels.values()) {
     if (!other || other.id === channelId) continue;
-    if ('permissionOverwrites' in other) {
-      const overwrite = other.permissionOverwrites.cache.get(roleId);
-      if (overwrite && overwrite.allow.bitfield !== 0n) unsafeOverwrites = true;
-    }
+    // Not every GuildBasedChannel is a normal text/voice channel.
+    const candidate = other as unknown as {
+      permissionOverwrites?: {
+        cache: { get(id: string): { allow: { bitfield: bigint } } | undefined };
+      };
+      permissionsFor?: (role: Role) => { has(bit: bigint): boolean } | null;
+    };
+    const overwrite = candidate.permissionOverwrites?.cache.get(roleId);
+    if (overwrite && overwrite.allow.bitfield !== 0n) unsafeOverwrites = true;
     if (other.type === ChannelType.GuildCategory) continue;
-    if (!('permissionsFor' in other)) {
+    if (!candidate.permissionsFor) {
       otherVisibleChannels = true; // Unknown channel type must fail closed.
       continue;
     }
-    const roleCanView = other.permissionsFor(role)?.has(view);
-    const everyoneCanView = other.permissionsFor(guild.roles.everyone)?.has(view);
+    const roleCanView = candidate.permissionsFor(role)?.has(view);
+    const everyoneCanView = candidate.permissionsFor(guild.roles.everyone)?.has(view);
     if (roleCanView !== false || everyoneCanView !== false) {
       otherVisibleChannels = true;
     }
