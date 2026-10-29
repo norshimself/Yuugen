@@ -251,9 +251,10 @@ describe('RolePanelService: concurrency, persistence and audit (#63)', () => {
     expect(x.actions.delete).toHaveBeenCalledWith({
       guildId, createdAt: expect.anything(),
     });
-    expect(x.locks.delete).toHaveBeenCalledWith(expect.objectContaining({
-      guildId, expiresAt: expect.anything(),
-    }));
+    expect(x.locks.query).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM "role_panel_member_locks"'),
+      [guildId, expect.any(Date)],
+    );
     await x.service.beginAction(
       '678901234567890124', guildId, userId, 14, 1, roleId,
     );
