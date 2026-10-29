@@ -85,6 +85,19 @@ describe('GuildAuditListener: metadata-only Discord event handling', () => {
     expect(x.send).toHaveBeenCalled();
   });
 
+  it('bounds bulk deletion logging to the first 20 messages', async () => {
+    const x = setup();
+    const messages = new Map<string, any>();
+    for (let i = 0; i < 25; i++) {
+      messages.set(String(i), {
+        guildId, channelId: source, id: String(345678901234567890n + BigInt(i)),
+        author: undefined, webhookId: null,
+      });
+    }
+    await x.listener.onBulkDelete([messages] as any);
+    expect(x.audit.reserve).toHaveBeenCalledTimes(20);
+  });
+
   it('skips DM, bot, webhook and unverified edit timestamps', async () => {
     const x = setup();
     await x.listener.onMessageDelete([{ ...x.message, guildId: null }] as any);
