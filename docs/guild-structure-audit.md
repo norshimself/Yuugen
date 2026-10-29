@@ -79,6 +79,9 @@ Existing JWT + GuildAccessGuard **Manage Server** checks remain intact.
 The runtime rechecks configuration and permissions before each send.
 Turning auditing off never requires a surviving destination channel.
 
+Manager history queries filter out rows older than the configured retention
+window, even if physical deletion has not yet run.
+
 Retention is **best-effort**: the existing service prunes expired rows
 only when it processes a new eligible guild event (at most once per ten
 minutes per worker). Quiet/disabled guilds require an external
