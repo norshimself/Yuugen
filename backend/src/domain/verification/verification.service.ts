@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'node:crypto';
-import { In, LessThan, Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import { GuildVerificationConfig } from './guild-verification-config.entity';
 import { GuildVerificationSession } from './guild-verification-session.entity';
 import { GuildVerificationAction } from './guild-verification-action.entity';
@@ -68,7 +68,7 @@ export class VerificationService {
       this.getConfig(guildId), this.getSession(guildId, userId),
     ]);
     const join = joinedTimestamp === null ? null : String(joinedTimestamp);
-    if (receipt && join && receipt.sessionKey === join) {
+    if (receipt && (!join || receipt.sessionKey === join)) {
       return receipt.status !== 'released';
     }
     return config?.status === 'active';
@@ -85,12 +85,10 @@ export class VerificationService {
         !['button', 'question'].includes(mode)) {
       throw new BadRequestException('Invalid verification destination or mode');
     }
-    if (mode === 'question' &&
-        (!validVerificationPrompt(questionPrompt) ||
-          !makeAnswerProof(answer || ''))) {
-      throw new BadRequestException('Question and a short answer are required');
+    if (mode === 'question' && !validVerificationPrompt(questionPrompt)) {
+      throw new BadRequestException('Question must be a single line of 1-45 characters');
     }
-    const proof = mode === 'question' ? makeAnswerProof(answer!) : null;
+    const proof = mode === 'question' ? makeAnswerProof(answer || '') : null;
     if (mode === 'question' && !proof) {
       throw new BadRequestException('Invalid verification answer');
     }
@@ -246,13 +244,20 @@ export class VerificationService {
     if (!validJoinSession(sessionKey) || !validDiscordId(roleId)) {
       throw new BadRequestException('Invalid override member session');
     }
-    await this.sessions.createQueryBuilder()
-      .insert().into(GuildVerificationSession)
-      .values({
-        guildId, userId, sessionKey, quarantineRoleId: roleId,
-        status: 'quarantined', claimToken: null,
-        wrongAnswers: 0, releasedAt: null,
-      }).orIgnore().execute();
+    // An explicit staff action can replace an older rejoin receipt, never a
+    // newer one. Equal sessions are kept untouched to preserve outcome state.
+    await this.sessions.query([
+      'INSERT INTO "guild_verification_sessions"',
+      '("guildId","userId","sessionKey","quarantineRoleId","status","claimToken","wrongAnswers")',
+      "VALUES ($1,$2,$3,$4,'quarantined',NULL,0)",
+      'ON CONFLICT ("guildId","userId") DO UPDATE',
+      'SET "sessionKey" = EXCLUDED."sessionKey",',
+      '"quarantineRoleId" = EXCLUDED."quarantineRoleId",',
+      '"status" = 'quarantined', "claimToken" = NULL,',
+      '"wrongAnswers" = 0, "releasedAt" = NULL, "updatedAt" = NOW()',
+      'WHERE ("guild_verification_sessions"."sessionKey"::bigint)',
+      '< (EXCLUDED."sessionKey"::bigint)',
+    ].join(' '), [guildId, userId, sessionKey, roleId]);
   }
 
   async finishRelease(
@@ -331,8 +336,9 @@ export class VerificationService {
   async recentActions(guildId: string): Promise<GuildVerificationAction[]> {
     checkGuild(guildId);
     return this.actions.find({
-      where: { guildId,
-        createdAt: LessThan(new Date(Date.now() + 1000)) },
+      where: { guildId, createdAt: MoreThan(
+        new Date(Date.now() - AUDIT_RETENTION_MS),
+      ) },
       order: { createdAt: 'DESC', id: 'DESC' }, take: 20,
     });
   }
