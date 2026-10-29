@@ -24,7 +24,7 @@ describe('GuildAuditController: guarded guild admin configuration', () => {
     const permissionsFor = jest.fn((member: unknown) => ({
       has: member === everyone ? canEveryone : canBot,
     }));
-    const channel = { type: ChannelType.GuildText, permissionsFor };
+    const channel = { type: ChannelType.GuildText as ChannelType, permissionsFor };
     const guild = {
       roles: { everyone },
       members: { me: bot, fetchMe: jest.fn().mockResolvedValue(bot) },
