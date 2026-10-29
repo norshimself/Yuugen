@@ -10,7 +10,8 @@ export const VERIFY_PREFIX = 'yverify';
 export const MAX_QUESTION_ATTEMPTS = 5;
 export const JOIN_EVENT_MAX_AGE_MS = 120_000;
 export const VERIFY_LEASE_MINUTES = 2;
-export const MAX_PROMPT_LENGTH = 140;
+// Discord modal input labels are capped at 45 characters.
+export const MAX_PROMPT_LENGTH = 45;
 const SNOWFLAKE = /^\d{17,20}$/;
 const SESSION = /^\d{12,16}$/;
 const OPEN_ID = /^yverify:open:(\d{17,20}):([1-9]\d{0,8})$/;
