@@ -121,7 +121,7 @@ export class RolePanelListener {
       // A quarantined or not-yet-observed new member must not use self-role
       // menus to gain channel access while verification is still pending.
       if (await this.verification.isRestricted(
-        guildId, userId, member.joinedTimestamp,
+        guildId, userId, member.joinedTimestamp, member.roles.cache,
       )) {
         await interaction.editReply(
           'Complete the server verification flow before choosing self-roles.',
