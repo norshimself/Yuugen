@@ -159,7 +159,8 @@ describe('GuildAuditService: scoped persistence and DB rate limiting', () => {
     });
     await a.service.history(guildId);
     expect(a.events.find).toHaveBeenCalledWith({
-      where: { guildId }, order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
+      where: { guildId, createdAt: expect.anything() },
+      order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
     });
   });
 });
