@@ -64,7 +64,7 @@ class OverrideOptions {
 interface ManagerContext {
   guild: Guild;
   staff: GuildMember;
-  bot: GuildMember;
+  bot: GuildMember | null;
 }
 
 @VerificationGroup()
@@ -87,7 +87,7 @@ export class VerificationCommands {
       guild.members.fetch({ user: interaction.user.id, force: true }).catch(() => null),
       guild.members.fetchMe().catch(() => null),
     ]);
-    if (!staff || !bot ||
+    if (!staff ||
         !staff.permissions.has(PermissionFlagsBits.ManageGuild) ||
         !staff.permissions.has(PermissionFlagsBits.ManageRoles)) return null;
     return { guild, staff, bot };
@@ -116,6 +116,7 @@ export class VerificationCommands {
         channel.guildId !== ctx.guild.id) {
       return interaction.editReply('Choose a valid guild role/channel and mode; answers are for question mode only.');
     }
+    if (!ctx.bot) return interaction.editReply('Bot member is unavailable for verification setup.');
     const check = await inspectVerificationEnvironment(
       ctx.guild, ctx.bot, channel.id, quarantineRole.id,
     );
@@ -151,6 +152,7 @@ export class VerificationCommands {
     if (!draft || draft.status !== 'draft') {
       return interaction.editReply('There is no unpublished verification draft.');
     }
+    if (!ctx.bot) return interaction.editReply('Bot member is unavailable for publishing.');
     const check = await inspectVerificationEnvironment(
       ctx.guild, ctx.bot, draft.channelId, draft.quarantineRoleId,
     );
@@ -308,8 +310,27 @@ export class VerificationCommands {
         outcome = 'denied';
         return interaction.editReply('Membership changed or lock expired; override denied.');
       }
+      // A manager can lose permissions while the database claim is pending.
+      // Recheck staff authorization even for an exemption with no role present.
+      const liveStaff = await ctx.guild.members.fetch({
+        user: interaction.user.id, force: true,
+      }).catch(() => null);
+      if (!liveStaff ||
+          !liveStaff.permissions.has(PermissionFlagsBits.ManageGuild) ||
+          !liveStaff.permissions.has(PermissionFlagsBits.ManageRoles)) {
+        outcome = 'denied';
+        return interaction.editReply('Your manager permissions changed before the override.');
+      }
       if (fresh.roles.cache.has(claim.roleId)) {
-        if (!await canSafelyRemoveQuarantineRole(ctx.guild, ctx.bot, claim.roleId)) {
+        const liveRole = await ctx.guild.roles.fetch(claim.roleId, { force: true })
+          .catch(() => null);
+        if (!ctx.bot || !liveRole ||
+            (liveStaff.id !== ctx.guild.ownerId &&
+              liveStaff.roles.highest.comparePositionTo(liveRole) <= 0) ||
+            !await canSafelyRemoveQuarantineRole(ctx.guild, ctx.bot, claim.roleId) ||
+            !await this.memberLocks.hasMemberLease(
+              ctx.guild.id, member.id, lease.token,
+            )) {
           outcome = 'denied';
           return interaction.editReply('Bot cannot safely remove the quarantine role. Fix hierarchy first.');
         }
