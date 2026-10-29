@@ -134,6 +134,10 @@ export class RolePanelCommands {
       : null;
     if (!role) return 'The selected role was deleted or is unavailable.';
     if (!staff.bot) return 'The bot member could not be verified.';
+    if (staff.manager.id !== staff.guild.ownerId &&
+        staff.manager.roles.highest.comparePositionTo(role) <= 0) {
+      return 'Your highest role must be above the self-role option.';
+    }
     const denial = roleConfigurationDenial({
       guildId: staff.guild.id, roleGuildId: role.guild.id,
       roleId: role.id, isEveryone: role.id === staff.guild.id,
