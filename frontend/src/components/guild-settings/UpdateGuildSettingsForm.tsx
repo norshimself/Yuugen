@@ -104,7 +104,13 @@ export function UpdateGuildSettingsForm({ initialSettings, guildId }: UpdateGuil
   const onSubmit = async (formData: GuildSettings) => {
     setFeedback(null);
     try {
-      await settingsService.updateSettings(guildId, formData);
+      await settingsService.updateSettings(guildId, {
+        ...formData,
+        // Unchecking DM also disables acknowledgement, even when that
+        // checkbox is disabled/omitted by the browser.
+        rulesAcknowledgementEnabled:
+          !!formData.welcomeDmEnabled && !!formData.rulesAcknowledgementEnabled,
+      });
       setFeedback({ text: 'Guild configurations synchronized successfully!', success: true });
       router.refresh(); // Invalidate server components to retrieve fresh cache context
     } catch (err) {
@@ -277,9 +283,7 @@ export function UpdateGuildSettingsForm({ initialSettings, guildId }: UpdateGuil
           </div>
           <label className="flex items-center gap-3 text-sm text-white">
             <input type="checkbox" {...register('rulesAcknowledgementEnabled')}
-              disabled={!watchedWelcomeDmEnabled}
-              onChange={(event) => setValue('rulesAcknowledgementEnabled',
-                event.target.checked && !!watchedWelcomeDmEnabled, { shouldDirty: true })} />
+              disabled={!watchedWelcomeDmEnabled} />
             Include a voluntary rules acknowledgement button in the DM
           </label>
           <div className="flex flex-col gap-2">
