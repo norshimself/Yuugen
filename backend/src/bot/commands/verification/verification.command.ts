@@ -256,6 +256,7 @@ export class VerificationCommands {
     let attempted = false;
     let actionId: number | null = null;
     let claim: { token: string; roleId: string } | null = null;
+    let claimedSessionKey: string | null = null;
     let outcome: 'succeeded' | 'denied' | 'failed' | 'uncertain' = 'uncertain';
     let release: 'released' | 'quarantined' | 'release_uncertain' = 'quarantined';
     try {
@@ -294,6 +295,7 @@ export class VerificationCommands {
       claim = await this.verification.claimRelease(
         ctx.guild.id, member.id, sessionKey, true,
       );
+      if (claim) claimedSessionKey = sessionKey;
       if (!claim) {
         outcome = 'denied';
         return interaction.editReply('No unresolved current verification session to override.');
@@ -334,14 +336,12 @@ export class VerificationCommands {
       );
     } catch (error) {
       this.logger.warn('Manual verification override uncertain', error);
+      if (attempted) release = 'release_uncertain';
       return interaction.editReply('Override could not be verified; inspect session and roles.');
     } finally {
-      if (claim) {
+      if (claim && claimedSessionKey) {
         await this.verification.finishRelease(
-          ctx.guild.id, target.id, String(
-            (await ctx.guild.members.fetch({ user: target.id, force: true }).catch(() => null))
-              ?.joinedTimestamp ?? ''),
-          claim.token, release,
+          ctx.guild.id, target.id, claimedSessionKey, claim.token, release,
         ).catch(error => this.logger.error('Cannot finalize override session', error));
       }
       if (actionId) {
