@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
 import { AutoModMessageListener } from './listeners/automod.listener';
+import { GuildAuditListener } from './listeners/guild-audit.listener';
+import { GuildAuditModule } from '../domain/audit/guild-audit.module';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -39,10 +41,11 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, GuildAuditModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
+    GuildAuditListener,
     PingCommand,
     PlayCommand,
     QueueCommand,
