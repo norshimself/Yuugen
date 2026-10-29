@@ -218,6 +218,16 @@ describe('/verify staff setup, publish and override (#64)', () => {
     );
   });
 
+  it('lets a manager disable verification even if the bot member is unavailable', async () => {
+    const x = setup();
+    x.guild.members.fetchMe.mockResolvedValue(null);
+    await x.command.onDisable([x.interaction] as any);
+    expect(x.verification.disable).toHaveBeenCalledWith(guildId);
+    expect(x.interaction.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('disabled'),
+    );
+  });
+
   it('shows metadata-only status, not the salted answer or prompt', async () => {
     const x = setup();
     await x.command.onStatus([x.interaction] as any);
@@ -272,6 +282,21 @@ describe('/verify staff setup, publish and override (#64)', () => {
   it('fails closed when bot loses role hierarchy or membership changes', async () => {
     const x = setup();
     (canSafelyRemoveQuarantineRole as jest.Mock).mockResolvedValueOnce(false);
+    await x.command.onOverride([x.interaction] as any, {
+      member: { id: targetId } as any,
+    });
+    expect(x.member.roles.remove).not.toHaveBeenCalled();
+    expect(x.verification.finishAction).toHaveBeenCalledWith(
+      guildId, 27, 'denied',
+    );
+  });
+
+  it('refuses a staff override after the invoker loses Manage Roles', async () => {
+    const x = setup();
+    x.staff.permissions.has
+      .mockReturnValueOnce(true)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(false);
     await x.command.onOverride([x.interaction] as any, {
       member: { id: targetId } as any,
     });
