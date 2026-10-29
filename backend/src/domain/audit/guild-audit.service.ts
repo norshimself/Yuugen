@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { IsNull, LessThan, Repository } from 'typeorm';
+import { LessThan, Repository } from 'typeorm';
 import {
   DEFAULT_GUILD_AUDIT, auditEventKey, shouldAudit, validAuditTime,
   validateGuildAuditConfig, type GuildAuditConfig, type GuildAuditType,
@@ -165,18 +165,18 @@ export class GuildAuditService {
   async finish(
     guildId: string,
     id: number,
-    outcome: 'sent' | 'missing_permissions',
+    outcome: 'sent' | 'missing_permissions' | 'config_changed',
   ): Promise<boolean> {
     checkGuild(guildId);
     if (!Number.isSafeInteger(id) || id < 1 ||
-        !['sent', 'missing_permissions'].includes(outcome)) {
+        !['sent', 'missing_permissions', 'config_changed'].includes(outcome)) {
       throw new BadRequestException('Invalid audit result');
     }
     const updated = await this.events.update(
       { guildId, id, status: 'pending' },
       outcome === 'sent'
         ? { status: 'sent', deliveredAt: new Date(), failureReason: null }
-        : { status: 'failed', failureReason: 'missing_permissions' },
+        : { status: 'failed', failureReason: outcome },
     );
     return (updated.affected || 0) > 0;
   }
