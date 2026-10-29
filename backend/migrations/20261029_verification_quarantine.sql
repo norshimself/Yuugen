@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS "guild_verification_configs" (
   "mode" VARCHAR(12) NOT NULL,
   "status" VARCHAR(12) NOT NULL DEFAULT 'draft',
   "revision" INTEGER NOT NULL DEFAULT 1,
-  "questionPrompt" VARCHAR(140) NULL,
+  "questionPrompt" VARCHAR(45) NULL,
   "answerSalt" VARCHAR(32) NULL,
   "answerDigest" VARCHAR(64) NULL,
   "updatedByUserId" VARCHAR(20) NOT NULL,
