@@ -37,6 +37,12 @@ Guild Members intent enabled in Discord Developer Portal; the flag is
 off by default. Manual verification setup refuses to enable while
 the flag is off, and all join events are ignored if it is disabled.
 
+This is independent of the voluntary rules-acknowledgement DM in
+[PR #106](https://github.com/norshimself/Yuugen/pull/106):
+acknowledging those rules does **not** release the quarantine role.
+Any future integration must explicitly reconcile both policies and
+retest member rejoin behavior.
+
 This implementation never attempts automatic CAPTCHA solving or
 pretends that a button/question proves human identity. The optional
 question is a simple rules/onboarding check, **not anti-bot protection**.
