@@ -27,6 +27,9 @@ export class GuildAuditEvent {
   @Column({ type: 'varchar', length: 20, nullable: true })
   actorId: string | null;
 
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  changedFields: string[];
+
   @Column({ type: 'timestamptz' })
   occurredAt: Date;
 
