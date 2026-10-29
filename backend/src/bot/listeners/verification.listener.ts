@@ -105,6 +105,19 @@ export class VerificationListener {
         auditResult = 'denied';
         return;
       }
+      // Permission inspection can be slow. A manager may disable the flow
+      // while it runs; never add a quarantine role based on stale settings.
+      const beforeMutation = await this.verification.activeConfig(guildId);
+      if (!beforeMutation || beforeMutation.revision !== updated.revision ||
+          beforeMutation.quarantineRoleId !== updated.quarantineRoleId ||
+          beforeMutation.channelId !== updated.channelId ||
+          !await this.memberLocks.hasMemberLease(
+            guildId, member.id, lease.token,
+          )) {
+        joinResult = 'join_failed';
+        auditResult = 'denied';
+        return;
+      }
       if (!current.roles.cache.has(updated.quarantineRoleId)) {
         attemptedMutation = true;
         try {
