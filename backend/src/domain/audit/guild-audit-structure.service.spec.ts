@@ -132,6 +132,20 @@ describe('GuildAuditService: structural events and retention (#61)', () => {
     expect(where.createdAt.value).toEqual(new Date(now - 3 * 24 * 3600000));
   });
 
+  it('filters historical audit rows at read time even when cleanup has not run', async () => {
+    const x = setup();
+    const before = Date.now();
+    await x.service.history(guildId);
+    const after = Date.now();
+    expect(x.events.find).toHaveBeenCalledTimes(1);
+    const where = x.events.find.mock.calls[0][0].where;
+    expect(where.guildId).toBe(guildId);
+    const cutoff = where.createdAt.value.getTime();
+    const retention = 3 * 24 * 3600000;
+    expect(cutoff).toBeGreaterThanOrEqual(before - retention);
+    expect(cutoff).toBeLessThanOrEqual(after - retention);
+  });
+
   it('defaults retention to seven days for old API request payloads', async () => {
     const x = setup();
     await x.service.setConfig(guildId, {
