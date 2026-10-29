@@ -14,6 +14,7 @@ import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
 import { SettingsModule } from './api/settings/settings.module';
+import { GuildAuditModule } from './domain/audit/guild-audit.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SettingsModule } from './api/settings/settings.module';
     EconomyApiModule,
     GamesApiModule,
     SettingsModule,
+    GuildAuditModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -58,6 +60,9 @@ import { SettingsModule } from './api/settings/settings.module';
             IntentsBitField.Flags.Guilds,
             IntentsBitField.Flags.GuildMessages,
             IntentsBitField.Flags.GuildVoiceStates,
+            ...(configService.get<string>('ENABLE_GUILD_MODERATION_INTENT') === 'true'
+              ? [IntentsBitField.Flags.GuildModeration]
+              : []),
             ...(configService.get<string>('ENABLE_GUILD_MEMBERS_INTENT') === 'true'
               ? [IntentsBitField.Flags.GuildMembers]
               : []),
