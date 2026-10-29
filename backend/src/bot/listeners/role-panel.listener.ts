@@ -107,7 +107,7 @@ export class RolePanelListener {
       // gateway intent or cached member roles is required.
       const [member, bot] = await Promise.all([
         guild.members.fetch({ user: userId, force: true }).catch(() => null),
-        guild.members.fetchMe().catch(() => null),
+        guild.members.fetchMe({ force: true }).catch(() => null),
       ]);
       if (!member || !bot || member.user.bot || !bot.permissions.has(
         PermissionFlagsBits.ManageRoles)) {
