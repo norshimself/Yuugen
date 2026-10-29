@@ -158,6 +158,15 @@ export class RolePanelListener {
         await interaction.editReply('Role change timed out before applying any change.');
         return;
       }
+      const stillActive = await this.panels.getPanel(guildId, parsed.panelId);
+      if (!stillActive || stillActive.status !== 'active' ||
+          stillActive.revision !== current.revision ||
+          stillActive.messageId !== interaction.message.id ||
+          stillActive.channelId !== interaction.channelId) {
+        status = 'denied';
+        await interaction.editReply('The role panel was disabled before your role change.');
+        return;
+      }
       // The role membership API has idempotent single-role routes. Never
       // use member.roles.set(), which would overwrite unrelated staff roles.
       if (plan.operation === 'remove') {
