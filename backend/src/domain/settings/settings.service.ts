@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { GuildSettings } from './guild-settings.entity';
+import { validateOnboardingTemplate, validSnowflake } from '../onboarding/onboarding-policy';
 
 @Injectable()
 export class SettingsService {
@@ -14,9 +15,9 @@ export class SettingsService {
     private settingsRepository: Repository<GuildSettings>,
   ) {}
 
-  async getSettings(guildId: string): Promise<GuildSettings> {
+  async getSettings(guildId: string, fresh = false): Promise<GuildSettings> {
     const cached = this.cache.get(guildId);
-    if (cached && cached.expiresAt > Date.now()) {
+    if (!fresh && cached && cached.expiresAt > Date.now()) {
       return cached.settings;
     }
     let settings = await this.settingsRepository.findOne({
@@ -62,6 +63,37 @@ export class SettingsService {
         throw new BadRequestException('Invalid welcome message');
       }
       settings.welcomeMessage = updateData.welcomeMessage;
+    }
+    // All onboarding options are allowlisted; never save guildId or unknown
+    // fields. Empty destinations disable the corresponding announcement.
+    for (const field of ['goodbyeChannelId', 'rulesChannelId'] as const) {
+      if (updateData[field] !== undefined) {
+        const value: unknown = updateData[field];
+        if (value !== null && value !== '' && !validSnowflake(value)) {
+          throw new BadRequestException('Invalid ' + field);
+        }
+        settings[field] = typeof value === 'string' ? value : null;
+      }
+    }
+    for (const field of ['goodbyeMessage', 'welcomeDmMessage'] as const) {
+      if (updateData[field] !== undefined) {
+        if (!validateOnboardingTemplate(updateData[field])) {
+          throw new BadRequestException('Invalid ' + field);
+        }
+        settings[field] = updateData[field]!;
+      }
+    }
+    for (const field of ['welcomeDmEnabled', 'rulesAcknowledgementEnabled'] as const) {
+      if (updateData[field] !== undefined) {
+        if (typeof updateData[field] !== 'boolean') {
+          throw new BadRequestException('Invalid ' + field);
+        }
+        settings[field] = updateData[field]!;
+      }
+    }
+    if (settings.rulesAcknowledgementEnabled &&
+        (!settings.welcomeDmEnabled || !settings.rulesChannelId)) {
+      throw new BadRequestException('Rules acknowledgement requires welcome DM and rules channel');
     }
     if (updateData.antiSpamEnabled !== undefined) {
       if (typeof updateData.antiSpamEnabled !== 'boolean') {
