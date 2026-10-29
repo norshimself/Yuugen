@@ -252,6 +252,18 @@ describe('RolePanelListener: guild-scoped interactive self-roles (#63)', () => {
     expect(x.service.finishAction).toHaveBeenCalledWith(guildId, 33, 'denied');
   });
 
+  it('refuses a role change when staff disables the panel after audit reservation', async () => {
+    const x = setup();
+    x.service.getPanel
+      .mockResolvedValueOnce(panel)
+      .mockResolvedValueOnce(panel)
+      .mockResolvedValueOnce({ ...panel, status: 'disabled' });
+    await x.listener.onInteraction(x.action as any);
+    expect(x.service.beginAction).toHaveBeenCalled();
+    expect(x.roleAdd).not.toHaveBeenCalled();
+    expect(x.service.finishAction).toHaveBeenCalledWith(guildId, 33, 'denied');
+  });
+
   it('never blindly retries an ambiguous Discord role addition', async () => {
     const x = setup();
     x.roleAdd.mockRejectedValueOnce(new Error('network response unknown'));
