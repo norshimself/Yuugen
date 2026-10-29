@@ -43,29 +43,56 @@ export class SettingsController {
   async updateSettings(
     @Body() body: { guildId: string; settings: Partial<GuildSettings> },
   ): Promise<GuildSettings> {
-    // A submitted text channel must belong to this guild and be writable by
-    // Yuugen. Guard checks that the signed-in user manages the guild.
+    // The authenticated guard has already verified the manager and guild.
+    // Validate only explicit channel changes; additionally recheck rules
+    // visibility whenever acknowledgement is being enabled.
     if (!body?.settings || typeof body.settings !== 'object' ||
         Array.isArray(body.settings)) {
       throw new BadRequestException('Settings payload is required');
     }
-    const selected: unknown = body.settings.welcomeChannelId;
-    if (selected !== undefined && selected !== null && selected !== '') {
-      if (typeof selected !== 'string' || !/^\d{17,20}$/.test(selected)) {
-        throw new BadRequestException('Invalid welcome channel');
+    const existing = await this.settingsService.getSettings(body.guildId);
+    const merged = { ...existing, ...body.settings };
+    const chosen = new Set<string>();
+    for (const field of [
+      'welcomeChannelId', 'goodbyeChannelId', 'rulesChannelId',
+    ] as const) {
+      const value: unknown = body.settings[field];
+      if (value === undefined || value === '' || value === null) continue;
+      if (typeof value !== 'string' || !/^\d{17,20}$/.test(value)) {
+        throw new BadRequestException('Invalid ' + field);
       }
+      chosen.add(value);
+    }
+    if (merged.rulesAcknowledgementEnabled) {
+      if (!merged.welcomeDmEnabled || !merged.rulesChannelId ||
+          !/^\d{17,20}$/.test(merged.rulesChannelId)) {
+        throw new BadRequestException('Rules acknowledgement requires welcome DM and rules channel');
+      }
+      chosen.add(merged.rulesChannelId);
+    }
+    if (chosen.size) {
       const guild = this.discordClient.guilds.cache.get(body.guildId);
-      const channel = await guild?.channels.fetch(selected).catch(() => null);
       const bot = guild?.members.me ||
         await guild?.members.fetchMe().catch(() => null);
-      if (
-        !channel ||
-        channel.type !== ChannelType.GuildText ||
-        !bot ||
-        !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel) ||
-        !channel.permissionsFor(bot)?.has(PermissionFlagsBits.SendMessages)
-      ) {
-        throw new BadRequestException('Select a text channel Yuugen can send to');
+      if (!guild || !bot) {
+        throw new BadRequestException('Bot is unavailable in this guild');
+      }
+      for (const channelId of chosen) {
+        const channel = await guild.channels.fetch(channelId).catch(() => null);
+        if (!channel || channel.type !== ChannelType.GuildText ||
+            !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel) ||
+            (channelId !== merged.rulesChannelId ||
+              !merged.rulesAcknowledgementEnabled) &&
+              !channel.permissionsFor(bot)?.has(PermissionFlagsBits.SendMessages)) {
+          throw new BadRequestException('Select a text channel Yuugen can access');
+        }
+        // DMs may link only to a rules channel visible to new members.
+        if (merged.rulesAcknowledgementEnabled &&
+            channelId === merged.rulesChannelId &&
+            channel.permissionsFor(guild.roles.everyone)
+              ?.has(PermissionFlagsBits.ViewChannel) !== true) {
+          throw new BadRequestException('Rules channel must be visible to new members');
+        }
       }
     }
     return this.settingsService.updateSettings(body.guildId, body.settings);
