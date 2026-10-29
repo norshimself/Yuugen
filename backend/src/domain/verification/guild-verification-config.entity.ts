@@ -28,7 +28,7 @@ export class GuildVerificationConfig {
   @Column({ type: 'integer', default: 1 })
   revision: number;
 
-  @Column({ type: 'varchar', length: 140, nullable: true })
+  @Column({ type: 'varchar', length: 45, nullable: true })
   questionPrompt: string | null;
 
   @Column({ type: 'varchar', length: 32, nullable: true })
