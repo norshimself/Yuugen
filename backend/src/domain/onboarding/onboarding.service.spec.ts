@@ -141,7 +141,6 @@ describe('OnboardingService: durable delivery receipts (#62)', () => {
     expect(x.receipts.delete).toHaveBeenCalledWith({
       guildId, kind: expect.anything(), createdAt: expect.anything(),
     });
-    const [, arg] = [...x.receipts.delete.mock.calls[0][0].kind.value];
     expect(x.receipts.delete.mock.calls[0][0].kind.value).toEqual([
       'welcome', 'goodbye',
     ]);
