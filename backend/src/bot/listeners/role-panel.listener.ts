@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  Guild, GuildMember, Interaction, MessageFlags,
+  Guild, GuildMember, MessageFlags,
   PermissionFlagsBits, Role,
 } from 'discord.js';
 import { Context, On } from 'necord';
@@ -41,13 +41,6 @@ export class RolePanelListener {
     });
     return error || (role.manageable ? null :
       'Yuugen cannot manage a role in this panel.');
-  }
-
-  private async respond(
-    interaction: Interaction & { editReply: (text: string) => Promise<unknown> },
-    message: string,
-  ): Promise<void> {
-    await interaction.editReply(message);
   }
 
   @On('interactionCreate')
