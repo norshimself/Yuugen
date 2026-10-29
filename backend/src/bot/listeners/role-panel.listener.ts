@@ -6,6 +6,7 @@ import {
 import { Context, On } from 'necord';
 import type { ContextOf } from 'necord';
 import { RolePanelService } from '../../domain/roles/role-panel.service';
+import { VerificationService } from '../../domain/verification/verification.service';
 import {
   ROLE_COMPONENT_PREFIX, planRoleToggle, parseRoleComponent,
   roleConfigurationDenial, validatePanelOptions,
@@ -23,7 +24,10 @@ type ActionStatus = 'added' | 'removed' | 'partial' | 'uncertain' | 'denied';
 export class RolePanelListener {
   private readonly logger = new Logger(RolePanelListener.name);
 
-  constructor(private readonly panels: RolePanelService) {}
+  constructor(
+    private readonly panels: RolePanelService,
+    private readonly verification: VerificationService,
+  ) {}
 
   private async manageable(
     guild: Guild, bot: GuildMember, roleId: string,
@@ -114,6 +118,16 @@ export class RolePanelListener {
         await interaction.editReply('Could not verify member, bot or Manage Roles permissions.');
         return;
       }
+      // A quarantined or not-yet-observed new member must not use self-role
+      // menus to gain channel access while verification is still pending.
+      if (await this.verification.isRestricted(
+        guildId, userId, member.joinedTimestamp, member.roles.cache,
+      )) {
+        await interaction.editReply(
+          'Complete the server verification flow before choosing self-roles.',
+        );
+        return;
+      }
       const selectedNow = current.options.find(item => item.id === parsed.optionId);
       if (!selectedNow || selectedNow.roleId !== option.roleId) {
         await interaction.editReply('The selected role is no longer available.');
@@ -165,6 +179,15 @@ export class RolePanelListener {
           stillActive.channelId !== interaction.channelId) {
         status = 'denied';
         await interaction.editReply('The role panel was disabled before your role change.');
+        return;
+      }
+      // Recheck immediately before the Discord mutation so a quarantine
+      // claim created while this interaction was pending fails closed.
+      if (await this.verification.isRestricted(
+        guildId, userId, member.joinedTimestamp,
+      )) {
+        status = 'denied';
+        await interaction.editReply('Verification is now required. No self-role was changed.');
         return;
       }
       // The role membership API has idempotent single-role routes. Never

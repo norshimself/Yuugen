@@ -22,6 +22,9 @@ import { FilterCommand } from './commands/player/filter.command';
 import { EconomyModule } from '../domain/economy/economy.module';
 import { SettingsModule } from '../api/settings/settings.module';
 import { RolePanelModule } from '../domain/roles/role-panel.module';
+import { VerificationModule } from '../domain/verification/verification.module';
+import { VerificationCommands } from './commands/verification/verification.command';
+import { VerificationListener } from './listeners/verification.listener';
 import { RolePanelCommands } from './commands/roles/role-panel.command';
 import { RolePanelListener } from './listeners/role-panel.listener';
 import { ModerationModule } from '../domain/moderation/moderation.module';
@@ -42,7 +45,7 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule, RolePanelModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, RolePanelModule, VerificationModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
@@ -80,6 +83,8 @@ import { WelcomeListener } from './listeners/welcome.listener';
     WelcomeListener,
     RolePanelCommands,
     RolePanelListener,
+    VerificationCommands,
+    VerificationListener,
   ],
 })
 export class BotModule {}
