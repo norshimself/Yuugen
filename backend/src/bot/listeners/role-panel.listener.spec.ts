@@ -84,12 +84,16 @@ describe('RolePanelListener: guild-scoped interactive self-roles (#63)', () => {
       beginAction: jest.fn().mockResolvedValue(33),
       finishAction: jest.fn().mockResolvedValue(true),
     };
+    const verificationGuard = {
+      isRestricted: jest.fn().mockResolvedValue(false),
+    };
     return {
       action, guild, member, bot, service, currentRoles, roleAdd,
       roleRemove, rolesById,
+      verification: verificationGuard,
       listener: new RolePanelListener(
         service as unknown as RolePanelService,
-        { isRestricted: jest.fn().mockResolvedValue(false) } as any,
+        verificationGuard as any,
       ),
     };
   }
@@ -265,6 +269,38 @@ describe('RolePanelListener: guild-scoped interactive self-roles (#63)', () => {
     expect(x.service.beginAction).toHaveBeenCalled();
     expect(x.roleAdd).not.toHaveBeenCalled();
     expect(x.service.finishAction).toHaveBeenCalledWith(guildId, 33, 'denied');
+  });
+
+  it('blocks members with active quarantine before assigning self-roles', async () => {
+    const x = setup();
+    x.verification.isRestricted.mockResolvedValue(true);
+    await x.listener.onInteraction(x.action as any);
+    expect(x.roleAdd).not.toHaveBeenCalled();
+    expect(x.service.beginAction).not.toHaveBeenCalled();
+    expect(x.action.editReply).toHaveBeenCalledWith(
+      expect.stringContaining('Complete the server verification'),
+    );
+  });
+
+  it('rechecks verification immediately before mutation to block a racing join', async () => {
+    const x = setup();
+    x.verification.isRestricted
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    await x.listener.onInteraction(x.action as any);
+    expect(x.roleAdd).not.toHaveBeenCalled();
+    expect(x.service.beginAction).toHaveBeenCalled();
+    expect(x.service.finishAction).toHaveBeenCalledWith(guildId, 33, 'denied');
+  });
+
+  it('fails closed on a verification DB error instead of assigning a role', async () => {
+    const x = setup();
+    x.verification.isRestricted.mockRejectedValueOnce(
+      new Error('verification DB unavailable'),
+    );
+    await x.listener.onInteraction(x.action as any);
+    expect(x.roleAdd).not.toHaveBeenCalled();
+    expect(x.roleRemove).not.toHaveBeenCalled();
   });
 
   it('never blindly retries an ambiguous Discord role addition', async () => {
