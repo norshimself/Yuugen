@@ -138,7 +138,8 @@ export function classifyStructuralAudit(
     case 'member_role_update': {
       const roleChanges = changes.filter(change =>
         (change?.key === '$add' || change?.key === '$remove') &&
-        Array.isArray(change.new) && change.new.length > 0);
+        ((Array.isArray(change.new) && change.new.length > 0) ||
+          (Array.isArray(change.old) && change.old.length > 0)));
       return roleChanges.length
         ? { type: 'member_role_update', changedFields: changedFields(roleChanges) }
         : null;
