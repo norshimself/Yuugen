@@ -278,10 +278,16 @@ export class RolePanelService {
     await this.actions.delete({
       guildId, createdAt: LessThan(new Date(now - THIRTY_DAYS_MS)),
     });
-    await this.locks.delete({
-      guildId, expiresAt: LessThan(new Date(now - THIRTY_DAYS_MS)),
-      lastActionAt: LessThan(new Date(now - THIRTY_DAYS_MS)),
-    });
+    // Delete stale lock rows even when no successful action ever occurred
+    // (lastActionAt is NULL). The guild predicate prevents cross-guild purges.
+    await this.locks.query(
+      [
+        'DELETE FROM "role_panel_member_locks"',
+        'WHERE "guildId" = $1 AND "expiresAt" < $2',
+        'AND ("lastActionAt" IS NULL OR "lastActionAt" < $2)',
+      ].join(' '),
+      [guildId, new Date(now - THIRTY_DAYS_MS)],
+    );
     if (this.lastPruned.size >= 500) this.lastPruned.clear();
     this.lastPruned.set(guildId, now);
   }
