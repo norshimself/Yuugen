@@ -87,7 +87,10 @@ describe('RolePanelListener: guild-scoped interactive self-roles (#63)', () => {
     return {
       action, guild, member, bot, service, currentRoles, roleAdd,
       roleRemove, rolesById,
-      listener: new RolePanelListener(service as unknown as RolePanelService),
+      listener: new RolePanelListener(
+        service as unknown as RolePanelService,
+        { isRestricted: jest.fn().mockResolvedValue(false) } as any,
+      ),
     };
   }
 
