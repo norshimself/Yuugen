@@ -40,7 +40,7 @@ export class GuildAuditEvent {
   status: 'pending' | 'sent' | 'failed';
 
   @Column({ type: 'varchar', length: 32, nullable: true })
-  failureReason: 'missing_permissions' | null;
+  failureReason: 'missing_permissions' | 'config_changed' | null;
 
   @Column({ type: 'timestamptz', nullable: true })
   deliveredAt: Date | null;
