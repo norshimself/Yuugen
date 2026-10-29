@@ -92,6 +92,19 @@ describe('VerificationService: durable sessions and action audit (#64)', () => {
     expect(await x.service.isRestricted(guildId, userId, now)).toBe(true);
   });
 
+  it('blocks re-applied quarantine roles even after a database release', async () => {
+    const x = setup();
+    x.sessions.findOne.mockResolvedValue({
+      guildId, userId, sessionKey, status: 'released', quarantineRoleId: roleId,
+    });
+    expect(await x.service.isRestricted(
+      guildId, userId, now, new Set([roleId]),
+    )).toBe(true);
+    expect(await x.service.isRestricted(
+      guildId, userId, now, new Set(),
+    )).toBe(false);
+  });
+
   it('keeps a rejoined member restricted until the newer session is handled', async () => {
     const x = setup();
     x.sessions.findOne.mockResolvedValue({
