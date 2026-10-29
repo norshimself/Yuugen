@@ -42,6 +42,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Channel lock/unlock and permission-safe restoration](docs/moderation-channel-locks.md)
 - [Per-guild AutoMod rules and dry-run](docs/automod-engine.md)
 - [Private, metadata-only member and message audit channels](docs/guild-audit-channels.md)
+- [Role, channel, webhook and permission audit events](docs/guild-structure-audit.md)
 - [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
 
