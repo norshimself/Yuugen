@@ -21,6 +21,7 @@ import { FilterCommand } from './commands/player/filter.command';
 
 import { EconomyModule } from '../domain/economy/economy.module';
 import { SettingsModule } from '../api/settings/settings.module';
+import { OnboardingModule } from '../domain/onboarding/onboarding.module';
 import { ModerationModule } from '../domain/moderation/moderation.module';
 import { ModerationCommands } from './commands/moderation/moderation.command';
 import { VoiceModerationCommands } from './commands/moderation/voice-moderation.command';
@@ -39,7 +40,7 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, OnboardingModule],
   providers: [
     BotGateway,
     AutoModMessageListener,

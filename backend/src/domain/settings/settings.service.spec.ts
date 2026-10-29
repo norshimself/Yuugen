@@ -12,6 +12,12 @@ describe('SettingsService authorization invariants', () => {
       prefix: 'y!',
       welcomeChannelId: '',
       welcomeMessage: 'Welcome!',
+      goodbyeChannelId: null,
+      goodbyeMessage: 'Goodbye {user} from {guild}.',
+      welcomeDmEnabled: false,
+      welcomeDmMessage: 'Welcome to {guild}, {user}!',
+      rulesAcknowledgementEnabled: false,
+      rulesChannelId: null,
       antiSpamEnabled: false,
       profanityFilterEnabled: false,
       blacklistedWords: [],
@@ -51,4 +57,65 @@ describe('SettingsService authorization invariants', () => {
       service.updateSettings(guildId, { antiSpamEnabled: 'yes' as unknown as boolean }),
     ).rejects.toThrow('Invalid anti-spam setting');
   });
+
+  it('accepts bounded onboarding options without copying unknown entity fields', async () => {
+    const { service } = createService();
+    const result = await service.updateSettings(guildId, {
+      goodbyeChannelId: '345678901234567890',
+      goodbyeMessage: 'Farewell {user}!',
+      welcomeDmEnabled: true,
+      welcomeDmMessage: 'Read the rules in {guild}, {user}.',
+      rulesAcknowledgementEnabled: true,
+      rulesChannelId: '456789012345678901',
+      guildId: otherGuildId,
+    });
+    expect(result.guildId).toBe(guildId);
+    expect(result.goodbyeChannelId).toBe('345678901234567890');
+    expect(result.rulesAcknowledgementEnabled).toBe(true);
+    expect(result.rulesChannelId).toBe('456789012345678901');
+  });
+
+  it('requires a DM and rules channel together before enabling acknowledgement', async () => {
+    const { service } = createService();
+    await expect(service.updateSettings(guildId, {
+      rulesAcknowledgementEnabled: true,
+    })).rejects.toThrow('requires welcome DM');
+    await expect(service.updateSettings(guildId, {
+      welcomeDmEnabled: true,
+      rulesAcknowledgementEnabled: true,
+    })).rejects.toThrow('rules channel');
+    await expect(service.updateSettings(guildId, {
+      welcomeDmEnabled: true,
+      rulesAcknowledgementEnabled: true,
+      rulesChannelId: 'bad',
+    })).rejects.toThrow('Invalid rulesChannelId');
+  });
+
+  it('rejects malformed templates and nonboolean toggles without saving', async () => {
+    const { service, settings } = createService();
+    await expect(service.updateSettings(guildId, {
+      goodbyeMessage: ''.padEnd(1501, 'x'),
+    })).rejects.toThrow('Invalid goodbyeMessage');
+    await expect(service.updateSettings(guildId, {
+      welcomeDmMessage: '\u0000do not render',
+    })).rejects.toThrow('Invalid welcomeDmMessage');
+    await expect(service.updateSettings(guildId, {
+      welcomeDmEnabled: 'yes' as any,
+    })).rejects.toThrow('Invalid welcomeDmEnabled');
+    await expect(service.updateSettings(guildId, {
+      goodbyeChannelId: 'not-a-snowflake',
+    })).rejects.toThrow('Invalid goodbyeChannelId');
+    expect(settings.goodbyeChannelId).toBeNull();
+  });
+
+  it('uses a fresh read to bypass the thirty-second cache when required', async () => {
+    const { service } = createService();
+    const repo = (service as any).settingsRepository;
+    await service.getSettings(guildId);
+    await service.getSettings(guildId);
+    expect(repo.findOne).toHaveBeenCalledTimes(1);
+    await service.getSettings(guildId, true);
+    expect(repo.findOne).toHaveBeenCalledTimes(2);
+  });
+
 });
