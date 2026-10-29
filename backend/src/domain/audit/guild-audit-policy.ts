@@ -26,6 +26,7 @@ export const DEFAULT_GUILD_AUDIT: GuildAuditConfig = {
   enabled: false,
   logChannelId: null,
   selectedEvents: [],
+  retentionDays: 7,
 };
 
 const snowflake = /^\d{17,20}$/;
