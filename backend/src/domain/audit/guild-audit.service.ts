@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import {
   DEFAULT_GUILD_AUDIT, auditEventKey, shouldAudit, validAuditTime,
   validateGuildAuditConfig, type GuildAuditConfig, type GuildAuditType,
@@ -99,8 +99,13 @@ export class GuildAuditService {
 
   async history(guildId: string): Promise<GuildAuditEvent[]> {
     checkGuild(guildId);
+    const config = await this.getConfig(guildId);
+    // A quiet guild might not trigger opportunistic deletion for days.
+    // Do not expose rows beyond configured retention even if still at rest.
+    const cutoff = new Date(Date.now() - (config.retentionDays ?? 7) * ONE_DAY_MS);
     return this.events.find({
-      where: { guildId }, order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
+      where: { guildId, createdAt: MoreThan(cutoff) },
+      order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
     });
   }
 
