@@ -29,7 +29,8 @@ export class GuildAuditListener {
     private readonly config: ConfigService,
   ) {}
 
-  private async record(input: GuildAuditInput): Promise<void> {
+  /** Shared, permission-checked delivery for every audit-log listener. */
+  async record(input: GuildAuditInput): Promise<void> {
     try {
       const item = await this.audit.reserve(input);
       if (!item) return;
@@ -59,6 +60,7 @@ export class GuildAuditListener {
       await channel.send({
         content: formatGuildAudit(
           item.eventType, item.targetId, item.sourceChannelId, item.actorId,
+          item.changedFields ?? [],
         ),
         allowedMentions: { parse: [] },
       });
