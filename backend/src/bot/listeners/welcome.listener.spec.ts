@@ -166,6 +166,16 @@ describe('Welcome / goodbye / first-time onboarding (#62)', () => {
     );
   });
 
+  it('does not retry an uncertain onboarding DM response', async () => {
+    const x = setup();
+    x.settings.welcomeChannelId = '';
+    x.settings.welcomeDmEnabled = true;
+    x.dm.mockRejectedValueOnce(new Error('unknown network state'));
+    await x.listener.onGuildMemberAdd(x.member as any);
+    expect(x.dm).toHaveBeenCalledTimes(1);
+    expect(x.onboarding.finish).not.toHaveBeenCalled();
+  });
+
   it('sends a safe rules-link and user-bound acknowledgement button only when selected', async () => {
     const x = setup();
     x.settings.welcomeChannelId = '';
