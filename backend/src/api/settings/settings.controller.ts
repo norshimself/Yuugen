@@ -53,6 +53,7 @@ export class SettingsController {
     const existing = await this.settingsService.getSettings(body.guildId);
     const merged = { ...existing, ...body.settings };
     const chosen = new Set<string>();
+    const sendRequired = new Set<string>();
     for (const field of [
       'welcomeChannelId', 'goodbyeChannelId', 'rulesChannelId',
     ] as const) {
@@ -62,6 +63,7 @@ export class SettingsController {
         throw new BadRequestException('Invalid ' + field);
       }
       chosen.add(value);
+      if (field !== 'rulesChannelId') sendRequired.add(value);
     }
     if (merged.rulesAcknowledgementEnabled) {
       if (!merged.welcomeDmEnabled || !merged.rulesChannelId ||
@@ -81,9 +83,8 @@ export class SettingsController {
         const channel = await guild.channels.fetch(channelId).catch(() => null);
         if (!channel || channel.type !== ChannelType.GuildText ||
             !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel) ||
-            (channelId !== merged.rulesChannelId ||
-              !merged.rulesAcknowledgementEnabled) &&
-              !channel.permissionsFor(bot)?.has(PermissionFlagsBits.SendMessages)) {
+            (sendRequired.has(channelId) &&
+              !channel.permissionsFor(bot)?.has(PermissionFlagsBits.SendMessages))) {
           throw new BadRequestException('Select a text channel Yuugen can access');
         }
         // DMs may link only to a rules channel visible to new members.
