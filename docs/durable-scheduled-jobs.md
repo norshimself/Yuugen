@@ -82,12 +82,29 @@ exclude job payloads. `retryDead` is scoped to a guild and operator ID and
 works only for `dead` jobs with `handler_missing` or `retry_exhausted`
 (known no-effect classifications). It never retries `needs_review`.
 
-There is **no public HTTP admin endpoint or operator CLI yet**. These methods
-are for future permission-checked staff operations. Direct database edits,
-deleting lease tokens, changing `needs_review` to `pending`, or running
-manual job SQL against live production are **not** supported recovery paths.
-Operators must reconcile unknown remote effects before any separate release
-adds a controlled reconciliation flow.
+The manager-only HTTP operations are bound to the existing JWT and live
+Discord membership / **Manage Server** guards. They require the bot to be in
+the requested guild, force-refresh the actor's membership, and do not accept
+caller-supplied actor IDs:
+
+- `GET /api/v1/scheduler/jobs/status?guildId=...` returns counts only.
+- `GET /api/v1/scheduler/jobs/failed?guildId=...` returns at most 20
+  job IDs, kinds, statuses, attempt counts and fixed error codes, never payloads.
+- `POST /api/v1/scheduler/jobs/cancel` with JSON
+  `{"guildId":"...","jobId":"..."}` cancels pending jobs and requests
+  cancellation for in-flight jobs; it **cannot** undo sent Discord actions.
+- `POST /api/v1/scheduler/jobs/retry` with the same JSON allows a
+  manager-initiated retry only if the job is `dead` and the database has a
+  known-no-effect failure classification. It never retries `needs_review`.
+
+Do not treat `{"changed":false}` as success: the job might be missing, in
+another guild, already finished, or ineligible. Both mutation endpoints reject
+unexpected body fields. The API cannot perform manual reconciliation of an
+unknown remote result; that needs a separately reviewed, human-confirmed flow.
+Direct database edits, deleting lease tokens, changing `needs_review` to
+`pending`, or running manual job SQL against live production are **not**
+supported recovery paths. Keep these endpoints away from production until
+authentication, staging and privacy acceptance is complete.
 
 ## Verification before merge / release
 
@@ -112,8 +129,10 @@ adds a controlled reconciliation flow.
    replay a Discord rate-limit error and simulate an uncertain provider
    response. Require no unapproved action and no second attempt after
    uncertainty. No real user bans/messages should be part of a test.
-7. Review metadata retention and deletion with #91, error alerting,
-   authenticated operator manual-retry interface and operational metrics.
+7. Test the authenticated operator API with manager/non-manager JWTs, cross-
+   guild IDs, permission revocation, missing jobs and disputed outcomes.
+   Review metadata retention and deletion with #91, error alerting,
+   and operational metrics.
    Gain operator sign-off before enabling any production worker.
 
 ## Rollback
