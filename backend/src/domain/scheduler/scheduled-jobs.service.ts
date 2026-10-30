@@ -78,6 +78,39 @@ export class ScheduledJobsService {
         FROM claimed`,[limit,workerId,kinds]);
   }
 
+  /**
+   * This can ONLY be called by the worker on a claim that has not entered
+   * executeOne. No external side effect occurred, so release immediately and
+   * restore the attempt budget. A raced manager cancellation stays final.
+   * The lease token and expiry fence a concurrent reaper/worker takeover.
+   */
+  async releaseUnstarted(job: ClaimedJob): Promise<boolean> {
+    const rows: Array<{id:string}> = await this.db.query(
+      `WITH released AS (
+        UPDATE ${JOBS} SET
+          "status"=CASE WHEN "cancelRequested" THEN 'canceled' ELSE 'pending' END,
+          "attempts"="attempts"-1,
+          "leaseToken"=NULL,"leaseOwner"=NULL,"leaseUntil"=NULL,
+          "lastErrorCode"=CASE WHEN "cancelRequested"
+            THEN 'cancel_requested' ELSE NULL END,
+          "lastErrorAt"=CASE WHEN "cancelRequested"
+            THEN clock_timestamp() ELSE NULL END,
+          "finishedAt"=CASE WHEN "cancelRequested"
+            THEN clock_timestamp() ELSE NULL END,
+          "updatedAt"=clock_timestamp()
+        WHERE id=$1::bigint AND "status"='running'
+          AND "leaseToken"=$2::uuid AND "leaseOwner"=$3
+          AND "leaseUntil">clock_timestamp() AND "attempts">0
+        RETURNING id,"attempts","status"
+      ), audit AS (
+        INSERT INTO ${EVENTS} ("jobId","event","attempt","reasonCode")
+        SELECT id,'released_unstarted',"attempts",'shutdown_before_dispatch'
+        FROM released
+      ) SELECT id::text AS id FROM released`,
+      [job.id,job.leaseToken,job.leaseOwner]);
+    return rows.length===1;
+  }
+
   /** An expired in-flight external operation is UNCERTAIN, not auto-retryable. */
   async reconcileExpiredLeases(): Promise<number> {
     const rows: Array<{jobId:string}> = await this.db.query(
