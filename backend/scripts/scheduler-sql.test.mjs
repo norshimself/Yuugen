@@ -108,6 +108,7 @@ test('database contract guards kind, identities, leases, audit and claim index',
     assert.ok(sql.includes(required), 'Missing SQL contract: ' + required);
   }
   assert.match(sql, /"jobId" BIGINT NOT NULL REFERENCES "scheduled_jobs"/);
+  assert.match(sql, /'manual_resolved'/);
   assert.match(sql, /"kind", "runAt", "id"\) WHERE "status" = 'pending'/);
 });
 
