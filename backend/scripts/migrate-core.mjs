@@ -10,16 +10,95 @@ const MIGRATION_NAME = /^\d{8}_[a-z][a-z0-9_]*\.sql$/;
  * before execution inside the runner's single transaction: an inner COMMIT
  * would otherwise commit the schema before its ledger entry is recorded.
  */
+function sqlStatements(sql, filename) {
+  const masked = [];
+  for (let i = 0; i < sql.length;) {
+    const two = sql.slice(i, i + 2);
+    if (two === '--') {
+      let j = i + 2;
+      while (j < sql.length && sql[j] !== '\n') j++;
+      masked.push(' '.repeat(j - i));
+      i = j;
+      continue;
+    }
+    if (two === '/*') {
+      let depth = 1;
+      let j = i + 2;
+      while (j < sql.length && depth > 0) {
+        if (sql.slice(j, j + 2) === '/*') { depth++; j += 2; }
+        else if (sql.slice(j, j + 2) === '*/') { depth--; j += 2; }
+        else j++;
+      }
+      if (depth !== 0) throw new Error(filename + ': unterminated SQL block comment');
+      masked.push(' '.repeat(j - i));
+      i = j;
+      continue;
+    }
+    if (sql[i] === "'" || sql[i] === '"') {
+      const quote = sql[i];
+      const escapeString = quote === "'" && /[Ee]/.test(sql[i - 1] || '') &&
+        (i < 2 || !/[A-Za-z0-9_]/.test(sql[i - 2]));
+      let j = i + 1;
+      let closed = false;
+      while (j < sql.length) {
+        if (escapeString && sql[j] === '\\' && j + 1 < sql.length) { j += 2; continue; }
+        if (sql[j] === quote) {
+          if (sql[j + 1] === quote) { j += 2; continue; }
+          j++;
+          closed = true;
+          break;
+        }
+        j++;
+      }
+      if (!closed) throw new Error(filename + ': unterminated SQL quoted literal/identifier');
+      masked.push(' '.repeat(j - i));
+      i = j;
+      continue;
+    }
+    const dollar = sql[i] === '$'
+      ? /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.exec(sql.slice(i))?.[0]
+      : null;
+    if (dollar) {
+      const end = sql.indexOf(dollar, i + dollar.length);
+      if (end === -1) throw new Error(filename + ': unterminated SQL dollar quote');
+      const j = end + dollar.length;
+      masked.push(' '.repeat(j - i));
+      i = j;
+      continue;
+    }
+    masked.push(sql[i]);
+    i++;
+  }
+  const safe = masked.join('');
+  const parts = [];
+  let start = 0;
+  for (let j = 0; j < safe.length; j++) {
+    if (safe[j] === ';') {
+      parts.push({ start, end: j, statement: safe.slice(start, j).trim() });
+      start = j + 1;
+    }
+  }
+  if (safe.slice(start).trim()) {
+    throw new Error(filename + ': SQL must end with an outer COMMIT;');
+  }
+  return parts;
+}
+
 export function unwrapMigration(sql, filename = 'migration.sql') {
-  const match = /^(?:\s|--[^\n]*(?:\n|$))*BEGIN\s*;\s*([\s\S]*?)\s*COMMIT\s*;\s*$/i.exec(sql);
-  if (!match || !match[1].trim()) {
+  const statements = sqlStatements(sql, filename);
+  const first = statements[0];
+  const last = statements.at(-1);
+  if (statements.length < 3 || statements.some((item) => !item.statement) ||
+      first.statement.toUpperCase() !== 'BEGIN' ||
+      last.statement.toUpperCase() !== 'COMMIT') {
     throw new Error(filename + ': expected exactly one outer BEGIN; ... COMMIT; wrapper');
   }
-  const body = match[1].trim();
-  if (/(^|\n)\s*(BEGIN|COMMIT|END|ROLLBACK|SAVEPOINT|RELEASE)\s*;/i.test(body)) {
-    throw new Error(filename + ': nested transaction commands are not supported');
+  for (const statement of statements.slice(1, -1)) {
+    if (/^(?:BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK|ABORT|SAVEPOINT|RELEASE|PREPARE\s+TRANSACTION)\b/i.test(statement.statement)) {
+      throw new Error(filename + ': nested transaction commands are not supported');
+    }
   }
-  return body;
+  return sql.slice(first.end + 1, last.start).trim();
 }
 
 export async function loadMigrations(directory = MIGRATION_DIRECTORY) {
