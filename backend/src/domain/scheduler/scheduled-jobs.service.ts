@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { type ClaimedJob, type JobOutcome, type NewScheduledJob,
-  normalizeJob, transitionFor, assertSnowflake } from './scheduler-policy';
+  normalizeJob, transitionFor, assertSnowflake,
+  SCHEDULED_KINDS, type ScheduledKind } from './scheduler-policy';
 
 const JOBS = 'public.scheduled_jobs';
 const EVENTS = 'public.scheduled_job_events';
@@ -44,14 +45,24 @@ export class ScheduledJobsService {
   }
 
   /** Pending claims use PostgreSQL time and SKIP LOCKED, across all processes. */
-  async claim(workerId: string, limit = 5): Promise<ClaimedJob[]> {
+  async claim(
+    workerId: string,
+    limit = 5,
+    kinds: readonly ScheduledKind[] = SCHEDULED_KINDS,
+  ): Promise<ClaimedJob[]> {
     if (!/^[a-zA-Z0-9:_-]{1,80}$/.test(workerId)) throw new Error('Invalid worker ID');
     if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error('Invalid batch size');
+    if (!Array.isArray(kinds) || kinds.length < 1 || kinds.length > SCHEDULED_KINDS.length ||
+        new Set(kinds).size !== kinds.length ||
+        !kinds.every((kind) => SCHEDULED_KINDS.includes(kind))) {
+      throw new Error('Invalid scheduler handler kind set');
+    }
     return this.db.query(
       `WITH due AS (
         SELECT id FROM ${JOBS}
         WHERE "status"='pending' AND "runAt" <= clock_timestamp()
           AND "cancelRequested"=FALSE AND "attempts" < "maxAttempts"
+          AND "kind" = ANY($3::text[])
         ORDER BY "runAt",id LIMIT $1 FOR UPDATE SKIP LOCKED
       ), claimed AS (
         UPDATE ${JOBS} AS j SET "status"='running',"attempts"=j."attempts"+1,
@@ -64,7 +75,7 @@ export class ScheduledJobsService {
         SELECT id,'claimed',"attempts" FROM claimed
       ) SELECT id::text AS id,"guildId","kind","payload","attempts","maxAttempts",
         "leaseToken"::text AS "leaseToken","leaseOwner","cancelRequested"
-        FROM claimed`,[limit,workerId]);
+        FROM claimed`,[limit,workerId,kinds]);
   }
 
   /** An expired in-flight external operation is UNCERTAIN, not auto-retryable. */
