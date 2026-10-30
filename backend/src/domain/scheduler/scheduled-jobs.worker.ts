@@ -45,11 +45,13 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
   /** Single-item claim avoids letting other jobs' 60-second leases age in a batch. */
   async runOnce(): Promise<void> {
     if (this.stopping) return;
-    if (this.registry.size === 0) return;
+    // Recovery is required even if a deployment has not registered handlers:
+    // no orphaned running job may remain invisible after restart.
     const uncertain = await this.jobs.reconcileExpiredLeases();
     if (uncertain > 0) {
       this.logger.warn('Scheduler parked expired leases for manual review: ' + uncertain);
     }
+    if (this.registry.size === 0) return;
     const [job] = await this.jobs.claim(this.workerId, 1);
     if (job) await this.executeOne(job);
   }
