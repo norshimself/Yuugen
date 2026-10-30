@@ -166,6 +166,7 @@ export async function inspectMigrations(client, migrations) {
 export async function applyMigrations(client, migrations) {
   await client.query('BEGIN');
   try {
+    await client.query('SET LOCAL search_path = public');
     await client.query("SET LOCAL lock_timeout = '10s'");
     await client.query("SET LOCAL statement_timeout = '120s'");
     await client.query('SELECT pg_advisory_xact_lock(202610, 89)');
