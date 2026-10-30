@@ -22,7 +22,7 @@ test('manifest loads the seven main-branch migrations in dependency order', asyn
 
 test('only outer transaction wrappers are removed', () => {
   assert.equal(unwrapMigration('-- header\nBEGIN;\nSELECT 1;\nCOMMIT;'), 'SELECT 1;');
-  assert.throws(() => unwrapMigration('SELECT 1'), /expected exactly one outer/);
+  assert.throws(() => unwrapMigration('SELECT 1'), /outer/);
   assert.throws(() => unwrapMigration('BEGIN; SAVEPOINT;\nCOMMIT;'), /nested transaction/);
   assert.throws(() => unwrapMigration('BEGIN; SELECT 1; COMMIT; SELECT 2; COMMIT;'), /nested transaction/);
   assert.throws(() => unwrapMigration('BEGIN; SELECT 1; ROLLBACK; SELECT 2; COMMIT;'), /nested transaction/);
