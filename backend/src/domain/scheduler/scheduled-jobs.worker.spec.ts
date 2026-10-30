@@ -122,6 +122,23 @@ describe('ScheduledJobsWorker safety gates',()=>{
     } as any)).toThrow('Invalid scheduler handler');
   });
 
+  it('quarantines corrupted stored payloads without executing a handler',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    const preflight=jest.fn();
+    handlers.register('reminder_send',{preflight,execute});
+    queue.claim.mockResolvedValueOnce([{
+      ...job,payload:{reminderId:1,unapprovedContent:'@everyone'},
+    }]);
+    await worker.runOnce();
+    expect(preflight).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.settle).toHaveBeenCalledWith(
+      expect.objectContaining({id:job.id}),
+      {outcome:'needs_review',reasonCode:'invalid_claimed_job'},
+    );
+  });
+
   it('does not dispatch after a failed initial permission/resource preflight',async()=>{
     const {worker,queue,handlers}=setup();
     const execute=jest.fn();
