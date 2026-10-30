@@ -1,0 +1,97 @@
+import { ConfigService } from '@nestjs/config';
+import { ScheduledJobsRegistry } from './scheduled-jobs.registry';
+import { ScheduledJobsWorker } from './scheduled-jobs.worker';
+import { ScheduledJobsService } from './scheduled-jobs.service';
+import { type ClaimedJob } from './scheduler-policy';
+
+const job: ClaimedJob = {
+  id:'111',guildId:'123456789012345678',
+  kind:'reminder_send',payload:{reminderId:1},
+  attempts:1,maxAttempts:5,
+  leaseToken:'44444444-4444-4444-4444-444444444444',
+  leaseOwner:'worker-test',cancelRequested:false,
+};
+
+function setup(enabled=false) {
+  const queue = {
+    reconcileExpiredLeases:jest.fn().mockResolvedValue(0),
+    claim:jest.fn().mockResolvedValue([job]),
+    leaseState:jest.fn().mockResolvedValue({alive:true,cancelRequested:false}),
+    heartbeat:jest.fn().mockResolvedValue(true),
+    settle:jest.fn().mockResolvedValue(true),
+  };
+  const handlers=new ScheduledJobsRegistry();
+  const config={get:jest.fn().mockReturnValue(enabled?'true':'false')};
+  const worker=new ScheduledJobsWorker(
+    queue as unknown as ScheduledJobsService,
+    handlers, config as unknown as ConfigService,
+  );
+  return {worker,queue,handlers};
+}
+
+describe('ScheduledJobsWorker safety gates',()=>{
+  it('never starts timers or dispatches with the opt-in flag off',async()=>{
+    const {worker,queue}=setup(false);
+    worker.onModuleInit();
+    await worker.onModuleDestroy();
+    expect(queue.claim).not.toHaveBeenCalled();
+  });
+
+  it('never claims jobs when no handlers are registered',async()=>{
+    const {worker,queue}=setup();
+    await worker.runOnce();
+    expect(queue.claim).not.toHaveBeenCalled();
+  });
+
+  it('dispatches a registered handler and journals completion',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn().mockResolvedValue({outcome:'completed'});
+    handlers.register('reminder_send',{execute});
+    await worker.runOnce();
+    expect(queue.claim).toHaveBeenCalledWith(expect.any(String),1);
+    expect(execute).toHaveBeenCalledWith(job,{
+      assertActive:expect.any(Function),
+    });
+    expect(queue.settle).toHaveBeenCalledWith(job,{outcome:'completed'});
+    await worker.onModuleDestroy();
+  });
+
+  it('cancellation before dispatch never executes remote action',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    handlers.register('reminder_send',{execute});
+    queue.leaseState.mockResolvedValueOnce({alive:true,cancelRequested:true});
+    await worker.runOnce();
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'canceled',reasonCode:'cancel_before_dispatch',
+    });
+  });
+
+  it('an ambiguous handler error is held for review, not retried',async()=>{
+    const {worker,queue,handlers}=setup();
+    handlers.register('reminder_send',{
+      execute:async()=>{throw new Error('ETIMEDOUT after Discord accepted');},
+    });
+    await worker.runOnce();
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    });
+  });
+
+  it('a lost lease never finalizes as success',async()=>{
+    const {worker,queue,handlers}=setup();
+    handlers.register('reminder_send',{execute:async()=>({outcome:'completed'})});
+    queue.leaseState.mockResolvedValueOnce({alive:false,cancelRequested:false});
+    await worker.runOnce();
+    expect(queue.settle).not.toHaveBeenCalled();
+  });
+
+  it('cannot register two handlers for the same kind',()=>{
+    const {handlers}=setup();
+    handlers.register('event_notice',{execute:async()=>({outcome:'completed'})});
+    expect(()=>handlers.register('event_notice',{
+      execute:async()=>({outcome:'completed'}),
+    })).toThrow('Duplicate');
+  });
+});
