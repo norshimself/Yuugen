@@ -40,6 +40,12 @@ deliberate at-least-once *claim* semantics, NOT exactly-once Discord delivery.
 An external API call can succeed just before a worker loses its lease; fencing
 prevents stale database settlement but cannot undo the external side effect.
 
+The worker claims **only job kinds with registered handlers**, so a future
+temporary unban is not discarded merely because a deployment has only
+installed the reminder handler. Pending jobs for unregistered kinds remain
+durable until the appropriate feature module is enabled. The service's
+operator-only `claim` method can accept an explicit safe kind allowlist.
+
 PostgreSQL `clock_timestamp()` defines due time and lease expiry; the API
 requires an unambiguous UTC `Z` timestamp and never interprets local DST
 values. The worker claims **one job at a time** via row locks with
