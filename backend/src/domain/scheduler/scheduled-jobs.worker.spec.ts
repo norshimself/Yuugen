@@ -37,9 +37,11 @@ describe('ScheduledJobsWorker safety gates',()=>{
     expect(queue.claim).not.toHaveBeenCalled();
   });
 
-  it('never claims jobs when no handlers are registered',async()=>{
+  it('reconciles expired leases but never claims when no handlers are registered',async()=>{
     const {worker,queue}=setup();
+    queue.reconcileExpiredLeases.mockResolvedValueOnce(2);
     await worker.runOnce();
+    expect(queue.reconcileExpiredLeases).toHaveBeenCalledTimes(1);
     expect(queue.claim).not.toHaveBeenCalled();
   });
 
