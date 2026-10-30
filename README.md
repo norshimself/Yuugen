@@ -30,6 +30,7 @@ database. Never enable TypeORM auto-synchronization in production.
 ## Operator guides
 
 - [PostgreSQL migration runner, safety checks and recovery](docs/postgresql-migrations.md)
+- [Durable scheduled jobs, recovery and staging checklist](docs/durable-scheduled-jobs.md)
 - [Release-readiness matrix and test plan](docs/release-readiness.md)
 - [Staging OAuth, WebSocket, voice and economy acceptance](docs/staging-acceptance.md)
 - [Manual authentication deployment](docs/manual-auth-deployment.md)
