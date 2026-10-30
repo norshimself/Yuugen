@@ -53,7 +53,7 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
       this.logger.warn('Scheduler parked expired leases for manual review: ' + uncertain);
     }
     if (this.registry.size === 0) return;
-    const [job] = await this.jobs.claim(this.workerId, 1);
+    const [job] = await this.jobs.claim(this.workerId, 1, this.registry.kinds);
     if (job) await this.executeOne(job);
   }
 
