@@ -253,6 +253,57 @@ describe('ScheduledJobsWorker safety gates',()=>{
     }
   });
 
+  it('bounds a hung guild permission preflight before any remote effect',async()=>{
+    jest.useFakeTimers();
+    try {
+      const {worker,queue,handlers}=setup();
+      const execute=jest.fn();
+      handlers.register('reminder_send',{
+        preflight:async()=>new Promise(()=>{}),
+        execute,
+      });
+      const run=worker.runOnce();
+      await jest.advanceTimersByTimeAsync(5*60_000);
+      await run;
+      expect(execute).not.toHaveBeenCalled();
+      expect(queue.settle).toHaveBeenCalledWith(job,{
+        outcome:'needs_review',reasonCode:'execution_timeout',
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops late actions after a failed lease heartbeat',async()=>{
+    jest.useFakeTimers();
+    try {
+      const {worker,queue,handlers}=setup();
+      const effect=jest.fn();
+      let resume: (()=>void)|undefined;
+      queue.heartbeat.mockResolvedValueOnce(false);
+      handlers.register('reminder_send',{
+        preflight:async()=>({state:'ready'}),
+        execute:async(_job,context)=>{
+          await new Promise<void>(resolve=>{resume=resolve;});
+          await context.assertActive();
+          effect();
+          return {outcome:'completed'};
+        },
+      });
+      const run=worker.runOnce();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(resume).toBeDefined();
+      await jest.advanceTimersByTimeAsync(15_000);
+      resume!();
+      await run;
+      expect(effect).not.toHaveBeenCalled();
+      // A lost lease cannot settle; the reaper will park it for review.
+      expect(queue.settle).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rechecks permissions for each action and parks later uncertainty',async()=>{
     const {worker,queue,handlers}=setup();
     const external=jest.fn();
