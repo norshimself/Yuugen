@@ -59,6 +59,7 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
 
   private async executeOne(job: ClaimedJob): Promise<void> {
     let leaseLost = false;
+    const handler = this.registry.get(job.kind);
     const heartbeat = setInterval(() => {
       void this.jobs.heartbeat(job).then((alive) => {
         if (!alive) leaseLost = true;
@@ -72,6 +73,14 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
       if (!state.alive || state.cancelRequested) {
         throw new Error('Scheduler lease or target canceled');
       }
+      // Every remote side effect must be preceded by a fresh permission and
+      // resource probe, not just a database lease check.
+      if (handler) {
+        const preflight = await handler.preflight(job);
+        if (!preflight || preflight.state !== 'ready') {
+          throw new Error('Scheduler live authorization or resource check failed');
+        }
+      }
     };
 
     try {
@@ -83,14 +92,24 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const handler = this.registry.get(job.kind);
       let outcome: JobOutcome;
       if (!handler) {
         outcome = { outcome: 'dead', reasonCode: 'handler_missing' };
       } else {
-        // The handler is responsible for fresh guild permissions/target checks,
-        // and for calling assertActive immediately before all external actions.
-        outcome = await handler.execute(job, { assertActive });
+        // A pre-dispatch denial is safe to classify before any remote effects.
+        // This is mandatory even if the handler forgets to call assertActive.
+        const preflight = await handler.preflight(job);
+        if (!preflight) throw new Error('Invalid scheduler preflight');
+        if (preflight.state === 'canceled' || preflight.state === 'needs_review') {
+          outcome = { outcome: preflight.state, reasonCode: preflight.reasonCode };
+        } else if (preflight.state === 'ready') {
+          // Recheck the lease AND authorization after the first probe: a
+          // cancellation could race an async guild permission fetch.
+          await assertActive();
+          outcome = await handler.execute(job, { assertActive });
+        } else {
+          throw new Error('Invalid scheduler preflight');
+        }
       }
       if (leaseLost) return;
       // An expired or replaced token cannot settle, even after a remote API call.
