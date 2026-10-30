@@ -131,8 +131,8 @@ creates/drops only a random `yuugen_scheduler_it_*` database:
 
 ```bash
 cd backend
-YUUGEN_SCHEDULER_TEST_CONFIRM=disposable \\
-  YUUGEN_SCHEDULER_TEST_ADMIN_URL=postgres://postgres:password@127.0.0.1:5432/postgres \\
+YUUGEN_SCHEDULER_TEST_CONFIRM=disposable \
+  YUUGEN_SCHEDULER_TEST_ADMIN_URL=postgres://postgres:password@127.0.0.1:5432/postgres \
   npm run test:e2e -- --runInBand scheduler.pg.e2e-spec.ts
 ```
 
