@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS "scheduled_job_events" (
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "CHK_scheduled_job_events_event" CHECK (
     "event" IN ('queued', 'claimed', 'completed', 'canceled', 'retry',
-      'dead', 'needs_review', 'lease_expired', 'manual_retry', 'manual_resolved', 'cancel_requested')
+      'dead', 'needs_review', 'lease_expired', 'manual_retry', 'manual_resolved',
+      'released_unstarted', 'cancel_requested')
   ),
   CONSTRAINT "CHK_scheduled_job_events_attempt" CHECK ("attempt" BETWEEN 0 AND 10)
 );
