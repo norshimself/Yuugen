@@ -4,6 +4,7 @@ import {
 import { JwtAuthGuard } from '../../api/auth/jwt-auth.guard';
 import { GuildAccessGuard, RequireGuildManager } from '../../api/auth/guild-access.guard';
 import { ScheduledJobsService } from './scheduled-jobs.service';
+import { ScheduledJobsRegistry } from './scheduled-jobs.registry';
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const JOB_ID = /^[1-9]\d{0,18}$/;
@@ -23,11 +24,32 @@ function parseMutation(value: unknown): { guildId: string; jobId: string } {
   return { guildId: fields.guildId, jobId: fields.jobId };
 }
 
+function parseResolution(value: unknown): {
+  guildId: string; jobId: string; disposition: 'completed' | 'canceled';
+} {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new BadRequestException('An explicit review confirmation is required');
+  }
+  const fields = value as Record<string, unknown>;
+  if (Object.keys(fields).sort().join(',') !== 'confirmed,disposition,guildId,jobId' ||
+      fields.confirmed !== true ||
+      (fields.disposition !== 'completed' && fields.disposition !== 'canceled')) {
+    throw new BadRequestException('An explicit terminal review disposition is required');
+  }
+  const {guildId,jobId} = parseMutation({
+    guildId: fields.guildId, jobId: fields.jobId,
+  });
+  return {guildId,jobId,disposition:fields.disposition};
+}
+
 @Controller('scheduler/jobs')
 @RequireGuildManager()
 @UseGuards(JwtAuthGuard, GuildAccessGuard)
 export class ScheduledJobsController {
-  constructor(private readonly jobs: ScheduledJobsService) {}
+  constructor(
+    private readonly jobs: ScheduledJobsService,
+    private readonly registry: ScheduledJobsRegistry,
+  ) {}
 
   /** Metadata only. JWT, fresh guild membership and Manage Server required. */
   @Get('status')
@@ -40,6 +62,13 @@ export class ScheduledJobsController {
   @Header('Cache-Control', 'no-store')
   async failed(@Query('guildId') guildId: string) {
     return { jobs: await this.jobs.failedJobs(guildId, 20) };
+  }
+
+  /** No job IDs, payloads, credentials, or raw provider errors. */
+  @Get('metrics')
+  @Header('Cache-Control', 'no-store')
+  async metrics(@Query('guildId') guildId: string) {
+    return { metrics: await this.jobs.healthMetrics(guildId, this.registry.kinds) };
   }
 
   /** Cancel only this guild's pending/running job; running is best effort. */
@@ -65,4 +94,21 @@ export class ScheduledJobsController {
     const { guildId, jobId } = parseMutation(body);
     return { changed: await this.jobs.retryDead(guildId, jobId, request.user.id) };
   }
+  /**
+   * Operator attests to a verified terminal remote outcome. An ambiguous job
+   * is never requeued, and only the authenticated guild manager is journaled.
+   */
+  @Post('resolve')
+  async resolve(
+    @Body() body: unknown,
+    @Req() request: { user: { id: string } },
+  ) {
+    const {guildId,jobId,disposition} = parseResolution(body);
+    return {
+      changed: await this.jobs.resolveReviewedJob(
+        guildId,jobId,request.user.id,disposition,
+      ),
+    };
+  }
+
 }
