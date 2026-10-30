@@ -2,6 +2,7 @@ import 'reflect-metadata';
 import { BadRequestException } from '@nestjs/common';
 import { ScheduledJobsController } from './scheduled-jobs.controller';
 import { ScheduledJobsService } from './scheduled-jobs.service';
+import { ScheduledJobsRegistry } from './scheduled-jobs.registry';
 import { JwtAuthGuard } from '../../api/auth/jwt-auth.guard';
 import { GuildAccessGuard } from '../../api/auth/guild-access.guard';
 
@@ -18,10 +19,16 @@ function setup() {
     }]),
     cancel: jest.fn().mockResolvedValue(true),
     retryDead: jest.fn().mockResolvedValue(true),
+    resolveReviewedJob: jest.fn().mockResolvedValue(true),
+    healthMetrics: jest.fn().mockResolvedValue({
+      dueRunnable:'2',awaitingHandler:'1',expiredLeases:'0',
+      needsReview:'3',dead:'1',oldestDueSeconds:'120',
+    }),
   };
+  const registry = new ScheduledJobsRegistry();
   return {
-    jobs,
-    controller: new ScheduledJobsController(jobs as unknown as ScheduledJobsService),
+    jobs, registry,
+    controller: new ScheduledJobsController(jobs as unknown as ScheduledJobsService, registry),
   };
 }
 
@@ -47,6 +54,50 @@ describe('ScheduledJobsController', () => {
     });
     expect(jobs.statusCounts).toHaveBeenCalledWith(guildId);
     expect(jobs.failedJobs).toHaveBeenCalledWith(guildId, 20);
+  });
+
+  it('reports manager-only queue health with registered handler kinds',async()=>{
+    const {jobs,registry,controller}=setup();
+    expect(await controller.metrics(guildId)).toEqual({metrics:{
+      dueRunnable:'2',awaitingHandler:'1',expiredLeases:'0',
+      needsReview:'3',dead:'1',oldestDueSeconds:'120',
+    }});
+    expect(jobs.healthMetrics).toHaveBeenCalledWith(guildId,[]);
+    registry.register('reminder_send',{
+      preflight:async()=>({state:'ready'}),
+      execute:async()=>({outcome:'completed'}),
+    });
+    await controller.metrics(guildId);
+    expect(jobs.healthMetrics).toHaveBeenLastCalledWith(guildId,['reminder_send']);
+  });
+
+  it('records only explicitly confirmed terminal review outcomes', async () => {
+    const {jobs,controller}=setup();
+    const payload={guildId,jobId:'7',confirmed:true,disposition:'completed'};
+    expect(await controller.resolve(payload,request)).toEqual({changed:true});
+    expect(jobs.resolveReviewedJob).toHaveBeenCalledWith(
+      guildId,'7',moderatorId,'completed',
+    );
+    expect(await controller.resolve({...payload,disposition:'canceled'},request))
+      .toEqual({changed:true});
+    expect(jobs.resolveReviewedJob).toHaveBeenLastCalledWith(
+      guildId,'7',moderatorId,'canceled',
+    );
+    jobs.resolveReviewedJob.mockResolvedValueOnce(false);
+    expect(await controller.resolve(payload,request)).toEqual({changed:false});
+  });
+
+  it.each([
+    null, {},
+    {guildId,jobId:'7',disposition:'completed'},
+    {guildId,jobId:'7',confirmed:false,disposition:'completed'},
+    {guildId,jobId:'7',confirmed:true,disposition:'pending'},
+    {guildId,jobId:'9223372036854775808',confirmed:true,disposition:'completed'},
+    {guildId,jobId:'7',confirmed:true,disposition:'completed',rawEvidence:'a secret'},
+  ])('refuses unconfirmed, replay or arbitrary evidence input: %j', async(input)=>{
+    const {jobs,controller}=setup();
+    await expect(controller.resolve(input,request)).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobs.resolveReviewedJob).not.toHaveBeenCalled();
   });
 
   it('uses the authenticated actor ID for cancel and retry', async () => {
