@@ -10,6 +10,10 @@ currently merged into `main`. New migrations (including those added by other dra
 in dependency order, never renamed or edited after application. The SHA-256 checksum of each
 exact SQL file is stored in `public.yuugen_schema_migrations`.
 
+The runner explicitly pins its transaction search path to the `public`
+schema, where Yuugen's existing tables and version ledger live. Using a
+custom application schema requires a reviewed runner change.
+
 The CLI can inspect pending versions without schema writes. Apply runs the
 entire pending batch in one PostgreSQL transaction with a transaction-scoped
 advisory lock shared by concurrent runner instances, then records versions
