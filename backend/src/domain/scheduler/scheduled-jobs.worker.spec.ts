@@ -191,7 +191,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
     const preflight=jest.fn().mockImplementation(async()=>{
       checks++;
       if (checks===2) {
-        await new Promise<void>((resolve)=>{release=resolve;});
+        await new Promise<void>((resolve)=>{release=()=>resolve();});
       }
       return {state:'ready'};
     });
@@ -259,7 +259,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
       const {worker,queue,handlers}=setup();
       const execute=jest.fn();
       handlers.register('reminder_send',{
-        preflight:async()=>new Promise(()=>{}),
+        preflight:async()=>new Promise<never>(()=>{}),
         execute,
       });
       const run=worker.runOnce();
@@ -284,7 +284,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
       handlers.register('reminder_send',{
         preflight:async()=>({state:'ready'}),
         execute:async(_job,context)=>{
-          await new Promise<void>(resolve=>{resume=resolve;});
+          await new Promise<void>(resolve=>{resume=()=>resolve();});
           await context.assertActive();
           effect();
           return {outcome:'completed'};
