@@ -14,6 +14,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { ScheduledJobsService } from '../src/domain/scheduler/scheduled-jobs.service';
+import { assertClaimedJob } from '../src/domain/scheduler/scheduler-policy';
 
 const ADMIN_URL = process.env.YUUGEN_SCHEDULER_TEST_ADMIN_URL;
 const enabled = Boolean(
@@ -155,6 +156,26 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     const later = await b.claim('worker-b', 1, ['temporary_unban']);
     expect(later).toHaveLength(1);
     expect(later[0].id).toBe(unban.id);
+  });
+
+  it('rejects a corrupted JSONB payload after claim and parks the record', async () => {
+    const queued = await a.enqueue(reminder('corrupted-row'));
+    // PostgreSQL validates JSONB object structure, not kind-specific fields.
+    await dbA.query(
+      'UPDATE public.scheduled_jobs SET "payload"=$2::jsonb WHERE id=$1::bigint',
+      [queued.id, '{"reminderId":123,"messageContent":"@everyone"}'],
+    );
+    const [claimed] = await a.claim('worker-a', 1, ['reminder_send']);
+    expect(() => assertClaimedJob(claimed)).toThrow('payload');
+    expect(await a.settle(claimed, {
+      outcome: 'needs_review', reasonCode: 'invalid_claimed_job',
+    })).toBe(true);
+    expect(await b.claim('worker-b', 1, ['reminder_send'])).toHaveLength(0);
+    const status = await dbB.query(
+      'SELECT "status" FROM public.scheduled_jobs WHERE id=$1::bigint',
+      [queued.id],
+    );
+    expect(status[0].status).toBe('needs_review');
   });
 
   it('uses database time, not the application clock, to release due jobs', async () => {
