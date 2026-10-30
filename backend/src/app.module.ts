@@ -10,6 +10,7 @@ import { AuthModule } from './api/auth/auth.module';
 import { PlayerModule } from './api/player/player.module';
 import { BotModule } from './bot/bot.module';
 import { StatusService } from './shared/status.service';
+import { ScheduledJobsModule } from './domain/scheduler/scheduled-jobs.module';
 import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
@@ -27,6 +28,7 @@ import { SettingsModule } from './api/settings/settings.module';
     EconomyApiModule,
     GamesApiModule,
     SettingsModule,
+    ScheduledJobsModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
