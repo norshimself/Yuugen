@@ -6,7 +6,7 @@ been run as part of this change.** The operations below require operator sign-of
 ## Scope and safety
 
 The ordered \`backend/migrations/manifest.json\` registers all seven SQL files
-currently merged into \`main\`. New migrations must be appended in dependency
+currently merged into \`main\`. New migrations, including those added by other draft PRs, must be appended in dependency
 order, never renamed or edited after application. The SHA-256 checksum of each
 exact SQL file is stored in \`public.yuugen_schema_migrations\`.
 
@@ -21,6 +21,24 @@ duplicates or altered checksums. The present SQL files have outer BEGIN/COMMIT;
 the runner strips those wrappers and executes their bodies inside its controlled
 transaction. Do not add nontransactional statements (e.g. CREATE INDEX
 CONCURRENTLY) to this manifest without redesigning the runner.
+
+## Mandatory write target
+
+An `apply` command **always requires** an explicit `--environment`, a
+matching `YUUGEN_MIGRATION_TARGET`, and `--confirm-apply`. There is no
+implicit local write target. Local mode only accepts loopback or the Compose
+`postgres` host and refuses `NODE_ENV=production`:
+
+```bash
+cd backend
+YUUGEN_MIGRATION_TARGET=local DATABASE_URL="$LOCAL_DATABASE_URL" \
+  node scripts/migrate.mjs apply --environment local --confirm-apply
+```
+
+**Warning:** A Compose service named `postgres` can also be deployed in a
+production network. Environment labels and hostnames are guardrails, not
+cryptographic proof of target identity. Check the actual database identity,
+credentials and connectivity before authorizing an apply.
 
 ## Commands
 
