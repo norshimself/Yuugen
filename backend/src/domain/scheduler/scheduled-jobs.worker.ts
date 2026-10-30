@@ -43,7 +43,7 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
       await Promise.race([
         this.running,
         new Promise<void>((resolve) => {
-          timeout = setTimeout(resolve, SHUTDOWN_GRACE_MS);
+          timeout = setTimeout(() => resolve(), SHUTDOWN_GRACE_MS);
         }),
       ]);
     } finally {
