@@ -141,6 +141,7 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     const sql=query.mock.calls[0][0] as string;
     expect(sql).toContain('"status"=\'dead\'');
     expect(sql).toContain("'retry_exhausted','handler_missing'");
+    expect(sql).toContain('"cancelRequested"=FALSE');
     expect(sql).toContain("'manual_retry'");
     expect(sql).not.toContain("'needs_review'");
   });
