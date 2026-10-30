@@ -95,10 +95,16 @@ describe('ScheduledJobsWorker safety gates',()=>{
   it('never claims unregistered future job kinds',async()=>{
     const {worker,queue,handlers}=setup();
     const execute=jest.fn().mockResolvedValue({outcome:'completed'});
+    const eventJob={...job,kind:'event_notice' as const,payload:{eventId:7}};
+    queue.claim.mockResolvedValueOnce([eventJob]);
     handlers.register('event_notice',{preflight:async()=>({state:'ready'}),execute});
     await worker.runOnce();
     expect(queue.claim).toHaveBeenCalledWith(expect.any(String),1,['event_notice']);
     expect(handlers.kinds).toEqual(['event_notice']);
+    expect(execute).toHaveBeenCalledWith(eventJob,{
+      assertActive:expect.any(Function),
+    });
+    expect(queue.settle).toHaveBeenCalledWith(eventJob,{outcome:'completed'});
   });
 
   it('cannot register two handlers for the same kind',()=>{
