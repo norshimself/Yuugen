@@ -12,6 +12,9 @@ Apply `backend/migrations/20261030_scheduled_jobs.sql` only after all earlier
 migrations in the updated versioned manifest, on a backed-up **staging**
 PostgreSQL 17 instance first. The SQL creates:
 
+- `scheduled_jobs`: PostgreSQL also checks supported kind names, 17–20
+  digit guild IDs and idempotency-key syntax, with a kind/due-time partial
+  index so workers efficiently claim only installed feature kinds.
 - `scheduled_jobs`: guild-scoped jobs with a unique
   `(guildId, kind, idempotencyKey)` tuple, minimal typed JSON metadata,
   UTC `timestamptz` due time, attempt bounds, status, lease owner,
