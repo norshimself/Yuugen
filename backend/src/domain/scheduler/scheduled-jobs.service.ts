@@ -177,6 +177,7 @@ export class ScheduledJobsService {
           "lastErrorCode"=NULL,"lastErrorAt"=NULL,
           "cancelRequested"=FALSE,"updatedAt"=clock_timestamp()
         WHERE id=$1::bigint AND "guildId"=$2 AND "status"='dead'
+          AND "cancelRequested"=FALSE
           AND "lastErrorCode" IN ('retry_exhausted','handler_missing')
         RETURNING id,"attempts"
       ), audit AS (
