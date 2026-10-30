@@ -50,7 +50,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
   it('dispatches a registered handler and journals completion',async()=>{
     const {worker,queue,handlers}=setup();
     const execute=jest.fn().mockResolvedValue({outcome:'completed'});
-    handlers.register('reminder_send',{execute});
+    handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
     await worker.runOnce();
     expect(queue.claim).toHaveBeenCalledWith(expect.any(String),1);
     expect(execute).toHaveBeenCalledWith(job,{
@@ -63,7 +63,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
   it('cancellation before dispatch never executes remote action',async()=>{
     const {worker,queue,handlers}=setup();
     const execute=jest.fn();
-    handlers.register('reminder_send',{execute});
+    handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
     queue.leaseState.mockResolvedValueOnce({alive:true,cancelRequested:true});
     await worker.runOnce();
     expect(execute).not.toHaveBeenCalled();
@@ -75,6 +75,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
   it('an ambiguous handler error is held for review, not retried',async()=>{
     const {worker,queue,handlers}=setup();
     handlers.register('reminder_send',{
+      preflight:async()=>({state:'ready'}),
       execute:async()=>{throw new Error('ETIMEDOUT after Discord accepted');},
     });
     await worker.runOnce();
@@ -85,7 +86,7 @@ describe('ScheduledJobsWorker safety gates',()=>{
 
   it('a lost lease never finalizes as success',async()=>{
     const {worker,queue,handlers}=setup();
-    handlers.register('reminder_send',{execute:async()=>({outcome:'completed'})});
+    handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute:async()=>({outcome:'completed'})});
     queue.leaseState.mockResolvedValueOnce({alive:false,cancelRequested:false});
     await worker.runOnce();
     expect(queue.settle).not.toHaveBeenCalled();
@@ -93,9 +94,87 @@ describe('ScheduledJobsWorker safety gates',()=>{
 
   it('cannot register two handlers for the same kind',()=>{
     const {handlers}=setup();
-    handlers.register('event_notice',{execute:async()=>({outcome:'completed'})});
+    handlers.register('event_notice',{preflight:async()=>({state:'ready'}),execute:async()=>({outcome:'completed'})});
     expect(()=>handlers.register('event_notice',{
+      preflight:async()=>({state:'ready'}),
       execute:async()=>({outcome:'completed'}),
     })).toThrow('Duplicate');
   });
+  it('rejects handlers that omit live authorization/resource preflight',()=>{
+    const {handlers}=setup();
+    expect(()=>handlers.register('reminder_send',{
+      execute:async()=>({outcome:'completed'}),
+    } as any)).toThrow('Invalid scheduler handler');
+  });
+
+  it('does not dispatch after a failed initial permission/resource preflight',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    const preflight=jest.fn().mockResolvedValue({
+      state:'needs_review',reasonCode:'bot_permission_revoked',
+    });
+    handlers.register('reminder_send',{preflight,execute});
+    await worker.runOnce();
+    expect(preflight).toHaveBeenCalledWith(job);
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'needs_review',reasonCode:'bot_permission_revoked',
+    });
+  });
+
+  it('classifies deleted resources before dispatch as canceled',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    handlers.register('reminder_send',{
+      preflight:async()=>({state:'canceled',reasonCode:'resource_missing'}),
+      execute,
+    });
+    await worker.runOnce();
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'canceled',reasonCode:'resource_missing',
+    });
+  });
+
+  it('rechecks permissions after async preflight before starting handler',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    const preflight=jest.fn()
+      .mockResolvedValueOnce({state:'ready'})
+      .mockResolvedValueOnce({state:'needs_review',reasonCode:'permission_changed'});
+    handlers.register('reminder_send',{preflight,execute});
+    await worker.runOnce();
+    expect(preflight).toHaveBeenCalledTimes(2);
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    });
+  });
+
+  it('rechecks permissions for each action and parks later uncertainty',async()=>{
+    const {worker,queue,handlers}=setup();
+    const external=jest.fn();
+    const preflight=jest.fn()
+      .mockResolvedValueOnce({state:'ready'})
+      .mockResolvedValueOnce({state:'ready'})
+      .mockResolvedValueOnce({state:'ready'})
+      .mockResolvedValueOnce({state:'needs_review',reasonCode:'permission_changed'});
+    handlers.register('reminder_send',{
+      preflight,
+      execute:async(_job,context)=>{
+        await context.assertActive();
+        external();
+        await context.assertActive();
+        external();
+        return {outcome:'completed'};
+      },
+    });
+    await worker.runOnce();
+    expect(preflight).toHaveBeenCalledTimes(4);
+    expect(external).toHaveBeenCalledTimes(1);
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    });
+  });
+
 });
