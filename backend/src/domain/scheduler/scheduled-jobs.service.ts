@@ -7,7 +7,8 @@ const JOBS = 'public.scheduled_jobs';
 const EVENTS = 'public.scheduled_job_events';
 
 function assertJobId(id: string): void {
-  if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id)) {
+  if (typeof id !== 'string' || !/^[1-9]\d{0,18}$/.test(id) ||
+      BigInt(id) > 9223372036854775807n) {
     throw new Error('Invalid job ID');
   }
 }
@@ -69,13 +70,17 @@ export class ScheduledJobsService {
   /** An expired in-flight external operation is UNCERTAIN, not auto-retryable. */
   async reconcileExpiredLeases(): Promise<number> {
     const rows: Array<{jobId:string}> = await this.db.query(
-      `WITH expired AS (
-        UPDATE ${JOBS} SET "status"='needs_review',"leaseToken"=NULL,
+      `WITH due AS (
+        SELECT id FROM ${JOBS}
+        WHERE "status"='running' AND "leaseUntil"<=clock_timestamp()
+        ORDER BY "leaseUntil",id LIMIT 100 FOR UPDATE SKIP LOCKED
+      ), expired AS (
+        UPDATE ${JOBS} AS j SET "status"='needs_review',"leaseToken"=NULL,
           "leaseOwner"=NULL,"leaseUntil"=NULL,"lastErrorCode"='lease_expired',
           "lastErrorAt"=clock_timestamp(),"finishedAt"=clock_timestamp(),
           "updatedAt"=clock_timestamp()
-        WHERE "status"='running' AND "leaseUntil"<=clock_timestamp()
-        RETURNING id,"attempts"
+        FROM due WHERE j.id=due.id
+        RETURNING j.id,j."attempts"
       ) INSERT INTO ${EVENTS} ("jobId","event","attempt","reasonCode")
         SELECT id,'lease_expired',"attempts",'lease_expired' FROM expired
         RETURNING "jobId"::text AS "jobId"`);
