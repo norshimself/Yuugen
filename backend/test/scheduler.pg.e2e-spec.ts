@@ -11,6 +11,7 @@
  */
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import { ScheduledJobsService } from '../src/domain/scheduler/scheduled-jobs.service';
 
@@ -67,7 +68,7 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     await dbB.initialize();
 
     const migration = await readFile(
-      new URL('../migrations/20261030_scheduled_jobs.sql', import.meta.url),
+      join(__dirname, '../migrations/20261030_scheduled_jobs.sql'),
       'utf8',
     );
     await dbA.query(migration);
