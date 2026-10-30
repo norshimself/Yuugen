@@ -126,8 +126,10 @@ caller-supplied actor IDs:
   `dueRunnable`, `awaitingHandler`, `expiredLeases`, `needsReview`,
   `dead` and `oldestDueSeconds` values. All are computed with the database
   clock for the authenticated guild. Jobs awaiting unregistered handlers are
-  **not** counted as runnable overdue work. A worker-disabled deployment has
-  no active kinds and reports runnable work as zero.
+  **not** counted as runnable overdue work. With no registered handlers,
+  runnable work is zero and pending jobs appear as awaiting a handler.
+  Kind availability reflects the API process answering the request; these
+  metrics alone cannot prove that another worker process is online.
 - `POST /api/v1/scheduler/jobs/cancel` with JSON
   `{"guildId":"...","jobId":"..."}` cancels pending jobs and requests
   cancellation for in-flight jobs; it **cannot** undo sent Discord actions.
