@@ -19,6 +19,7 @@ function setup(enabled=true) {
     leaseState:jest.fn().mockResolvedValue({alive:true,cancelRequested:false}),
     heartbeat:jest.fn().mockResolvedValue(true),
     settle:jest.fn().mockResolvedValue(true),
+    releaseUnstarted:jest.fn().mockResolvedValue(true),
   };
   const handlers=new ScheduledJobsRegistry();
   const config={get:jest.fn().mockReturnValue(enabled?'true':'false')};
@@ -45,6 +46,50 @@ describe('ScheduledJobsWorker safety gates',()=>{
     await worker.runOnce();
     expect(queue.reconcileExpiredLeases).toHaveBeenCalledTimes(1);
     expect(queue.claim).not.toHaveBeenCalled();
+  });
+
+  it('does not claim after shutdown races a slow lease sweep',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
+    let finishSweep: (()=>void) | undefined;
+    let started!: ()=>void;
+    const entered=new Promise<void>(resolve=>{started=()=>resolve();});
+    queue.reconcileExpiredLeases.mockImplementationOnce(async()=>{
+      started();
+      await new Promise<void>(resolve=>{finishSweep=()=>resolve();});
+      return 0;
+    });
+    const run=worker.runOnce();
+    await entered;
+    await worker.onModuleDestroy();
+    finishSweep!();
+    await run;
+    expect(queue.claim).not.toHaveBeenCalled();
+    expect(queue.releaseUnstarted).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it('releases a job claimed during shutdown without starting its handler',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
+    let finishClaim: (()=>void) | undefined;
+    let started!: ()=>void;
+    const entered=new Promise<void>(resolve=>{started=()=>resolve();});
+    queue.claim.mockImplementationOnce(async()=>{
+      started();
+      await new Promise<void>(resolve=>{finishClaim=()=>resolve();});
+      return [job];
+    });
+    const run=worker.runOnce();
+    await entered;
+    await worker.onModuleDestroy();
+    finishClaim!();
+    await run;
+    expect(queue.releaseUnstarted).toHaveBeenCalledWith(job);
+    expect(queue.settle).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it('dispatches a registered handler and journals completion',async()=>{
