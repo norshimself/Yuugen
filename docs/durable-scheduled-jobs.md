@@ -32,8 +32,10 @@ Database permissions/backup strategy and restore rehearsals are tracked in #89.
 `pending` -> `running` -> `completed` is the normal path. A known
 no-side-effect transient failure returns to `pending` with bounded exponential
 backoff (up to 15 minutes), or goes to `dead` on exhausted attempts.
-A known canceled resource moves to `canceled`. Missing handlers become `dead`
-with reason `handler_missing`, without calling Discord.
+A known canceled resource moves to `canceled`. Unregistered job kinds are
+**not claimed** by the worker: their pending jobs remain intact until a safe
+handler is installed. A handler disappearing after a claim is classified as
+`dead` with reason `handler_missing`, without calling Discord.
 
 **Never auto-retry an unknown external outcome.** A thrown handler exception,
 lease expiry, lost execution acknowledgement or ambiguous provider call is
@@ -46,13 +48,19 @@ prevents stale database settlement but cannot undo the external side effect.
 The worker claims **only job kinds with registered handlers**, so a future
 temporary unban is not discarded merely because a deployment has only
 installed the reminder handler. Pending jobs for unregistered kinds remain
-durable until the appropriate feature module is enabled. The service's
-operator-only `claim` method can accept an explicit safe kind allowlist.
+durable until the appropriate feature module is enabled. The internal service's
+`claim` method accepts an explicit safe kind allowlist.
 
 PostgreSQL `clock_timestamp()` defines due time and lease expiry; the API
 requires an unambiguous UTC `Z` timestamp and never interprets local DST
 values. The worker claims **one job at a time** via row locks with
 `FOR UPDATE SKIP LOCKED`, uses a 60-second lease and a 15-second heartbeat.
+A five-minute ceiling bounds even a hung guild preflight or Discord provider
+request. On timeout the job is parked for human review (or is parked when the
+lease reaper expires a lost token); it is **never automatically replayed**.
+During Nest shutdown, lease heartbeats stop immediately and the worker waits
+at most five seconds for an in-flight operation before returning to Nest.
+No timeout can guarantee canceling a remote request already accepted by Discord.
 
 A cancellation request for a pending job is immediate. A running job may
 already have sent an external request; cancel is best-effort. Handlers must
@@ -76,8 +84,8 @@ Every handler **must**:
    for a revoked/uncertain authorization. Never use stale gateway cache or
    raw provider exception text. Handler registration rejects a missing preflight.
 2. Call `context.assertActive()` immediately before *each* Discord mutation.
-   This rechecks both the database lease/cancel flag and the handler's live
-   preflight. The worker also runs preflight **before** it starts the handler.
+   This checks the database lease/cancel flag both **before and after** the
+   handler's potentially slow live preflight. The worker also runs preflight **before** it starts the handler.
    If permissions change after a handler begins, it parks the operation for
    manual review rather than retrying.
 3. Return `{outcome:'retry',reasonCode:'rate_limited'}` only when it can prove
