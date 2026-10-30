@@ -74,6 +74,7 @@ test('apply reserves a transaction lock and records each migration exactly once'
   }};
   assert.deepEqual(await applyMigrations(client, [sample('one'), sample('two')]), ['two']);
   assert.equal(queries[0].sql, 'BEGIN');
+  assert.ok(queries.some((q) => q.sql === 'SET LOCAL search_path = public'));
   assert.ok(queries.some(q => q.sql.includes('pg_advisory_xact_lock')));
   assert.deepEqual(queries.find(q => q.sql.includes('INSERT INTO')).params, ['two','abc']);
   assert.equal(queries.at(-1).sql, 'COMMIT');
