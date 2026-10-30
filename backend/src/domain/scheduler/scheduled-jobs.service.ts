@@ -116,13 +116,13 @@ export class ScheduledJobsService {
     const rows: Array<{id:string}> = await this.db.query(
       `WITH settled AS (
         UPDATE ${JOBS} SET
-          "status"=CASE WHEN "cancelRequested" AND $4='pending'
+          "status"=CASE WHEN "cancelRequested" AND $7::boolean
             THEN 'canceled' ELSE $4 END,
           "runAt"=CASE WHEN $4='pending' AND NOT "cancelRequested"
             THEN clock_timestamp()+($6::integer * INTERVAL '1 second')
             ELSE "runAt" END,
           "leaseToken"=NULL,"leaseOwner"=NULL,"leaseUntil"=NULL,
-          "lastErrorCode"=CASE WHEN "cancelRequested" AND $4='pending'
+          "lastErrorCode"=CASE WHEN "cancelRequested" AND $7::boolean
             THEN 'cancel_requested' ELSE $5 END,
           "lastErrorAt"=CASE WHEN $5::text IS NULL THEN NULL ELSE clock_timestamp() END,
           "finishedAt"=CASE WHEN $4='pending' AND NOT "cancelRequested"
@@ -137,7 +137,8 @@ export class ScheduledJobsService {
         SELECT id,CASE WHEN "status"='pending' THEN 'retry' ELSE "status" END,
           "attempts","lastErrorCode" FROM settled
       ) SELECT id::text AS id FROM settled`,
-      [job.id,job.leaseToken,job.leaseOwner,t.status,t.reasonCode,t.retryDelaySeconds]);
+      [job.id,job.leaseToken,job.leaseOwner,t.status,t.reasonCode,
+        t.retryDelaySeconds,outcome.outcome==='retry']);
     return rows.length===1;
   }
 
