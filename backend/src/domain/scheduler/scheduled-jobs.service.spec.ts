@@ -110,7 +110,7 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(sql).toContain('"leaseUntil">clock_timestamp()');
     // A cancel that races a known-no-effect retry must become final canceled,
     // not an unclaimable pending job with cancelRequested=true.
-    expect(sql).toContain('WHEN "cancelRequested" AND $4=\'pending\'');
+    expect(sql).toContain('WHEN "cancelRequested" AND $7::boolean');
     expect(sql).toContain('THEN \'canceled\' ELSE $4 END');
     expect(sql).toContain('WHEN $4=\'pending\' AND NOT "cancelRequested"');
     expect(sql).toContain('FROM settled');
@@ -118,6 +118,7 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(args[3]).toBe('pending');
     expect(args[4]).toBe('rate_limited');
     expect(args[5]).toBeGreaterThanOrEqual(5);
+    expect(args[6]).toBe(true); // true only for a certified no-side-effect retry
     query.mockResolvedValueOnce([]);
     expect(await svc.settle(claimed,{outcome:'completed'})).toBe(false);
   });
