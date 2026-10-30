@@ -263,6 +263,86 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     expect(await a.statusCounts(otherGuild)).toEqual([]);
   });
 
+  it('manual verification only resolves needs_review terminally and once per guild',async()=>{
+    const queued=await a.enqueue(reminder('manual-review'));
+    const [claimed]=await a.claim('worker-a',1);
+    expect(await a.settle(claimed,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    })).toBe(true);
+    expect(await b.resolveReviewedJob(otherGuild,queued.id,moderator,'completed')).toBe(false);
+    expect(await b.resolveReviewedJob(guild,queued.id,moderator,'completed')).toBe(true);
+    expect(await b.resolveReviewedJob(guild,queued.id,moderator,'canceled')).toBe(false);
+    expect(await a.retryDead(guild,queued.id,moderator)).toBe(false);
+    expect(await b.claim('worker-b',1,['reminder_send'])).toHaveLength(0);
+    const jobRows=await dbB.query(
+      'SELECT "status","lastErrorCode" FROM public.scheduled_jobs WHERE id=$1::bigint',
+      [queued.id],
+    );
+    expect(jobRows[0]).toEqual({
+      status:'completed',lastErrorCode:'unknown_outcome',
+    });
+    const audit=await dbA.query(
+      'SELECT "event","actorId","reasonCode" FROM public.scheduled_job_events '+
+      'WHERE "jobId"=$1::bigint AND "event"=$2',
+      [queued.id,'manual_resolved'],
+    );
+    expect(audit).toEqual([{
+      event:'manual_resolved',actorId:moderator,
+      reasonCode:'operator_verified_complete',
+    }]);
+    const canceled=await a.enqueue(reminder('manual-review-absent'));
+    const [second]=await a.claim('worker-a',1);
+    expect(second.id).toBe(canceled.id);
+    expect(await a.settle(second,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    })).toBe(true);
+    expect(await b.resolveReviewedJob(guild,canceled.id,moderator,'canceled')).toBe(true);
+    const resolution=await dbB.query(
+      'SELECT "status" FROM public.scheduled_jobs WHERE id=$1::bigint',
+      [canceled.id],
+    );
+    expect(resolution[0].status).toBe('canceled');
+  });
+
+  it('health metrics separate due runnable jobs from disabled feature kinds',async()=>{
+    const running=await a.enqueue(reminder('metrics-running'));
+    const [inFlight]=await a.claim('worker-a',1);
+    expect(inFlight.id).toBe(running.id);
+    await dbA.query(
+      'UPDATE public.scheduled_jobs SET "leaseUntil"=clock_timestamp()-INTERVAL \'1 second\' '+
+      'WHERE id=$1::bigint',[running.id],
+    );
+    await a.enqueue(reminder('metrics-review'));
+    const [review]=await a.claim('worker-a',1);
+    expect(await a.settle(review,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    })).toBe(true);
+    await a.enqueue(reminder('metrics-dead'));
+    const [dead]=await a.claim('worker-a',1);
+    expect(await a.settle(dead,{
+      outcome:'dead',reasonCode:'handler_missing',
+    })).toBe(true);
+    await a.enqueue({
+      guildId:guild,kind:'event_notice',idempotencyKey:'metrics-disabled',
+      payload:{eventId:19},runAt:due,
+    });
+    await a.enqueue(reminder('metrics-runnable'));
+    const metrics=await a.healthMetrics(guild,['reminder_send']);
+    expect(metrics).toEqual(expect.objectContaining({
+      dueRunnable:'1',awaitingHandler:'1',expiredLeases:'1',
+      needsReview:'1',dead:'1',
+    }));
+    expect(Number(metrics.oldestDueSeconds)).toBeGreaterThan(0);
+    const disabled=await b.healthMetrics(guild,[]);
+    expect(disabled.dueRunnable).toBe('0');
+    expect(disabled.awaitingHandler).toBe('2');
+    expect(disabled.oldestDueSeconds).toBe('0');
+    const other=await b.healthMetrics(otherGuild,['reminder_send']);
+    expect(other.dueRunnable).toBe('0');
+    expect(other.needsReview).toBe('0');
+    expect(other.dead).toBe('0');
+  });
+
   it('pending cancellation is final, fenced and auditable', async () => {
     const queued = await a.enqueue(reminder('pending-cancel'));
     expect(await b.cancel(guild, queued.id, moderator)).toBe(true);
