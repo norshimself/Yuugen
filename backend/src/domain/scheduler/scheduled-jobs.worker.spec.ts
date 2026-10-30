@@ -12,7 +12,7 @@ const job: ClaimedJob = {
   leaseOwner:'worker-test',cancelRequested:false,
 };
 
-function setup(enabled=false) {
+function setup(enabled=true) {
   const queue = {
     reconcileExpiredLeases:jest.fn().mockResolvedValue(0),
     claim:jest.fn().mockResolvedValue([job]),
@@ -30,10 +30,12 @@ function setup(enabled=false) {
 }
 
 describe('ScheduledJobsWorker safety gates',()=>{
-  it('never starts timers or dispatches with the opt-in flag off',async()=>{
+  it('never starts timers, recovers leases or dispatches with the opt-in flag off',async()=>{
     const {worker,queue}=setup(false);
     worker.onModuleInit();
+    await worker.runOnce(); // even accidental direct invocation must be inert
     await worker.onModuleDestroy();
+    expect(queue.reconcileExpiredLeases).not.toHaveBeenCalled();
     expect(queue.claim).not.toHaveBeenCalled();
   });
 
