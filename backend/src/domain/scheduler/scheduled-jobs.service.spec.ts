@@ -69,9 +69,17 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(sql).toContain('gen_random_uuid()');
     expect(sql).toContain('"attempts"=j."attempts"+1');
     expect(sql).toContain("'claimed'");
-    expect(query.mock.calls[0][1]).toEqual([1,'worker-1']);
+    expect(query.mock.calls[0][1]).toEqual([1,'worker-1',[
+      'temporary_unban','reminder_send','giveaway_close','event_notice',
+    ]]);
+    expect(sql).toContain('"kind" = ANY($3::text[])');
     await expect(svc.claim('bad token with spaces')).rejects.toThrow('worker');
     await expect(svc.claim('worker-1',20)).rejects.toThrow('batch');
+    await expect(svc.claim('worker-1',1,[])).rejects.toThrow('kind');
+    await expect(svc.claim('worker-1',1,['reminder_send','reminder_send']))
+      .rejects.toThrow('kind');
+    await svc.claim('worker-1',1,['reminder_send']);
+    expect(query.mock.calls.at(-1)?.[1]).toEqual([1,'worker-1',['reminder_send']]);
   });
 
   it('parks expired running jobs for human review, never auto-requeues', async () => {
