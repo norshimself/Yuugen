@@ -83,6 +83,13 @@ Every handler **must**:
 4. Make irreversible remote effects idempotent or provide a durable external
    reconciliation key. PostgreSQL locking alone is not an exactly-once guarantee.
 
+The worker also validates each **claimed PostgreSQL row** at runtime (guild,
+kind, ID-only JSON payload, attempt bounds and lease metadata). A legacy,
+corrupted or manually edited row with unexpected payload fields is parked in
+`needs_review` and cannot reach a registered Discord handler. This supplements
+the database's object-type JSONB check; it is not a replacement for input
+validation at enqueue time.
+
 The current PR provides **no registered handlers**. Merely turning on the
 worker flag does not authorize any Discord actions.
 
