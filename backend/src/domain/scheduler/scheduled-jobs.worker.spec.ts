@@ -183,6 +183,76 @@ describe('ScheduledJobsWorker safety gates',()=>{
     });
   });
 
+  it('notices cancellation that races a slow live authorization fetch',async()=>{
+    const {worker,queue,handlers}=setup();
+    const execute=jest.fn();
+    let checks=0;
+    let release: (()=>void) | undefined;
+    const preflight=jest.fn().mockImplementation(async()=>{
+      checks++;
+      if (checks===2) {
+        await new Promise<void>((resolve)=>{release=resolve;});
+      }
+      return {state:'ready'};
+    });
+    handlers.register('reminder_send',{preflight,execute});
+    queue.leaseState
+      .mockResolvedValueOnce({alive:true,cancelRequested:false})
+      .mockResolvedValueOnce({alive:true,cancelRequested:false})
+      .mockResolvedValueOnce({alive:true,cancelRequested:true});
+
+    const run=worker.runOnce();
+    for(let i=0;i<20 && !release;i++) await Promise.resolve();
+    expect(release).toBeDefined();
+    release!();
+    await run;
+    expect(execute).not.toHaveBeenCalled();
+    expect(queue.leaseState).toHaveBeenCalledTimes(3);
+    expect(queue.settle).toHaveBeenCalledWith(job,{
+      outcome:'needs_review',reasonCode:'unknown_outcome',
+    });
+  });
+
+  it('parks a hung provider operation after a bounded deadline',async()=>{
+    jest.useFakeTimers();
+    try {
+      const {worker,queue,handlers}=setup();
+      const execute=jest.fn().mockImplementation(()=>new Promise(()=>{}));
+      handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
+      const run=worker.runOnce();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(execute).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(5*60_000);
+      await run;
+      expect(queue.settle).toHaveBeenCalledWith(job,{
+        outcome:'needs_review',reasonCode:'execution_timeout',
+      });
+      expect(queue.settle).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('does not hang Nest shutdown on an indefinitely pending handler',async()=>{
+    jest.useFakeTimers();
+    try {
+      const {worker,queue,handlers}=setup();
+      const execute=jest.fn().mockImplementation(()=>new Promise(()=>{}));
+      handlers.register('reminder_send',{preflight:async()=>({state:'ready'}),execute});
+      worker.onModuleInit();
+      await jest.advanceTimersByTimeAsync(0);
+      expect(execute).toHaveBeenCalledTimes(1);
+      const shuttingDown=worker.onModuleDestroy();
+      await jest.advanceTimersByTimeAsync(5_000);
+      await shuttingDown;
+      await jest.advanceTimersByTimeAsync(60_000);
+      expect(queue.heartbeat).not.toHaveBeenCalled();
+      expect(queue.settle).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('rechecks permissions for each action and parks later uncertainty',async()=>{
     const {worker,queue,handlers}=setup();
     const external=jest.fn();
