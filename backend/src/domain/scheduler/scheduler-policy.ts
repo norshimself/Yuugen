@@ -98,12 +98,32 @@ export function normalizeJob(value: NewScheduledJob): Required<NewScheduledJob> 
   if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) {
     throw new Error('Invalid maxAttempts');
   }
-  const raw = value.payload;
+  assertScheduledPayload(value.kind, value.payload);
+  const payload = value.payload;
+
+  return {
+    guildId: value.guildId,
+    kind: value.kind,
+    idempotencyKey: value.idempotencyKey,
+    payload: { ...payload } as unknown as ScheduledPayload,
+    runAt: value.runAt,
+    maxAttempts,
+  };
+}
+
+/**
+ * Validate job contents on both write and read. The PostgreSQL JSONB check
+ * enforces only that payload is an object, not its kind-specific shape.
+ */
+export function assertScheduledPayload(
+  kind: ScheduledKind, raw: unknown,
+): asserts raw is ScheduledPayload {
+  if (!SCHEDULED_KINDS.includes(kind)) throw new Error('Unsupported job kind');
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error('Invalid job payload');
   }
-  const payload = raw as unknown as Record<string, unknown>;
-  switch (value.kind) {
+  const payload = raw as Record<string, unknown>;
+  switch (kind) {
     case 'temporary_unban':
       assertKeys(payload, ['targetUserId', 'moderationCaseId']);
       assertSnowflake(payload.targetUserId, 'target user ID');
@@ -122,14 +142,39 @@ export function normalizeJob(value: NewScheduledJob): Required<NewScheduledJob> 
       assertNumber(payload.eventId, 'event ID');
       break;
   }
-  return {
-    guildId: value.guildId,
-    kind: value.kind,
-    idempotencyKey: value.idempotencyKey,
-    payload: { ...payload } as unknown as ScheduledPayload,
-    runAt: value.runAt,
-    maxAttempts,
-  };
+}
+
+/**
+ * Database rows are NOT trusted merely because TypeScript declares the query
+ * result a ClaimedJob. A corrupted/migrated row must never reach Discord.
+ */
+export function assertClaimedJob(value: unknown): asserts value is ClaimedJob {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('Invalid claimed job');
+  }
+  const job = value as Partial<ClaimedJob>;
+  if (typeof job.id !== 'string' || !/^[1-9]\d{0,18}$/.test(job.id) ||
+      BigInt(job.id) > 9223372036854775807n) {
+    throw new Error('Invalid claimed job ID');
+  }
+  assertSnowflake(job.guildId, 'claimed guild ID');
+  if (!job.kind || !SCHEDULED_KINDS.includes(job.kind)) {
+    throw new Error('Unsupported claimed job kind');
+  }
+  assertScheduledPayload(job.kind, job.payload);
+  if (!Number.isInteger(job.attempts) || !Number.isInteger(job.maxAttempts) ||
+      (job.attempts as number) < 1 || (job.maxAttempts as number) < 1 ||
+      (job.attempts as number) > (job.maxAttempts as number) ||
+      (job.maxAttempts as number) > 10) {
+    throw new Error('Invalid claimed job attempt count');
+  }
+  if (typeof job.leaseToken !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(job.leaseToken) ||
+      typeof job.leaseOwner !== 'string' ||
+      !/^[a-zA-Z0-9:_-]{1,80}$/.test(job.leaseOwner) ||
+      typeof job.cancelRequested !== 'boolean') {
+    throw new Error('Invalid claimed job lease');
+  }
 }
 
 /** Deterministic bounded retry, with a tiny stable per-job spread. */
