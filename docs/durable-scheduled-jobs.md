@@ -60,7 +60,16 @@ request. On timeout the job is parked for human review (or is parked when the
 lease reaper expires a lost token); it is **never automatically replayed**.
 During Nest shutdown, lease heartbeats stop immediately and the worker waits
 at most five seconds for an in-flight operation before returning to Nest.
-No timeout can guarantee canceling a remote request already accepted by Discord.
+If shutdown begins while the lease reaper is running, no new job is claimed.
+If shutdown races a claim **before the handler begins**, `releaseUnstarted`
+atomically returns the untouched job to `pending` with its original attempt
+budget and due time. The release is UUID/owner/expiry-fenced and audited as
+`released_unstarted`. A concurrent manager cancellation stays `canceled`,
+not pending. If the lease has expired or changed ownership, the release fails
+and the regular reaper holds it for review instead. **Only proven unstarted
+jobs qualify**; once handler dispatch begins, any uncertain provider outcome
+must stay in `needs_review`. No timeout can guarantee canceling a remote
+request already accepted by Discord.
 
 A cancellation request for a pending job is immediate. A running job may
 already have sent an external request; cancel is best-effort. Handlers must
@@ -200,9 +209,13 @@ inspect whether the ephemeral database was cleaned up before rerunning.
    cancellation vs claim, fenced settlement with an old UUID and idempotent
    replay after a restart.
 4. Kill a worker during an in-flight simulated job. After lease expiration,
-   assert `needs_review`, **not** a second outgoing call. Test lease
-   heartbeat loss, backpressure, max attempts and manual retry of only a
-   definitive no-effect failure.
+   assert `needs_review`, **not** a second outgoing call. Also race shutdown
+   against the lease reaper and the claim query: no post-shutdown dispatch;
+   a claim not yet dispatched returns pending with no consumed attempt,
+   while a concurrent manager cancellation remains terminal. Attempt a
+   stale-token release after lease expiry and confirm it cannot revive the
+   job. Test lease heartbeat loss, backpressure, max attempts and manual
+   retry of only a definitive no-effect failure.
 5. Test UTC timestamps around DST boundaries, database/local clock skew
    and rejected timezone-free schedules.
 6. In a disposable Discord guild, *after adding and reviewing a handler*,
@@ -225,6 +238,7 @@ database restore from a verified backup, with explicit consideration of
 post-backup writes. Follow `docs/postgresql-migrations.md` for the base runner.
 
 **Outstanding blockers:** full Nest build/Jest/e2e, real PostgreSQL
-multi-worker/lease/crash tests, future permission-aware handlers and
-operator-authorized reconciliation/retention. Keep issue #90 open until these
-are satisfied. This PR must not be deployed simply because source is merged.
+multi-worker/lease/crash/shutdown tests, future permission-aware handlers,
+staging approval of the manual operator reconciliation workflow and retention
+policies (#91). Keep issue #90 open until these are satisfied. This PR must
+not be deployed simply because source is merged.
