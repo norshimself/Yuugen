@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, utimes, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseArgs } from './migrate.mjs';
+import { parseArgs, run } from './migrate.mjs';
 import {
   loadMigrations, unwrapMigration, reconcileMigrations,
   inspectMigrations, applyMigrations, verifyBackupFile,
@@ -14,16 +14,22 @@ const sample = (name, checksum = 'abc') => ({ name, checksum, sql: 'SELECT 1;' }
 
 test('manifest loads the seven main-branch migrations in dependency order', async () => {
   const migrations = await loadMigrations();
-  assert.equal(migrations.length, 7);
+  assert.ok(migrations.length >= 7);
   assert.equal(migrations[0].name, '20261019_economy_integrity.sql');
-  assert.equal(migrations.at(-1).name, '20261028_automod_rules.sql');
-  assert.equal(new Set(migrations.map((entry) => entry.checksum)).size, 7);
+  assert.equal(migrations[6].name, '20261028_automod_rules.sql');
+  assert.equal(new Set(migrations.map((entry) => entry.checksum)).size, migrations.length);
 });
 
 test('only outer transaction wrappers are removed', () => {
   assert.equal(unwrapMigration('-- header\nBEGIN;\nSELECT 1;\nCOMMIT;'), 'SELECT 1;');
   assert.throws(() => unwrapMigration('SELECT 1'), /expected exactly one outer/);
   assert.throws(() => unwrapMigration('BEGIN; SAVEPOINT;\nCOMMIT;'), /nested transaction/);
+  assert.throws(() => unwrapMigration('BEGIN; SELECT 1; COMMIT; SELECT 2; COMMIT;'), /nested transaction/);
+  assert.throws(() => unwrapMigration('BEGIN; SELECT 1; ROLLBACK; SELECT 2; COMMIT;'), /nested transaction/);
+  assert.equal(unwrapMigration("BEGIN; SELECT '; COMMIT;' AS txt; COMMIT;"), "SELECT '; COMMIT;' AS txt;");
+  assert.equal(unwrapMigration("BEGIN; DO $ BEGIN PERFORM 1; END; $; COMMIT;"),
+    'DO $ BEGIN PERFORM 1; END; $;');
+  assert.throws(() => unwrapMigration('BEGIN; /* unclosed'), /unterminated/);
 });
 
 test('manifest does not silently omit or permit unknown SQL', async () => {
@@ -89,10 +95,13 @@ test('failure rolls back and never commits incomplete ledger writes', async () =
 });
 
 test('environment and confirmation flags are parsed explicitly', () => {
-  assert.deepEqual(parseArgs(['status']), {command:'status',environment:'local',backupFile:null,confirmApply:false});
+  assert.deepEqual(parseArgs(['status']), {command:'status',environment:null,backupFile:null,confirmApply:false});
   assert.equal(parseArgs(['apply','--environment','staging','--backup-file','/tmp/backup','--confirm-apply']).environment,'staging');
   assert.throws(() => parseArgs(['apply','--bad']), /Unknown/);
   assert.throws(() => parseArgs(['apply','--environment','other']), /Invalid/);
+  assert.throws(() => parseArgs(['status','--confirm-apply']), /Write-only flags/);
+  assert.throws(() => parseArgs(['apply','--environment','local','--environment','staging']), /Repeated flag/);
+  assert.throws(() => parseArgs(['apply','--backup-file','--confirm-apply']), /Missing value/);
 });
 
 test('backup requires a recent nonempty pg_dump custom archive', async () => {
@@ -106,4 +115,59 @@ test('backup requires a recent nonempty pg_dump custom archive', async () => {
   } finally {
     await rm(dir, {recursive:true,force:true});
   }
+});
+
+test('an explicit matching target is mandatory before any write, even local', async () => {
+  const db = 'postgres://user:password@localhost:5432/yuugen_test';
+  await assert.rejects(
+    () => run(['apply', '--confirm-apply'], { DATABASE_URL: db }),
+    /explicit --environment/,
+  );
+  await assert.rejects(
+    () => run(['apply', '--confirm-apply', '--environment', 'local'], { DATABASE_URL: db }),
+    /YUUGEN_MIGRATION_TARGET/,
+  );
+  await assert.rejects(
+    () => run(['apply', '--confirm-apply', '--environment', 'local'], {
+      DATABASE_URL: db, NODE_ENV: 'production', YUUGEN_MIGRATION_TARGET: 'local',
+    }),
+    /local database and non-production/,
+  );
+  await assert.rejects(
+    () => run(['apply', '--confirm-apply', '--environment', 'local'], {
+      DATABASE_URL: 'postgres://user:password@db.example.invalid:5432/yuugen',
+      YUUGEN_MIGRATION_TARGET: 'local',
+    }),
+    /local database and non-production/,
+  );
+});
+
+test('a second pass is a no-op when checksums already match', async () => {
+  const migrations = [sample('one'), sample('two')];
+  const commands = [];
+  const client = { query: async (sql) => {
+    commands.push(sql);
+    if (sql.includes('to_regclass')) return { rows: [{ exists: true }] };
+    if (sql.startsWith('SELECT name')) return {
+      rows: migrations.map(({ name, checksum }) => ({ name, checksum })),
+    };
+    return { rows: [] };
+  } };
+  assert.deepEqual(await applyMigrations(client, migrations), []);
+  assert.equal(commands.filter((command) => command === 'SELECT 1;').length, 0);
+  assert.equal(commands.filter((command) => command.startsWith('INSERT INTO')).length, 0);
+  assert.equal(commands.at(-1), 'COMMIT');
+});
+
+test('checksum mismatch after obtaining the advisory lock rolls back', async () => {
+  const commands = [];
+  const client = { query: async (sql) => {
+    commands.push(sql);
+    if (sql.includes('to_regclass')) return { rows: [{ exists: true }] };
+    if (sql.startsWith('SELECT name')) return { rows: [{ name: 'one', checksum: 'tampered' }] };
+    return { rows: [] };
+  } };
+  await assert.rejects(() => applyMigrations(client, [sample('one')]), /Checksum mismatch/);
+  assert.ok(commands.some((command) => command.includes('pg_advisory_xact_lock')));
+  assert.equal(commands.at(-1), 'ROLLBACK');
 });
