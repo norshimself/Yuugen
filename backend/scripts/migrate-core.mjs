@@ -163,7 +163,7 @@ export async function inspectMigrations(client, migrations) {
  * advisory lock. A second worker must wait, then see the first one's ledger.
  * No SQL or DDL is executed by inspectMigrations alone.
  */
-export async function applyMigrations(client, migrations, onApplied = () => {}) {
+export async function applyMigrations(client, migrations) {
   await client.query('BEGIN');
   try {
     await client.query("SET LOCAL lock_timeout = '10s'");
@@ -183,7 +183,6 @@ export async function applyMigrations(client, migrations, onApplied = () => {}) 
         'INSERT INTO ' + LEDGER + ' (name, checksum) VALUES ($1, $2)',
         [entry.name, entry.checksum],
       );
-      onApplied(entry.name);
     }
     await client.query('COMMIT');
     return pending.map((entry) => entry.name);
