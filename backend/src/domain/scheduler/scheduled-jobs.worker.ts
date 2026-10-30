@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { type ClaimedJob, type JobOutcome } from './scheduler-policy';
+import { assertClaimedJob, type ClaimedJob, type JobOutcome } from './scheduler-policy';
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import { ScheduledJobsRegistry } from './scheduled-jobs.registry';
 
@@ -58,6 +58,23 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private async executeOne(job: ClaimedJob): Promise<void> {
+    // Fail closed for malformed legacy/corrupted database rows. The schema's
+    // JSONB-object check alone cannot enforce each job kind's ID-only payload.
+    try {
+      assertClaimedJob(job);
+    } catch {
+      try {
+        await this.jobs.settle(job, {
+          outcome: 'needs_review', reasonCode: 'invalid_claimed_job',
+        });
+      } catch {
+        // A malformed ownership token cannot be settled safely. Leave the
+        // lease to expire; the bounded reaper will park it for review.
+        this.logger.error('Malformed claimed job requires lease reconciliation');
+      }
+      return;
+    }
+
     let leaseLost = false;
     const handler = this.registry.get(job.kind);
     const heartbeat = setInterval(() => {
