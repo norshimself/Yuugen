@@ -115,23 +115,27 @@ export class ScheduledJobsService {
     const t = transitionFor(job.id,job.attempts,job.maxAttempts,outcome);
     const rows: Array<{id:string}> = await this.db.query(
       `WITH settled AS (
-        UPDATE ${JOBS} SET "status"=$4,
-          "runAt"=CASE WHEN $4='pending'
+        UPDATE ${JOBS} SET
+          "status"=CASE WHEN "cancelRequested" AND $4='pending'
+            THEN 'canceled' ELSE $4 END,
+          "runAt"=CASE WHEN $4='pending' AND NOT "cancelRequested"
             THEN clock_timestamp()+($6::integer * INTERVAL '1 second')
             ELSE "runAt" END,
           "leaseToken"=NULL,"leaseOwner"=NULL,"leaseUntil"=NULL,
-          "lastErrorCode"=$5,
+          "lastErrorCode"=CASE WHEN "cancelRequested" AND $4='pending'
+            THEN 'cancel_requested' ELSE $5 END,
           "lastErrorAt"=CASE WHEN $5::text IS NULL THEN NULL ELSE clock_timestamp() END,
-          "finishedAt"=CASE WHEN $4='pending' THEN NULL ELSE clock_timestamp() END,
+          "finishedAt"=CASE WHEN $4='pending' AND NOT "cancelRequested"
+            THEN NULL ELSE clock_timestamp() END,
           "updatedAt"=clock_timestamp()
         WHERE id=$1::bigint AND "status"='running'
           AND "leaseToken"=$2::uuid AND "leaseOwner"=$3
           AND "leaseUntil">clock_timestamp()
-        RETURNING id,"attempts"
+        RETURNING id,"attempts","status","lastErrorCode"
       ), audit AS (
         INSERT INTO ${EVENTS} ("jobId","event","attempt","reasonCode")
-        SELECT id,CASE WHEN $4='pending' THEN 'retry' ELSE $4 END,
-          "attempts",$5 FROM settled
+        SELECT id,CASE WHEN "status"='pending' THEN 'retry' ELSE "status" END,
+          "attempts","lastErrorCode" FROM settled
       ) SELECT id::text AS id FROM settled`,
       [job.id,job.leaseToken,job.leaseOwner,t.status,t.reasonCode,t.retryDelaySeconds]);
     return rows.length===1;
