@@ -67,12 +67,24 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
     // Recovery is required even if a deployment has not registered handlers:
     // no orphaned running job may remain invisible after restart.
     const uncertain = await this.jobs.reconcileExpiredLeases();
+    // Shutdown may begin while the database is recovering expired leases.
+    // Never start a new claim after the reaper returns in that case.
+    if (this.stopping) return;
     if (uncertain > 0) {
       this.logger.warn('Scheduler parked expired leases for manual review: ' + uncertain);
     }
     if (this.registry.size === 0) return;
     const [job] = await this.jobs.claim(this.workerId, 1, this.registry.kinds);
-    if (job) await this.executeOne(job);
+    if (!job) return;
+    if (this.stopping) {
+      // Claimed but NOT dispatched: no Discord side effect is possible.
+      // Return it to pending, without consuming an attempt. A raced operator
+      // cancel remains terminal. Fencing prevents releasing a stale lease.
+      const released = await this.jobs.releaseUnstarted(job);
+      if (!released) this.logger.warn('Scheduler claim requires lease reconciliation: ' + job.id);
+      return;
+    }
+    await this.executeOne(job);
   }
 
   private async executeOne(job: ClaimedJob): Promise<void> {
