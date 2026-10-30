@@ -199,6 +199,79 @@ export class ScheduledJobsService {
     return rows.length===1;
   }
 
+  /**
+   * Human reconciliation of an uncertain job is TERMINAL ONLY. There is no
+   * SQL path from needs_review back to pending: a Discord effect might have
+   * succeeded before its acknowledgement was lost.
+   *
+   * The caller must independently verify the remote outcome; the
+   * authenticated operator ID and fixed disposition are journaled.
+   */
+  async resolveReviewedJob(
+    guildId: string, id: string, actorId: string,
+    disposition: 'completed' | 'canceled',
+  ): Promise<boolean> {
+    assertSnowflake(guildId, 'guild ID');
+    assertSnowflake(actorId, 'operator ID');
+    assertJobId(id);
+    if (disposition !== 'completed' && disposition !== 'canceled') {
+      throw new Error('Invalid review disposition');
+    }
+    const rows: Array<{id:string}> = await this.db.query(
+      `WITH changed AS (
+        UPDATE ${JOBS} SET "status"=$4,"finishedAt"=clock_timestamp(),
+          "updatedAt"=clock_timestamp()
+        WHERE id=$1::bigint AND "guildId"=$2 AND "status"='needs_review'
+        RETURNING id,"attempts"
+      ), audit AS (
+        INSERT INTO ${EVENTS} ("jobId","event","attempt","actorId","reasonCode")
+        SELECT id,'manual_resolved',"attempts",$3,
+          CASE WHEN $4='completed' THEN 'operator_verified_complete'
+            ELSE 'operator_verified_absent' END
+        FROM changed
+      ) SELECT id::text AS id FROM changed`,
+      [id,guildId,actorId,disposition]);
+    return rows.length===1;
+  }
+
+  /**
+   * Guild-only operational metrics use the database clock. Pending kinds
+   * without installed handlers are NOT counted as runnable backlog.
+   * Return aggregate counts and age only (no job IDs, payloads or tokens).
+   */
+  async healthMetrics(
+    guildId: string,
+    activeKinds: readonly ScheduledKind[],
+  ): Promise<{
+    dueRunnable:string;awaitingHandler:string;expiredLeases:string;
+    needsReview:string;dead:string;oldestDueSeconds:string;
+  }> {
+    assertSnowflake(guildId, 'guild ID');
+    if (!Array.isArray(activeKinds) ||
+        activeKinds.length > SCHEDULED_KINDS.length ||
+        new Set(activeKinds).size !== activeKinds.length ||
+        !activeKinds.every((kind) => SCHEDULED_KINDS.includes(kind))) {
+      throw new Error('Invalid scheduler handler kind set');
+    }
+    const [metrics] = await this.db.query(
+      `SELECT
+        count(*) FILTER (WHERE "status"='pending' AND "runAt"<=clock_timestamp()
+          AND "kind"=ANY($2::text[]))::text AS "dueRunnable",
+        count(*) FILTER (WHERE "status"='pending'
+          AND "kind"<>ALL($2::text[]))::text AS "awaitingHandler",
+        count(*) FILTER (WHERE "status"='running'
+          AND "leaseUntil"<=clock_timestamp())::text AS "expiredLeases",
+        count(*) FILTER (WHERE "status"='needs_review')::text AS "needsReview",
+        count(*) FILTER (WHERE "status"='dead')::text AS "dead",
+        COALESCE(FLOOR(MAX(EXTRACT(EPOCH FROM
+          (clock_timestamp()-"runAt"))) FILTER (
+            WHERE "status"='pending' AND "runAt"<=clock_timestamp()
+              AND "kind"=ANY($2::text[])))::bigint,0)::text AS "oldestDueSeconds"
+        FROM ${JOBS} WHERE "guildId"=$1`,
+      [guildId,activeKinds]);
+    return metrics;
+  }
+
   /** Internal-only status: no payload or idempotency key is returned. */
   async statusCounts(guildId: string): Promise<Array<{status:string;count:string}>> {
     assertSnowflake(guildId,'guild ID');
