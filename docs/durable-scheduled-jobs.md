@@ -59,10 +59,18 @@ with an immutable event key and a minimal ID-only payload.
 
 Every handler **must**:
 
-1. Force-fetch the guild, affected resource and Discord actor/bot permissions
-   and hierarchy at execution time; treat a deleted or canceled resource as
-   a safe cancellation, not as a reason to dispatch the old action.
+1. Implement the **required** `preflight(job)` function. Force-fetch the
+   current guild, bot and actor permissions/hierarchy, affected resource and
+   feature toggle. Return `{state:'ready'}` only when all checks pass, return
+   `{state:'canceled',reasonCode:'resource_missing'}` for an unambiguously
+   canceled/deleted target, or `{state:'needs_review',reasonCode:'permission_changed'}`
+   for a revoked/uncertain authorization. Never use stale gateway cache or
+   raw provider exception text. Handler registration rejects a missing preflight.
 2. Call `context.assertActive()` immediately before *each* Discord mutation.
+   This rechecks both the database lease/cancel flag and the handler's live
+   preflight. The worker also runs preflight **before** it starts the handler.
+   If permissions change after a handler begins, it parks the operation for
+   manual review rather than retrying.
 3. Return `{outcome:'retry',reasonCode:'rate_limited'}` only when it can prove
    the remote operation had **no effect**. Use `needs_review` for all unknown
    outcomes, and never interpolate provider exception strings into reason codes.
