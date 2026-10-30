@@ -126,7 +126,7 @@ export function normalizeJob(value: NewScheduledJob): Required<NewScheduledJob> 
     guildId: value.guildId,
     kind: value.kind,
     idempotencyKey: value.idempotencyKey,
-    payload: { ...payload } as ScheduledPayload,
+    payload: { ...payload } as unknown as ScheduledPayload,
     runAt: value.runAt,
     maxAttempts,
   };
