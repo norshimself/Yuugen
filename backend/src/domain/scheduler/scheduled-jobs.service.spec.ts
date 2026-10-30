@@ -82,6 +82,24 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(query.mock.calls.at(-1)?.[1]).toEqual([1,'worker-1',['reminder_send']]);
   });
 
+  it('fences pre-dispatch release, restores attempts and preserves raced cancel',async()=>{
+    const {svc,query}=setup();
+    query.mockResolvedValueOnce([{id:claimed.id}]);
+    expect(await svc.releaseUnstarted(claimed)).toBe(true);
+    const [sql,args]=query.mock.calls[0];
+    expect(args).toEqual([claimed.id,claimed.leaseToken,claimed.leaseOwner]);
+    expect(sql).toContain('"leaseToken"=$2::uuid');
+    expect(sql).toContain('"leaseOwner"=$3');
+    expect(sql).toContain('"leaseUntil">clock_timestamp()');
+    expect(sql).toContain('"attempts"="attempts"-1');
+    expect(sql).toContain('"cancelRequested" THEN \'canceled\' ELSE \'pending\'');
+    expect(sql).toContain("'released_unstarted'");
+    expect(sql).toContain("'shutdown_before_dispatch'");
+    expect(sql).not.toContain('SET "status"=\'needs_review\'');
+    query.mockResolvedValueOnce([]);
+    expect(await svc.releaseUnstarted(claimed)).toBe(false);
+  });
+
   it('parks expired running jobs for human review, never auto-requeues', async () => {
     const {svc,query}=setup();
     query.mockResolvedValueOnce([{jobId:'1'},{jobId:'2'}]);
