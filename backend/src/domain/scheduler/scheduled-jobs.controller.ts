@@ -1,5 +1,5 @@
 import {
-  BadRequestException, Body, Controller, Get, Post, Query, Req, UseGuards,
+  BadRequestException, Body, Controller, Get, Header, Post, Query, Req, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../api/auth/jwt-auth.guard';
 import { GuildAccessGuard, RequireGuildManager } from '../../api/auth/guild-access.guard';
@@ -31,11 +31,13 @@ export class ScheduledJobsController {
 
   /** Metadata only. JWT, fresh guild membership and Manage Server required. */
   @Get('status')
+  @Header('Cache-Control', 'no-store')
   async status(@Query('guildId') guildId: string) {
     return { counts: await this.jobs.statusCounts(guildId) };
   }
 
   @Get('failed')
+  @Header('Cache-Control', 'no-store')
   async failed(@Query('guildId') guildId: string) {
     return { jobs: await this.jobs.failedJobs(guildId, 20) };
   }
