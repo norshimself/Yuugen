@@ -122,17 +122,36 @@ caller-supplied actor IDs:
 - `GET /api/v1/scheduler/jobs/status?guildId=...` returns counts only.
 - `GET /api/v1/scheduler/jobs/failed?guildId=...` returns at most 20
   job IDs, kinds, statuses, attempt counts and fixed error codes, never payloads.
+- `GET /api/v1/scheduler/jobs/metrics?guildId=...` returns **only** aggregate
+  `dueRunnable`, `awaitingHandler`, `expiredLeases`, `needsReview`,
+  `dead` and `oldestDueSeconds` values. All are computed with the database
+  clock for the authenticated guild. Jobs awaiting unregistered handlers are
+  **not** counted as runnable overdue work. A worker-disabled deployment has
+  no active kinds and reports runnable work as zero.
 - `POST /api/v1/scheduler/jobs/cancel` with JSON
   `{"guildId":"...","jobId":"..."}` cancels pending jobs and requests
   cancellation for in-flight jobs; it **cannot** undo sent Discord actions.
 - `POST /api/v1/scheduler/jobs/retry` with the same JSON allows a
   manager-initiated retry only if the job is `dead` and the database has a
   known-no-effect failure classification. It never retries `needs_review`.
+- `POST /api/v1/scheduler/jobs/resolve` with JSON
+  `{"guildId":"...","jobId":"...","disposition":"completed","confirmed":true}`
+  (or `"disposition":"canceled"`) records an **explicit, independently verified
+  remote outcome** for a job in `needs_review`. This only marks the job
+  terminal; it never requeues it or calls Discord. Only the first successful
+  resolution changes the row. The metadata audit records `manual_resolved`,
+  a fixed outcome code, and the *authenticated* manager's Discord ID.
+  Before submitting, examine the provider/resource externally to establish
+  whether the action succeeded or definitely did not occur. If the evidence
+  is inconclusive, leave the job in `needs_review`; do **not** mark it
+  complete or canceled to clear an alert. Arbitrary evidence text, secrets
+  and caller-supplied operator IDs are rejected.
 
-Do not treat `{"changed":false}` as success: the job might be missing, in
-another guild, already finished, or ineligible. Both mutation endpoints reject
-unexpected body fields. The API cannot perform manual reconciliation of an
-unknown remote result; that needs a separately reviewed, human-confirmed flow.
+Do not treat `{"changed":false}` as success: the job might be missing,
+in another guild, already finished, or ineligible. All mutation endpoints
+reject unexpected fields. Terminal reconciliation preserves the original
+failure code on the job and adds the fixed verification code to the audit;
+it never overrides or resends an unknown external operation.
 Direct database edits, deleting lease tokens, changing `needs_review` to
 `pending`, or running manual job SQL against live production are **not**
 supported recovery paths. Keep these endpoints away from production until
