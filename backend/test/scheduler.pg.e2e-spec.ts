@@ -108,6 +108,24 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     };
   }
 
+  it('rejects unsupported job kinds and invalid identifiers at the database boundary', async () => {
+    const sql =
+      'INSERT INTO public.scheduled_jobs ' +
+      '("guildId","kind","idempotencyKey","payload","runAt") ' +
+      'VALUES ($1,$2,$3,$4::jsonb,clock_timestamp())';
+    await expect(dbA.query(sql, [
+      guild, 'eval', 'invalid-kind', '{"reminderId":1}',
+    ])).rejects.toThrow();
+    await expect(dbA.query(sql, [
+      'not-a-guild-id', 'reminder_send', 'invalid-guild', '{"reminderId":1}',
+    ])).rejects.toThrow();
+    await expect(dbA.query(sql, [
+      guild, 'reminder_send', 'unexpected key;bad', '{"reminderId":1}',
+    ])).rejects.toThrow();
+    const rows = await dbA.query('SELECT count(*)::integer AS count FROM public.scheduled_jobs');
+    expect(rows[0].count).toBe(0);
+  });
+
   it('inserts once, checks identity on replay and never overwrites the first job', async () => {
     const first = await a.enqueue(reminder('identical'));
     const replay = await b.enqueue(reminder('identical'));
