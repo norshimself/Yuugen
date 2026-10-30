@@ -108,6 +108,12 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     const [sql,args]=query.mock.calls[0];
     expect(sql).toContain('"leaseOwner"=$3');
     expect(sql).toContain('"leaseUntil">clock_timestamp()');
+    // A cancel that races a known-no-effect retry must become final canceled,
+    // not an unclaimable pending job with cancelRequested=true.
+    expect(sql).toContain('WHEN "cancelRequested" AND $4=\'pending\'');
+    expect(sql).toContain('THEN \'canceled\' ELSE $4 END');
+    expect(sql).toContain('WHEN $4=\'pending\' AND NOT "cancelRequested"');
+    expect(sql).toContain('FROM settled');
     expect(args[0]).toBe('9007199254740993');
     expect(args[3]).toBe('pending');
     expect(args[4]).toBe('rate_limited');
@@ -124,6 +130,8 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(query.mock.calls[0][1]).toEqual(['15',guild,actor]);
     await expect(svc.cancel('bad','15',actor)).rejects.toThrow('guild');
     await expect(svc.cancel(guild,'-1',actor)).rejects.toThrow('job ID');
+    await expect(svc.cancel(guild,'9223372036854775808',actor))
+      .rejects.toThrow('job ID');
   });
 
   it('manual retry is restricted to definitively non-dispatched dead jobs', async () => {
