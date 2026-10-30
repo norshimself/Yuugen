@@ -138,6 +138,25 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     expect(claimEvents[0].count).toBe(20);
   });
 
+  it('leaves unregistered job kinds pending until their feature handler is installed', async () => {
+    const unban = await a.enqueue({
+      guildId: guild, kind: 'temporary_unban', idempotencyKey: 'future-unban',
+      payload: { targetUserId: '456789012345678901', moderationCaseId: 9 },
+      runAt: due,
+    });
+    await a.enqueue(reminder('active-reminder'));
+    const got = await a.claim('worker-a', 10, ['reminder_send']);
+    expect(got).toHaveLength(1);
+    expect(got[0].kind).toBe('reminder_send');
+    const stillPending = await dbB.query(
+      'SELECT "status" FROM public.scheduled_jobs WHERE id=$1::bigint', [unban.id],
+    );
+    expect(stillPending[0].status).toBe('pending');
+    const later = await b.claim('worker-b', 1, ['temporary_unban']);
+    expect(later).toHaveLength(1);
+    expect(later[0].id).toBe(unban.id);
+  });
+
   it('uses database time, not the application clock, to release due jobs', async () => {
     const future = await a.enqueue({
       ...reminder('future'), runAt: '2099-12-31T00:00:00Z',
