@@ -27,8 +27,8 @@ test('only outer transaction wrappers are removed', () => {
   assert.throws(() => unwrapMigration('BEGIN; SELECT 1; COMMIT; SELECT 2; COMMIT;'), /nested transaction/);
   assert.throws(() => unwrapMigration('BEGIN; SELECT 1; ROLLBACK; SELECT 2; COMMIT;'), /nested transaction/);
   assert.equal(unwrapMigration("BEGIN; SELECT '; COMMIT;' AS txt; COMMIT;"), "SELECT '; COMMIT;' AS txt;");
-  assert.equal(unwrapMigration("BEGIN; DO $ BEGIN PERFORM 1; END; $; COMMIT;"),
-    'DO $ BEGIN PERFORM 1; END; $;');
+  assert.equal(unwrapMigration("BEGIN; DO $$ BEGIN PERFORM 1; END; $$; COMMIT;"),
+    'DO $$ BEGIN PERFORM 1; END; $$;');
   assert.throws(() => unwrapMigration('BEGIN; /* unclosed'), /unterminated/);
 });
 
