@@ -155,6 +155,54 @@ describe('ScheduledJobsService: PostgreSQL SQL contracts', () => {
     expect(sql).not.toContain("'needs_review'");
   });
 
+  it('resolves uncertain jobs only to verified terminal states and journals actor', async () => {
+    const {svc,query}=setup();
+    query.mockResolvedValueOnce([{id:'15'}]);
+    expect(await svc.resolveReviewedJob(guild,'15',actor,'completed')).toBe(true);
+    const [sql,args]=query.mock.calls[0];
+    expect(sql).toContain('"status"=$4');
+    expect(sql).toContain('"status"=\'needs_review\'');
+    expect(sql).toContain('"guildId"=$2');
+    expect(sql).toContain("'manual_resolved'");
+    expect(sql).toContain("'operator_verified_complete'");
+    expect(sql).toContain("'operator_verified_absent'");
+    expect(sql).not.toContain('"status"=\'pending\'');
+    expect(args).toEqual(['15',guild,actor,'completed']);
+    query.mockResolvedValueOnce([]);
+    expect(await svc.resolveReviewedJob(guild,'15',actor,'canceled')).toBe(false);
+    await expect(svc.resolveReviewedJob(guild,'15',actor,'pending' as any))
+      .rejects.toThrow('disposition');
+    await expect(svc.resolveReviewedJob('bad','15',actor,'completed'))
+      .rejects.toThrow('guild');
+  });
+
+  it('aggregates health without exposing job IDs or counting missing handlers as runnable', async () => {
+    const {svc,query}=setup();
+    const expected={
+      dueRunnable:'3',awaitingHandler:'7',expiredLeases:'2',
+      needsReview:'1',dead:'4',oldestDueSeconds:'62',
+    };
+    query.mockResolvedValueOnce([expected]);
+    expect(await svc.healthMetrics(guild,['reminder_send'])).toEqual(expected);
+    const [sql,args]=query.mock.calls[0];
+    expect(sql).toContain('clock_timestamp()');
+    expect(sql).toContain('"kind"=ANY($2::text[])');
+    expect(sql).toContain('"kind"<>ALL($2::text[])');
+    expect(sql).toContain('"guildId"=$1');
+    expect(sql).not.toContain('SELECT *');
+    expect(sql).not.toContain('"payload"');
+    expect(args).toEqual([guild,['reminder_send']]);
+    query.mockResolvedValueOnce([{
+      dueRunnable:'0',awaitingHandler:'0',expiredLeases:'0',
+      needsReview:'0',dead:'0',oldestDueSeconds:'0',
+    }]);
+    await expect(svc.healthMetrics(guild,[])).resolves.toHaveProperty('dueRunnable','0');
+    await expect(svc.healthMetrics(guild,['reminder_send','reminder_send']))
+      .rejects.toThrow('kind');
+    await expect(svc.healthMetrics(guild,['injected' as any]))
+      .rejects.toThrow('kind');
+  });
+
   it('read-only observability remains guild-scoped and excludes payload content', async () => {
     const {svc,query}=setup();
     query.mockResolvedValueOnce([{status:'dead',count:'2'}]);
