@@ -45,6 +45,11 @@ export class ScheduledJobsRegistry {
     return this.handlers.get(kind);
   }
 
+  /** Registered kinds only: never claim future features before handlers exist. */
+  get kinds(): ScheduledKind[] {
+    return Array.from(this.handlers.keys());
+  }
+
   get size(): number {
     return this.handlers.size;
   }
