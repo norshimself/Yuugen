@@ -1,0 +1,220 @@
+/**
+ * Opt-in REAL PostgreSQL scheduler acceptance tests. These tests create and
+ * DROP a uniquely named disposable database on a LOCAL PostgreSQL server.
+ *
+ * Run only against a local PG 17 instance with CREATEDB permission:
+ * YUUGEN_SCHEDULER_TEST_ADMIN_URL=postgres://...@127.0.0.1:5432/postgres \
+ * YUUGEN_SCHEDULER_TEST_CONFIRM=disposable \
+ *   npm run test:e2e -- --runInBand scheduler.pg.e2e-spec.ts
+ *
+ * Absent explicit opt-in, this suite is SKIPPED (not claimed as passed).
+ */
+import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { DataSource } from 'typeorm';
+import { ScheduledJobsService } from '../src/domain/scheduler/scheduled-jobs.service';
+
+const ADMIN_URL = process.env.YUUGEN_SCHEDULER_TEST_ADMIN_URL;
+const enabled = Boolean(
+  ADMIN_URL && process.env.YUUGEN_SCHEDULER_TEST_CONFIRM === 'disposable',
+);
+const describeDatabase = enabled ? describe : describe.skip;
+const guild = '123456789012345678';
+const otherGuild = '234567890123456789';
+const moderator = '345678901234567890';
+const due = '2026-01-01T00:00:00Z';
+
+describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
+  let admin: DataSource;
+  let dbA: DataSource;
+  let dbB: DataSource;
+  let a: ScheduledJobsService;
+  let b: ScheduledJobsService;
+  const dbName = 'yuugen_scheduler_it_' + randomBytes(8).toString('hex');
+  let created = false;
+
+  beforeAll(async () => {
+    if (!ADMIN_URL || process.env.NODE_ENV === 'production') {
+      throw new Error('Scheduler integration must never target production');
+    }
+    const parsed = new URL(ADMIN_URL);
+    if (!['postgres:', 'postgresql:'].includes(parsed.protocol) ||
+        !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+      throw new Error('Scheduler integration requires an explicit loopback PostgreSQL host');
+    }
+    // Never mutate the admin database: create an independently named sandbox.
+    const target = new URL(ADMIN_URL);
+    target.pathname = '/' + dbName;
+    target.search = '';
+
+    admin = new DataSource({
+      type: 'postgres', url: ADMIN_URL,
+      synchronize: false, entities: [],
+    });
+    await admin.initialize();
+    await admin.query('CREATE DATABASE "' + dbName + '"');
+    created = true;
+
+    dbA = new DataSource({
+      type: 'postgres', url: target.href,
+      synchronize: false, entities: [],
+    });
+    dbB = new DataSource({
+      type: 'postgres', url: target.href,
+      synchronize: false, entities: [],
+    });
+    await dbA.initialize();
+    await dbB.initialize();
+
+    const migration = await readFile(
+      new URL('../migrations/20261030_scheduled_jobs.sql', import.meta.url),
+      'utf8',
+    );
+    await dbA.query(migration);
+    a = new ScheduledJobsService(dbA);
+    b = new ScheduledJobsService(dbB);
+  }, 45000);
+
+  afterAll(async () => {
+    if (dbA?.isInitialized) await dbA.destroy();
+    if (dbB?.isInitialized) await dbB.destroy();
+    if (admin?.isInitialized) {
+      try {
+        if (created) {
+          await admin.query('DROP DATABASE "' + dbName + '" WITH (FORCE)');
+        }
+      } finally {
+        await admin.destroy();
+      }
+    }
+  }, 30000);
+
+  beforeEach(async () => {
+    await dbA.query(
+      'TRUNCATE TABLE public.scheduled_job_events, public.scheduled_jobs RESTART IDENTITY CASCADE',
+    );
+  });
+
+  function reminder(key: string, forGuild = guild, maxAttempts = 5) {
+    return {
+      guildId: forGuild,
+      kind: 'reminder_send' as const,
+      idempotencyKey: key,
+      payload: { reminderId: 123 },
+      runAt: due,
+      maxAttempts,
+    };
+  }
+
+  it('inserts once, checks identity on replay and never overwrites the first job', async () => {
+    const first = await a.enqueue(reminder('identical'));
+    const replay = await b.enqueue(reminder('identical'));
+    expect(first.created).toBe(true);
+    expect(replay.created).toBe(false);
+    expect(replay.id).toBe(first.id);
+    await expect(b.enqueue({
+      ...reminder('identical'), payload: { reminderId: 456 },
+    })).rejects.toThrow('Idempotency key collision');
+
+    const events = await dbA.query(
+      'SELECT event FROM public.scheduled_job_events WHERE "jobId"=$1::bigint',
+      [first.id],
+    );
+    expect(events.map((event: { event: string }) => event.event)).toEqual(['queued']);
+  });
+
+  it('two workers claim each due job at most once using row locks', async () => {
+    for (let i = 0; i < 20; i++) await a.enqueue(reminder('claim:' + i));
+    const [first, second] = await Promise.all([a.claim('worker-a', 10), b.claim('worker-b', 10)]);
+    const claimed = [...first, ...second];
+    expect(claimed).toHaveLength(20);
+    expect(new Set(claimed.map((job) => job.id)).size).toBe(20);
+    expect(claimed.every((job) => job.attempts === 1 && job.leaseToken)).toBe(true);
+    expect(await a.claim('worker-a', 10)).toHaveLength(0);
+    const claimEvents = await dbA.query(
+      "SELECT count(*)::integer AS count FROM public.scheduled_job_events WHERE event='claimed'",
+    );
+    expect(claimEvents[0].count).toBe(20);
+  });
+
+  it('uses database time, not the application clock, to release due jobs', async () => {
+    const future = await a.enqueue({
+      ...reminder('future'), runAt: '2099-12-31T00:00:00Z',
+    });
+    expect(await a.claim('worker-a', 1)).toHaveLength(0);
+    await dbA.query(
+      'UPDATE public.scheduled_jobs SET "runAt"=clock_timestamp()-INTERVAL \'1 second\' WHERE id=$1::bigint',
+      [future.id],
+    );
+    expect((await a.claim('worker-a', 1))[0].id).toBe(future.id);
+  });
+
+  it('parks a crashed/expired worker as needs_review, never double-dispatches', async () => {
+    const queued = await a.enqueue(reminder('crash'));
+    const [claimed] = await a.claim('worker-a', 1);
+    expect(claimed.id).toBe(queued.id);
+    // Simulate a crash / elapsed lease without waiting 60 seconds.
+    await dbA.query(
+      'UPDATE public.scheduled_jobs SET "leaseUntil"=clock_timestamp()-INTERVAL \'1 second\' WHERE id=$1::bigint',
+      [queued.id],
+    );
+    expect(await b.reconcileExpiredLeases()).toBe(1);
+    expect(await a.reconcileExpiredLeases()).toBe(0);
+    expect(await b.claim('worker-b', 1)).toHaveLength(0);
+    expect(await a.settle(claimed, { outcome: 'completed' })).toBe(false);
+    const rows = await dbB.query(
+      'SELECT "status","lastErrorCode" FROM public.scheduled_jobs WHERE id=$1::bigint',
+      [queued.id],
+    );
+    expect(rows[0]).toEqual(expect.objectContaining({
+      status: 'needs_review', lastErrorCode: 'lease_expired',
+    }));
+    expect(await a.retryDead(guild, queued.id, moderator)).toBe(false);
+  });
+
+  it('cancellation racing a retry cannot leave an unclaimable pending job', async () => {
+    const queued = await a.enqueue(reminder('cancel-race', guild, 1));
+    const [claimed] = await a.claim('worker-a', 1);
+    expect(await b.cancel(guild, queued.id, moderator)).toBe(true);
+    expect(await a.settle(claimed, {
+      outcome: 'retry', reasonCode: 'rate_limited',
+    })).toBe(true);
+    const rows = await dbB.query(
+      'SELECT "status","cancelRequested" FROM public.scheduled_jobs WHERE id=$1::bigint',
+      [queued.id],
+    );
+    expect(rows[0].status).toBe('canceled');
+    expect(rows[0].cancelRequested).toBe(true);
+    expect(await b.claim('worker-b', 1)).toHaveLength(0);
+    expect(await b.retryDead(guild, queued.id, moderator)).toBe(false);
+  });
+
+  it('retries only proven no-effect dead jobs and respects guild scope', async () => {
+    const queued = await a.enqueue(reminder('dead'));
+    const [claimed] = await a.claim('worker-a', 1);
+    expect(await a.settle(claimed, {
+      outcome: 'dead', reasonCode: 'handler_missing',
+    })).toBe(true);
+    expect(await b.retryDead(otherGuild, queued.id, moderator)).toBe(false);
+    expect(await b.retryDead(guild, queued.id, moderator)).toBe(true);
+    expect(await b.retryDead(guild, queued.id, moderator)).toBe(false);
+    const [second] = await a.claim('worker-a', 1);
+    expect(second.id).toBe(queued.id);
+    expect(second.attempts).toBe(1);
+    expect(await a.statusCounts(otherGuild)).toEqual([]);
+  });
+
+  it('pending cancellation is final, fenced and auditable', async () => {
+    const queued = await a.enqueue(reminder('pending-cancel'));
+    expect(await b.cancel(guild, queued.id, moderator)).toBe(true);
+    expect(await a.claim('worker-a', 1)).toHaveLength(0);
+    const events = await dbA.query(
+      'SELECT event,"actorId" FROM public.scheduled_job_events WHERE "jobId"=$1::bigint ORDER BY id',
+      [queued.id],
+    );
+    expect(events).toEqual([
+      { event: 'queued', actorId: null },
+      { event: 'canceled', actorId: moderator },
+    ]);
+  });
+});
