@@ -1,5 +1,5 @@
 import {
-  assertSnowflake, normalizeJob, parseUtcInstant, retryDelaySeconds,
+  assertClaimedJob, assertSnowflake, normalizeJob, parseUtcInstant, retryDelaySeconds,
   transitionFor, type NewScheduledJob,
 } from './scheduler-policy';
 
@@ -101,4 +101,28 @@ describe('scheduler policy: bounded, UTC-only, metadata-only jobs', () => {
     expect(() => transitionFor('11',0,5,{outcome:'completed'})).toThrow('attempt');
     expect(() => transitionFor('11',6,5,{outcome:'completed'})).toThrow('attempt');
   });
+  it('validates every claimed database row, not only enqueue inputs',()=>{
+    const claimed = {
+      id:'9223372036854775807', guildId,
+      kind:'reminder_send',payload:{reminderId:10},
+      attempts:1,maxAttempts:5,
+      leaseToken:'44444444-4444-4444-4444-444444444444',
+      leaseOwner:'worker-1',cancelRequested:false,
+    };
+    expect(()=>assertClaimedJob(claimed)).not.toThrow();
+    expect(()=>assertClaimedJob({...claimed,payload:{
+      reminderId:10,messageContent:'@everyone',
+    }})).toThrow('payload');
+    expect(()=>assertClaimedJob({...claimed,payload:{reminderId:0}}))
+      .toThrow('reminder');
+    expect(()=>assertClaimedJob({...claimed,id:'9223372036854775808'}))
+      .toThrow('job ID');
+    expect(()=>assertClaimedJob({...claimed,attempts:6}))
+      .toThrow('attempt');
+    expect(()=>assertClaimedJob({...claimed,leaseToken:'malformed'}))
+      .toThrow('lease');
+    expect(()=>assertClaimedJob({...claimed,cancelRequested:'false'}))
+      .toThrow('lease');
+  });
+
 });
