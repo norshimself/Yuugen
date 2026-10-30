@@ -114,6 +114,34 @@ Direct database edits, deleting lease tokens, changing `needs_review` to
 supported recovery paths. Keep these endpoints away from production until
 authentication, staging and privacy acceptance is complete.
 
+## Real PostgreSQL integration suite (opt-in)
+
+The committed `backend/test/scheduler.pg.e2e-spec.ts` exercises the **actual
+ScheduledJobsService SQL** using two independent TypeORM connections and a
+randomly named disposable PostgreSQL database. It verifies idempotent
+replays, conflicting payloads, two-worker row locks, database clock, crash/
+lease expiry, stale fencing tokens, cancel-vs-retry races, safe manual retry,
+guild isolation and audit events. It deliberately does not call Discord.
+
+The suite is **skipped** during an ordinary `npm run test:e2e`. To run it on
+an approved local PostgreSQL 17 server, use an account with permission to
+create and drop a database. It checks a loopback host, requires an explicit
+`disposable` acknowledgement, never points the service at the admin DB, and
+creates/drops only a random `yuugen_scheduler_it_*` database:
+
+```bash
+cd backend
+YUUGEN_SCHEDULER_TEST_CONFIRM=disposable \\
+  YUUGEN_SCHEDULER_TEST_ADMIN_URL=postgres://postgres:password@127.0.0.1:5432/postgres \\
+  npm run test:e2e -- --runInBand scheduler.pg.e2e-spec.ts
+```
+
+Replace the example local credentials with securely supplied test-only values.
+Never reuse production credentials or target a production port-forward. This
+suite has **not yet been executed** in this PR environment; a committed suite
+is not equivalent to a passed PostgreSQL integration test. If setup fails,
+inspect whether the ephemeral database was cleaned up before rerunning.
+
 ## Verification before merge / release
 
 1. Run `cd backend && npm ci && npm run build && npm test -- --runInBand`,
