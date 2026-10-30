@@ -5,12 +5,16 @@ import { assertClaimedJob, type ClaimedJob, type JobOutcome } from './scheduler-
 import { ScheduledJobsService } from './scheduled-jobs.service';
 import { ScheduledJobsRegistry } from './scheduled-jobs.registry';
 
+const MAX_IN_FLIGHT_MS = 5 * 60_000;
+const SHUTDOWN_GRACE_MS = 5_000;
+
 @Injectable()
 export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ScheduledJobsWorker.name);
   private readonly workerId = 'yuugen-' + randomUUID();
   private timer: ReturnType<typeof setInterval> | null = null;
   private running: Promise<void> | null = null;
+  private activeHeartbeat: ReturnType<typeof setInterval> | null = null;
   private stopping = false;
 
   constructor(
@@ -30,7 +34,21 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
-    if (this.running) await this.running;
+    // Stop renewing the lease immediately, even if Discord never responds.
+    // The reaper will park any unresolved side effect for human review.
+    if (this.activeHeartbeat) clearInterval(this.activeHeartbeat);
+    if (!this.running) return;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
+    try {
+      await Promise.race([
+        this.running,
+        new Promise<void>((resolve) => {
+          timeout = setTimeout(resolve, SHUTDOWN_GRACE_MS);
+        }),
+      ]);
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   }
 
   /** Never overlap worker ticks in the same process. */
@@ -58,8 +76,7 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private async executeOne(job: ClaimedJob): Promise<void> {
-    // Fail closed for malformed legacy/corrupted database rows. The schema's
-    // JSONB-object check alone cannot enforce each job kind's ID-only payload.
+    // A JSONB object check is not enough to trust a claimed database payload.
     try {
       assertClaimedJob(job);
     } catch {
@@ -68,21 +85,27 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
           outcome: 'needs_review', reasonCode: 'invalid_claimed_job',
         });
       } catch {
-        // A malformed ownership token cannot be settled safely. Leave the
-        // lease to expire; the bounded reaper will park it for review.
+        // Invalid lease metadata may prevent settlement. Let the reaper park it.
         this.logger.error('Malformed claimed job requires lease reconciliation');
       }
       return;
     }
 
     let leaseLost = false;
+    let timedOut = false;
     const handler = this.registry.get(job.kind);
     const heartbeat = setInterval(() => {
+      if (this.stopping || leaseLost) {
+        clearInterval(heartbeat);
+        return;
+      }
       void this.jobs.heartbeat(job).then((alive) => {
         if (!alive) leaseLost = true;
       }).catch(() => { leaseLost = true; });
     }, 15000);
     heartbeat.unref();
+    this.activeHeartbeat = heartbeat;
+    let deadline: ReturnType<typeof setTimeout> | null = null;
 
     const assertActive = async (): Promise<void> => {
       if (leaseLost || this.stopping) throw new Error('Scheduler lease stopped');
@@ -90,61 +113,76 @@ export class ScheduledJobsWorker implements OnModuleInit, OnModuleDestroy {
       if (!state.alive || state.cancelRequested) {
         throw new Error('Scheduler lease or target canceled');
       }
-      // Every remote side effect must be preceded by a fresh permission and
-      // resource probe, not just a database lease check.
       if (handler) {
+        // A live guild authorization fetch may take time. Check again AFTER
+        // it completes; cancel or lease expiry must not be missed in the gap.
         const preflight = await handler.preflight(job);
         if (!preflight || preflight.state !== 'ready') {
           throw new Error('Scheduler live authorization or resource check failed');
         }
       }
+      if (leaseLost || this.stopping) throw new Error('Scheduler lease stopped');
+      const latest = await this.jobs.leaseState(job);
+      if (!latest.alive || latest.cancelRequested || leaseLost || this.stopping) {
+        throw new Error('Scheduler lease changed during authorization');
+      }
+    };
+
+    const dispatch = async (): Promise<JobOutcome | null> => {
+      const initial = await this.jobs.leaseState(job);
+      if (!initial.alive) return null;
+      if (initial.cancelRequested) {
+        return { outcome: 'canceled', reasonCode: 'cancel_before_dispatch' };
+      }
+      if (!handler) return { outcome: 'dead', reasonCode: 'handler_missing' };
+      const preflight = await handler.preflight(job);
+      if (!preflight) throw new Error('Invalid scheduler preflight');
+      if (preflight.state === 'canceled' || preflight.state === 'needs_review') {
+        return { outcome: preflight.state, reasonCode: preflight.reasonCode };
+      }
+      if (preflight.state !== 'ready') throw new Error('Invalid scheduler preflight');
+      await assertActive();
+      return handler.execute(job, { assertActive });
     };
 
     try {
-      // Before starting a handler, a canceled job is known to have NO side effect.
-      const initial = await this.jobs.leaseState(job);
-      if (!initial.alive) return;
-      if (initial.cancelRequested) {
-        await this.jobs.settle(job, { outcome: 'canceled', reasonCode: 'cancel_before_dispatch' });
-        return;
-      }
-
-      let outcome: JobOutcome;
-      if (!handler) {
-        outcome = { outcome: 'dead', reasonCode: 'handler_missing' };
-      } else {
-        // A pre-dispatch denial is safe to classify before any remote effects.
-        // This is mandatory even if the handler forgets to call assertActive.
-        const preflight = await handler.preflight(job);
-        if (!preflight) throw new Error('Invalid scheduler preflight');
-        if (preflight.state === 'canceled' || preflight.state === 'needs_review') {
-          outcome = { outcome: preflight.state, reasonCode: preflight.reasonCode };
-        } else if (preflight.state === 'ready') {
-          // Recheck the lease AND authorization after the first probe: a
-          // cancellation could race an async guild permission fetch.
-          await assertActive();
-          outcome = await handler.execute(job, { assertActive });
-        } else {
-          throw new Error('Invalid scheduler preflight');
-        }
-      }
-      if (leaseLost) return;
-      // An expired or replaced token cannot settle, even after a remote API call.
+      // A nonresponsive provider must not hold the worker or renew its lease
+      // forever. Late handler continuations can only pass assertActive while
+      // the token is still live; uncertain side effects are never replayed.
+      const outcome = await Promise.race([
+        dispatch(),
+        new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => {
+            timedOut = true;
+            leaseLost = true;
+            reject(new Error('Scheduler execution timed out'));
+          }, MAX_IN_FLIGHT_MS);
+          deadline.unref();
+        }),
+      ]);
+      if (!outcome || leaseLost) return;
       const settled = await this.jobs.settle(job, outcome);
       if (!settled) this.logger.warn('Scheduler job requires lease reconciliation: ' + job.id);
     } catch {
-      // Unknown provider outcomes must NOT be replayed as transient failures.
-      if (!leaseLost) {
+      // A timeout is uncertain even if the underlying Discord request may
+      // still finish. A failed heartbeat also cannot settle a stale token.
+      if (!leaseLost || timedOut) {
         try {
-          await this.jobs.settle(job, {
-            outcome: 'needs_review', reasonCode: 'unknown_outcome',
+          const settled = await this.jobs.settle(job, {
+            outcome: 'needs_review',
+            reasonCode: timedOut ? 'execution_timeout' : 'unknown_outcome',
           });
+          if (!settled) {
+            this.logger.warn('Scheduler job requires lease reconciliation: ' + job.id);
+          }
         } catch {
           this.logger.error('Scheduler could not park uncertain job: ' + job.id);
         }
       }
     } finally {
       clearInterval(heartbeat);
+      if (this.activeHeartbeat === heartbeat) this.activeHeartbeat = null;
+      if (deadline) clearTimeout(deadline);
     }
   }
 }
