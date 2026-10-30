@@ -208,6 +208,65 @@ describeDatabase('ScheduledJobsService on disposable PostgreSQL 17', () => {
     expect((await a.claim('worker-a', 1))[0].id).toBe(future.id);
   });
 
+  it('releases an unstarted claim without losing the job or consuming attempts',async()=>{
+    const queued=await a.enqueue(reminder('shutdown-before-dispatch'));
+    const [first]=await a.claim('worker-a',1,['reminder_send']);
+    expect(first.attempts).toBe(1);
+    expect(await b.releaseUnstarted(first)).toBe(true);
+    const rows=await dbB.query(
+      'SELECT "status","attempts","leaseToken" IS NULL AS "unowned" '+
+      'FROM public.scheduled_jobs WHERE id=$1::bigint',[queued.id],
+    );
+    expect(rows[0]).toEqual({status:'pending',attempts:0,unowned:true});
+    const [second]=await b.claim('worker-b',1,['reminder_send']);
+    expect(second.id).toBe(queued.id);
+    expect(second.attempts).toBe(1);
+    expect(await a.releaseUnstarted(first)).toBe(false);
+    const events=await dbB.query(
+      'SELECT "event","attempt" FROM public.scheduled_job_events '+
+      'WHERE "jobId"=$1::bigint ORDER BY id',[queued.id],
+    );
+    expect(events).toEqual([
+      {event:'queued',attempt:0},
+      {event:'claimed',attempt:1},
+      {event:'released_unstarted',attempt:0},
+      {event:'claimed',attempt:1},
+    ]);
+  });
+
+  it('raced manager cancellation stays terminal on an unstarted release',async()=>{
+    const queued=await a.enqueue(reminder('shutdown-cancel-race'));
+    const [first]=await a.claim('worker-a',1,['reminder_send']);
+    expect(await b.cancel(guild,queued.id,moderator)).toBe(true);
+    expect(await a.releaseUnstarted(first)).toBe(true);
+    const rows=await dbB.query(
+      'SELECT "status","attempts","cancelRequested","lastErrorCode" '+
+      'FROM public.scheduled_jobs WHERE id=$1::bigint',[queued.id],
+    );
+    expect(rows[0]).toEqual({
+      status:'canceled',attempts:0,cancelRequested:true,
+      lastErrorCode:'cancel_requested',
+    });
+    expect(await a.claim('worker-b',1,['reminder_send'])).toHaveLength(0);
+  });
+
+  it('stale release after lease expiry never resurrects uncertain work',async()=>{
+    const queued=await a.enqueue(reminder('shutdown-expired'));
+    const [first]=await a.claim('worker-a',1,['reminder_send']);
+    await dbB.query(
+      'UPDATE public.scheduled_jobs SET "leaseUntil"=clock_timestamp()-INTERVAL \'1 second\' '+
+      'WHERE id=$1::bigint',[queued.id],
+    );
+    expect(await a.releaseUnstarted(first)).toBe(false);
+    expect(await b.reconcileExpiredLeases()).toBe(1);
+    expect(await a.releaseUnstarted(first)).toBe(false);
+    expect(await b.claim('worker-b',1,['reminder_send'])).toHaveLength(0);
+    const rows=await dbB.query(
+      'SELECT "status" FROM public.scheduled_jobs WHERE id=$1::bigint',[queued.id],
+    );
+    expect(rows[0].status).toBe('needs_review');
+  });
+
   it('parks a crashed/expired worker as needs_review, never double-dispatches', async () => {
     const queued = await a.enqueue(reminder('crash'));
     const [claimed] = await a.claim('worker-a', 1);
