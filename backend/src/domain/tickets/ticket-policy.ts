@@ -50,6 +50,47 @@ export function privateTicketOverwrites(
   ];
 }
 
+/**
+ * Verify the provider's fresh channel overwrites, not merely the payload
+ * supplied to channel.create(). An inherited/unexpected role/member allow can
+ * expose private tickets even when @everyone is denied.
+ *
+ * Discord overwrite types: 0 = role, 1 = member. Guild administrators still
+ * bypass channel overwrites; the selected staff role requires staff review.
+ */
+export function hasExactPrivateTicketOverwrites(
+  overwrites: Iterable<{
+    id: string; type: number;
+    allow: { has(permission: bigint): boolean };
+    deny: { has(permission: bigint): boolean };
+  }>,
+  guildId: string, openerId: string, staffRoleId: string, botId: string,
+  viewChannel: bigint,
+): boolean {
+  const principals = [guildId, openerId, staffRoleId, botId];
+  if (principals.some(id => !validId(id)) || new Set(principals).size !== 4 ||
+      typeof viewChannel !== 'bigint' || viewChannel <= 0n) return false;
+
+  const expected = new Map<string, { type: number; deny: boolean }>([
+    [guildId, { type: 0, deny: true }],
+    [openerId, { type: 1, deny: false }],
+    [staffRoleId, { type: 0, deny: false }],
+    [botId, { type: 1, deny: false }],
+  ]);
+  for (const row of overwrites) {
+    if (!row || !row.allow || !row.deny ||
+        typeof row.allow.has !== 'function' ||
+        typeof row.deny.has !== 'function') return false;
+    const principal = expected.get(row.id);
+    if (!principal || row.type !== principal.type) return false;
+    const allowed = row.allow.has(viewChannel);
+    const denied = row.deny.has(viewChannel);
+    if (principal.deny ? (!denied || allowed) : (!allowed || denied)) return false;
+    expected.delete(row.id);
+  }
+  return expected.size === 0;
+}
+
 /** Only an explicit Discord authorization/validation rejection proves no channel was created. */
 export function isDefinitiveChannelCreateRejection(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
