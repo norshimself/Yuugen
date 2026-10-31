@@ -53,11 +53,14 @@ API, connected database, OAuth authorization or Discord/Lavalink response.
    schema changes. Restore it to a distinct disposable database, compare
    schema/data counts and log an independent restore result. Never test
    restore on the running production database.
-5. After parent migration runner #89 / PR #109 is reviewed, apply its
-   versioned manifest to disposable staging in order, including whichever
-   feature migrations have actually been merged. Record exact migration
-   SHA/version, schema/constraint state and rollback rehearsal. The draft
-   migration runner and scheduler PR #110 are **not** release-approved.
+5. Migration runner #89 / PR #109 is now **source-merged** to `main`,
+   but not staging-approved. Apply its ordered versioned manifest **only**
+   after an independent database backup/restore rehearsal and operator
+   authorization on disposable staging. New feature SQL files must be
+   registered in `backend/migrations/manifest.json` in dependency order
+   before merging their source. Record exact migration SHA/version,
+   schema constraints and rollback results. Scheduler PR #110 remains
+   draft and **not** release-approved.
 6. Record the tested backend/frontend image IDs and a **staging-only**
    rollback procedure. Rehearse returning to the previous images without
    dropping newly created ledger/audit tables or restoring erased data
