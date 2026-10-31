@@ -29,9 +29,10 @@ export class GuildAuditListener {
     private readonly config: ConfigService,
   ) {}
 
-  private async record(input: GuildAuditInput): Promise<void> {
-    // Distinct from shared Discord intents; never touch audit tables before
-    // the migration and explicit staging approval.
+  /** Shared, permission-checked delivery for every audit-log listener. */
+  async record(input: GuildAuditInput): Promise<void> {
+    // Even when Discord's shared intents are enabled, guild-audit recording
+    // stays inert until the separate staging-approved switch is explicit.
     if (this.config.get<string>('ENABLE_GUILD_AUDIT_LOGGING') !== 'true') return;
     try {
       const item = await this.audit.reserve(input);
@@ -62,6 +63,7 @@ export class GuildAuditListener {
       await channel.send({
         content: formatGuildAudit(
           item.eventType, item.targetId, item.sourceChannelId, item.actorId,
+          item.changedFields ?? [],
         ),
         allowedMentions: { parse: [] },
       });

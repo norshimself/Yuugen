@@ -6,6 +6,7 @@ import { AntiRaidModule } from '../domain/security/anti-raid.module';
 import { AntiNukeListener } from './listeners/anti-nuke.listener';
 import { AntiNukeModule } from '../domain/security/anti-nuke.module';
 import { GuildAuditListener } from './listeners/guild-audit.listener';
+import { GuildStructureAuditListener } from './listeners/guild-structure-audit.listener';
 import { GuildAuditModule } from '../domain/audit/guild-audit.module';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
@@ -52,6 +53,7 @@ import { WelcomeListener } from './listeners/welcome.listener';
     AntiRaidListener,
     AntiNukeListener,
     GuildAuditListener,
+    GuildStructureAuditListener,
     PingCommand,
     PlayCommand,
     QueueCommand,

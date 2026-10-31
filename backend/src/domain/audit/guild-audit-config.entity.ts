@@ -15,6 +15,9 @@ export class GuildAuditConfigEntity implements GuildAuditConfig {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   selectedEvents: GuildAuditType[];
 
+  @Column({ type: 'integer', default: 7 })
+  retentionDays: number;
+
   @UpdateDateColumn({ type: 'timestamptz' })
   updatedAt: Date;
 }

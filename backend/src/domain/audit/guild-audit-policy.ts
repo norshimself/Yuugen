@@ -1,3 +1,7 @@
+import {
+  STRUCTURAL_AUDIT_TYPES, isStructuralAuditType, sanitizeAuditFieldNames,
+} from './guild-audit-structure-policy';
+
 /**
  * Guild audit is opt-in. We deliberately never retain message bodies,
  * attachments, author names or user-provided free-form text.
@@ -6,6 +10,7 @@ export const AUDIT_TYPES = [
   'message_edit', 'message_delete',
   'member_join', 'member_departure', 'member_ban',
   'member_kick', 'member_timeout',
+  ...STRUCTURAL_AUDIT_TYPES,
 ] as const;
 export type GuildAuditType = (typeof AUDIT_TYPES)[number];
 
@@ -13,12 +18,15 @@ export interface GuildAuditConfig {
   enabled: boolean;
   logChannelId: string | null;
   selectedEvents: GuildAuditType[];
+  /** 1–30 days; defaults to seven for legacy request bodies. */
+  retentionDays?: number;
 }
 
 export const DEFAULT_GUILD_AUDIT: GuildAuditConfig = {
   enabled: false,
   logChannelId: null,
   selectedEvents: [],
+  retentionDays: 7,
 };
 
 const snowflake = /^\d{17,20}$/;
@@ -31,7 +39,7 @@ export function validateGuildAuditConfig(input: unknown): string | null {
   }
   const value = input as Partial<GuildAuditConfig>;
   if (Object.keys(value).some(key =>
-    !['enabled', 'logChannelId', 'selectedEvents'].includes(key))) {
+    !['enabled', 'logChannelId', 'selectedEvents', 'retentionDays'].includes(key))) {
     return 'Unknown audit setting';
   }
   if (typeof value.enabled !== 'boolean') return 'Invalid enabled state';
@@ -44,6 +52,11 @@ export function validateGuildAuditConfig(input: unknown): string | null {
       value.selectedEvents.some(type => typeof type !== 'string' || !types.has(type)) ||
       new Set(value.selectedEvents).size !== value.selectedEvents.length) {
     return 'Invalid selected audit events';
+  }
+  if (value.retentionDays !== undefined &&
+      (!Number.isSafeInteger(value.retentionDays) ||
+        value.retentionDays < 1 || value.retentionDays > 30)) {
+    return 'Retention must be 1 to 30 days';
   }
   if (value.enabled && (!value.logChannelId || !value.selectedEvents.length)) {
     return 'Enabled audit requires a log channel and selected events';
@@ -61,11 +74,14 @@ export function auditEventKey(
 }
 
 /** No arbitrary event timestamp may create a future/very old audit record. */
-export function validAuditTime(occurredAtMs: number, observedAtMs: number): boolean {
+export function validAuditTime(
+  occurredAtMs: number, observedAtMs: number, maxAgeMs = 120000,
+): boolean {
   return Number.isSafeInteger(occurredAtMs) &&
     Number.isSafeInteger(observedAtMs) &&
     occurredAtMs <= observedAtMs + 5000 &&
-    occurredAtMs >= observedAtMs - 120000;
+    Number.isSafeInteger(maxAgeMs) && maxAgeMs >= 0 &&
+    occurredAtMs >= observedAtMs - maxAgeMs;
 }
 
 /** Guild manager must explicitly select each event kind. */
@@ -88,6 +104,7 @@ export function formatGuildAudit(
   targetId: string | null,
   sourceChannelId: string | null,
   actorId: string | null,
+  changedFields: readonly string[] = [],
 ): string {
   const label: Record<GuildAuditType, string> = {
     message_edit: 'Message edited',
@@ -97,14 +114,30 @@ export function formatGuildAudit(
     member_ban: 'Member banned (actor unverified)',
     member_kick: 'Member kicked (confirmed by Discord audit log)',
     member_timeout: 'Member timeout changed (actor unverified)',
+    role_create: 'Role created',
+    role_update: 'Role updated',
+    role_delete: 'Role deleted',
+    member_role_update: 'Member roles changed',
+    channel_create: 'Channel created',
+    channel_update: 'Channel updated',
+    channel_delete: 'Channel deleted',
+    webhook_create: 'Webhook created',
+    webhook_update: 'Webhook updated',
+    webhook_delete: 'Webhook deleted',
+    permission_change: 'Permissions changed (audit entry)',
   };
   const parts = ['Guild audit: ' + label[type]];
   if (targetId && snowflake.test(targetId)) parts.push('target ID ' + targetId);
   if (sourceChannelId && snowflake.test(sourceChannelId)) {
     parts.push('channel ID ' + sourceChannelId);
   }
-  if (type === 'member_kick' && actorId && snowflake.test(actorId)) {
+  if ((type === 'member_kick' || isStructuralAuditType(type)) &&
+      actorId && snowflake.test(actorId)) {
     parts.push('audit actor ID ' + actorId);
+  }
+  if (isStructuralAuditType(type)) {
+    const safeFields = sanitizeAuditFieldNames(changedFields);
+    if (safeFields.length) parts.push('changed: ' + safeFields.join(', '));
   }
   return parts.join(' | ') + '. Metadata only; no message contents captured.';
 }

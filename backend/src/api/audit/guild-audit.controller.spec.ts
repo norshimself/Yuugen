@@ -90,17 +90,19 @@ describe('GuildAuditController: guarded guild admin configuration', () => {
     expect(x.audit.setConfig).not.toHaveBeenCalled();
   });
 
-  it('refuses enabled audit while global switch is off; can still disable', async () => {
+  it('requires explicit global audit activation before configuring structural capture', async () => {
     const x = setup();
     x.config.get.mockImplementation((key: string) =>
       key === 'ENABLE_GUILD_AUDIT_LOGGING' ? 'false' : 'true');
-    await expect(x.controller.configure({guildId,
-      settings: {...enabled, selectedEvents: [...enabled.selectedEvents]},
+    await expect(x.controller.configure({
+      guildId, settings: {enabled: true, logChannelId: channelId,
+        selectedEvents: ['role_create'], retentionDays: 7},
     })).rejects.toThrow('disabled until staging approval');
     expect(x.audit.setConfig).not.toHaveBeenCalled();
-    await x.controller.configure({guildId, settings: {
-      enabled: false, logChannelId: channelId, selectedEvents: [],
-    }});
+    await x.controller.configure({
+      guildId, settings: {enabled: false, logChannelId: null,
+        selectedEvents: [], retentionDays: 7},
+    });
     expect(x.audit.setConfig).toHaveBeenCalledTimes(1);
   });
 
@@ -127,4 +129,40 @@ describe('GuildAuditController: guarded guild admin configuration', () => {
     });
     expect(x.guild.channels.fetch).not.toHaveBeenCalled();
   });
+  it('requires Guild Moderation intent and View Audit Log for structural entries', async () => {
+    const x = setup();
+    const structural = {
+      guildId, settings: { enabled: true, logChannelId: channelId,
+        selectedEvents: ['role_create' as const], retentionDays: 7 },
+    };
+    x.config.get.mockReturnValueOnce('false');
+    await expect(x.controller.configure(structural))
+      .rejects.toThrow('Guild Moderation');
+    x.bot.permissions.has.mockReturnValue(false);
+    await expect(x.controller.configure(structural))
+      .rejects.toThrow('View Audit Log');
+    x.bot.permissions.has.mockReturnValue(true);
+    await x.controller.configure(structural);
+    expect(x.audit.setConfig).toHaveBeenCalledWith(guildId, structural.settings);
+  });
+
+  it('bounds manager-configured retention and preserves safe disable path', async () => {
+    const x = setup();
+    const payload = {
+      guildId, settings: {
+        enabled: true, logChannelId: channelId,
+        selectedEvents: ['webhook_delete' as const], retentionDays: 31,
+      },
+    };
+    await expect(x.controller.configure(payload)).rejects.toThrow('Retention');
+    expect(x.audit.setConfig).not.toHaveBeenCalled();
+    x.guild.channels.fetch.mockResolvedValue(null);
+    await x.controller.configure({
+      guildId, settings: { ...payload.settings, enabled: false, retentionDays: 1 },
+    });
+    expect(x.audit.setConfig).toHaveBeenCalledWith(guildId,
+      { ...payload.settings, enabled: false, retentionDays: 1 });
+  });
+
+
 });

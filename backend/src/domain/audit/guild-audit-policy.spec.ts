@@ -13,6 +13,7 @@ describe('metadata-only guild audit policy', () => {
   it('starts disabled, empty and privacy-preserving', () => {
     expect(DEFAULT_GUILD_AUDIT).toEqual({
       enabled: false, logChannelId: null, selectedEvents: [],
+      retentionDays: 7,
     });
     expect(AUDIT_TYPES).toContain('member_timeout');
     expect(shouldAudit(DEFAULT_GUILD_AUDIT, 'message_delete', null)).toBe(false);

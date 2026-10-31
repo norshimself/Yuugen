@@ -1,17 +1,21 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { LessThan, MoreThan, Repository } from 'typeorm';
 import {
   DEFAULT_GUILD_AUDIT, auditEventKey, shouldAudit, validAuditTime,
   validateGuildAuditConfig, type GuildAuditConfig, type GuildAuditType,
 } from './guild-audit-policy';
+import {
+  MAX_AUDIT_ENTRY_DELAY_MS, isStructuralAuditType,
+  sanitizeAuditFieldNames,
+} from './guild-audit-structure-policy';
 import { GuildAuditConfigEntity } from './guild-audit-config.entity';
 import { GuildAuditEvent } from './guild-audit-event.entity';
 
 const SNOWFLAKE = /^\d{17,20}$/;
 const MAX_EVENTS_PER_MINUTE = 20;
 const ONE_MINUTE = 60_000;
-const RETENTION_MS = 7 * 24 * 60 * ONE_MINUTE;
+const ONE_DAY_MS = 24 * 60 * ONE_MINUTE;
 
 function validId(value: unknown): value is string {
   return typeof value === 'string' && SNOWFLAKE.test(value);
@@ -29,8 +33,10 @@ export interface GuildAuditInput {
   observedAtMs: number;
   targetId: string | null;
   sourceChannelId: string | null;
-  // Actor attribution is allowed only for Discord's trusted kick audit log.
+  // Actor attribution is accepted only from trusted audit-log events.
   actorId: string | null;
+  verifiedAuditEntry?: boolean;
+  changedFields?: readonly string[];
 }
 
 export interface GuildAuditDispatch {
@@ -41,6 +47,7 @@ export interface GuildAuditDispatch {
   targetId: string | null;
   sourceChannelId: string | null;
   actorId: string | null;
+  changedFields?: string[];
 }
 
 @Injectable()
@@ -67,6 +74,7 @@ export class GuildAuditService {
       enabled: row.enabled,
       logChannelId: row.logChannelId,
       selectedEvents: [...row.selectedEvents],
+      retentionDays: row.retentionDays ?? 7,
     } : { ...DEFAULT_GUILD_AUDIT, selectedEvents: [] };
     if (this.cache.size >= 500) this.cache.clear();
     this.cache.set(guildId, { config, expires: Date.now() + 5000 });
@@ -82,6 +90,7 @@ export class GuildAuditService {
       enabled: value.enabled,
       logChannelId: value.logChannelId,
       selectedEvents: [...value.selectedEvents],
+      retentionDays: value.retentionDays ?? 7,
     };
     await this.configs.save(this.configs.create({ guildId, ...config }));
     this.cache.delete(guildId);
@@ -90,8 +99,13 @@ export class GuildAuditService {
 
   async history(guildId: string): Promise<GuildAuditEvent[]> {
     checkGuild(guildId);
+    const config = await this.getConfig(guildId);
+    // A quiet guild might not trigger opportunistic deletion for days.
+    // Do not expose rows beyond configured retention even if still at rest.
+    const cutoff = new Date(Date.now() - (config.retentionDays ?? 7) * ONE_DAY_MS);
     return this.events.find({
-      where: { guildId }, order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
+      where: { guildId, createdAt: MoreThan(cutoff) },
+      order: { createdAt: 'DESC', id: 'DESC' }, take: 30,
     });
   }
 
@@ -104,7 +118,10 @@ export class GuildAuditService {
   async reserve(input: GuildAuditInput): Promise<GuildAuditDispatch | null> {
     checkGuild(input?.guildId);
     const key = auditEventKey(input.eventType, input.eventId, input.revision);
-    if (!key || !validAuditTime(input.occurredAtMs, input.observedAtMs) ||
+    const isStructure = isStructuralAuditType(input.eventType);
+    if ((isStructure && input.verifiedAuditEntry !== true) ||
+        !key || !validAuditTime(input.occurredAtMs, input.observedAtMs,
+          isStructure ? MAX_AUDIT_ENTRY_DELAY_MS : 120000) ||
         (input.targetId !== null && !validId(input.targetId)) ||
         (input.sourceChannelId !== null && !validId(input.sourceChannelId))) {
       return null;
@@ -120,7 +137,7 @@ export class GuildAuditService {
       where: { guildId: input.guildId, eventKey: key },
     })) return null;
 
-    await this.pruneOld(input.guildId, now);
+    await this.pruneOld(input.guildId, now, config.retentionDays ?? 7);
     const minuteBucket = new Date(Math.floor(now / ONE_MINUTE) * ONE_MINUTE);
     for (let slot = 0; slot < MAX_EVENTS_PER_MINUTE; slot++) {
       const claimed = await this.events.createQueryBuilder()
@@ -131,8 +148,11 @@ export class GuildAuditService {
           eventType: input.eventType,
           targetId: input.targetId,
           sourceChannelId: input.sourceChannelId,
-          actorId: input.eventType === 'member_kick' && validId(input.actorId)
+          actorId: (input.eventType === 'member_kick' ||
+            (isStructure && input.verifiedAuditEntry === true)) && validId(input.actorId)
             ? input.actorId : null,
+          changedFields: isStructure
+            ? sanitizeAuditFieldNames(input.changedFields) : [],
           occurredAt: new Date(input.occurredAtMs),
           minuteBucket,
           slot,
@@ -149,6 +169,7 @@ export class GuildAuditService {
           targetId: row.targetId,
           sourceChannelId: row.sourceChannelId,
           actorId: row.actorId,
+          ...(isStructure ? { changedFields: row.changedFields ?? [] } : {}),
         };
       }
       // A concurrent worker may already have inserted the same event ID.
@@ -181,10 +202,10 @@ export class GuildAuditService {
     return (updated.affected || 0) > 0;
   }
 
-  private async pruneOld(guildId: string, now: number): Promise<void> {
+  private async pruneOld(guildId: string, now: number, retentionDays: number): Promise<void> {
     if (now - (this.lastPruned.get(guildId) || 0) < 10 * ONE_MINUTE) return;
     await this.events.delete({
-      guildId, createdAt: LessThan(new Date(now - RETENTION_MS)),
+      guildId, createdAt: LessThan(new Date(now - retentionDays * ONE_DAY_MS)),
     });
     if (this.lastPruned.size >= 500) this.lastPruned.clear();
     this.lastPruned.set(guildId, now);
