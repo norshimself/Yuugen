@@ -87,10 +87,18 @@ describe('Privacy policy: bounded retention, explicit consent and safe projectio
       id:7,name:'blocked',enabled:true,kind:'blocked_phrases',action:'dry_run',
       priority:1,phrases:['word'],threshold:6,windowSeconds:8,
       exemptChannelIds:['234567890123456789'],exemptRoleIds:[],
+      allowedDomains:['example.org'],allowedInviteCodes:['SafeInvite'],
       internalAccessToken:'never',
     };
     const output=autoModRuleExport(rule);
     expect(output).not.toHaveProperty('internalAccessToken');
     expect(output.phrases).not.toBe(rule.phrases);
+    expect(output.allowedDomains).toEqual(['example.org']);
+    expect(output.allowedInviteCodes).toEqual(['SafeInvite']);
+    expect(output.allowedDomains).not.toBe(rule.allowedDomains);
+    expect(output.allowedInviteCodes).not.toBe(rule.allowedInviteCodes);
+    const legacy={...rule,allowedDomains:undefined,allowedInviteCodes:undefined};
+    expect(autoModRuleExport(legacy).allowedDomains).toEqual([]);
+    expect(autoModRuleExport(legacy).allowedInviteCodes).toEqual([]);
   });
 });
