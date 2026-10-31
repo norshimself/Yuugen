@@ -13,19 +13,26 @@ database, Discord API or deployment has been mutated. GitHub Actions stay off.
 | `trivia_sessions` | Discord user ID, question/message ID, correct answer, reward, creation date | Game expires after 15 minutes. Incremental TTL cleanup; explicit self-erasure. |
 | `trivia_questions`, `shop_items` | Shared trivia and shop catalog data | Not personal; not removed for an individual user. |
 | `guild_settings` | Guild ID, welcome text/channel, prefix, word blacklist, moderation toggles | Live Manage Server permission required for guild export. Deletion needs guild lifecycle/cache review. |
-| `automod_rules` | Guild ID, blocked phrases, exemptions, rule settings | Manager-only export, limited to 100 rules with truncation notice; deletion not yet approved. |
+| `automod_rules` | Guild ID, blocked phrases, exemptions, rule settings, and the newly merged approved-domain/invite-code allowlists (#57) | Manager-only export, limited to 100 rules with truncation notice; deletion not yet approved. Export uses an explicit field allowlist. |
 | `moderation_cases` | Guild, target/staff IDs, case actions, **free-text reasons**, timestamps | Required audit/appeal evidence. Separate privacy/legal retention and subject-access review. Not erased by a self-request. |
 | `moderation_purges` | Guild, actor/filter IDs, **message IDs** and free-text reasons, event counts/status | Audit metadata; no copied message text or attachments. Separate retention review. |
 | `moderation_channel_locks`, `moderation_voice_cases` | Guild, staff and target IDs, channel IDs, permission snapshots, reasons, timestamps | Separate audit/legal policy; preserved. |
 | Gateway message activity/AutoMod counters | Guild/member IDs and matching content inspected in memory | Bounded in-memory only; Message Content intent is opt-in. No new transcript storage. |
 | OAuth and service secrets | Discord bot/client secrets, JWT secret, Lavalink/DB credentials | Deployment environment, **not** in this PR's exports. Require secret rotation, restricted access, encrypted backups and TLS review. |
 
-**Unmerged feature data needs a second inventory before integration.** Other
-draft branches contain onboarding DM/acknowledgement receipts (#62), anti-raid
-join metadata (#58), audit event records (#60/#61), and scheduled jobs/journal
-(#90). Ticket conversations, transcripts, provider attachments and personal
-consent settings need their own documented storage/export/retention decisions
-before they are enabled. Do not assume this PR erases any of those datasets.
+**The current `main` schema now includes additional records which this first
+privacy API does NOT export or erase:** anti-raid joins and alerts (#58),
+anti-nuke events and security alerts (#59), configurable guild audit and
+structural event metadata (#60/#61), and scheduled job/operator journal
+records (#90). These source branches were merged **without running their
+migrations** in this work. Exclusion does not constitute legal compliance;
+separate scoped export/erasure, consent, retention and audit-hold policies
+are required before enabling them.
+
+Further unmerged drafts contain onboarding DM/acknowledgement receipts (#62)
+and private ticket metadata (#65); ticket transcripts and attachments may
+have separate Discord/provider lifecycles (#66). Do not assume a self-request
+erases other guilds' data or data held by external providers.
 
 ## Available privacy API (first slice)
 
@@ -54,7 +61,8 @@ their user ID from JWT authentication, never from URL parameters or JSON input.
 - `GET /api/v1/privacy/guild/export?guildId=...`: protected by JWT and fresh
   GuildAccessGuard membership with Manage Server permission in the requested
   guild. Exports only the existing guild settings and first 100 AutoMod rule
-  configurations. `truncated=true` flags further pages needing a reviewed
+  configurations, **including reviewed domain and invite-code allowlists**.
+  `truncated=true` flags further pages needing a reviewed
   export flow. Does not expose user profiles, members of other guilds, or
   moderation cases. No guild-wide erase endpoint is offered yet.
 
