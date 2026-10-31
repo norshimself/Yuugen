@@ -96,6 +96,16 @@ skipped if the matching tokens are absent.
 Each check is reported PASS/FAIL, exits nonzero on failures, and does not
 print token values.
 
+**Fail-closed write preflight:** Even with `YUUGEN_TEST_VOICE=yes` or
+`YUUGEN_TEST_ECONOMY=yes`, *no POST requests are issued* if **any** prior
+read-only check fails—database/Discord/Lavalink readiness, anonymous JWT
+rejection, mutual guild membership, channel/queue reads, live WebSocket
+authorization, or optional outsider/non-manager permissions. A failed voice
+test also prevents the economy test from proceeding in the same run. The
+harness prints a SKIP notice; the original failed check still blocks release.
+Malformed WebSocket frames and send errors fail gracefully without logging
+bearer credentials. Test only against a completely disposable guild.
+
 ## 3. Opt-in voice and Lavalink acceptance
 
 **Only** with a disposable test guild and inactive voice channel, add:
