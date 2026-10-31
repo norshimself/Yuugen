@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "migrations": [
+    "20261019_economy_integrity.sql",
+    "20261020_moderation_warnings.sql",
+    "20261028_moderation_timeouts.sql",
+    "20261028_moderation_purges.sql",
+    "20261028_moderation_channel_locks.sql",
+    "20261028_moderation_voice.sql",
+    "20261028_automod_rules.sql",
+    "20261028_automod_content_filters.sql",
+    "20261028_anti_raid_alerts.sql",
+    "20261028_anti_nuke_monitoring.sql",
+    "20261029_guild_audit_channels.sql",
+    "20261029_guild_audit_structure.sql"
+  ]
+}

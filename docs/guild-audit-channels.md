@@ -3,6 +3,11 @@
 **Implementation status: source-only; disabled for every guild until explicitly
 configured and accepted on staging.** GitHub Actions remain disabled.
 
+The global `ENABLE_GUILD_AUDIT_LOGGING=false` switch disables all capture and
+makes enabled configuration requests fail closed. Only activate after the
+SQL migration and privacy acceptance on a disposable guild. Shared Discord
+intents alone do not activate the audit pipeline.
+
 ## Purpose and privacy contract
 
 Guild managers can select which audit events to send to a *private* guild text

@@ -14,6 +14,8 @@ import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
 import { SettingsModule } from './api/settings/settings.module';
+import { AntiRaidModule } from './domain/security/anti-raid.module';
+import { AntiNukeModule } from './domain/security/anti-nuke.module';
 import { GuildAuditModule } from './domain/audit/guild-audit.module';
 
 @Module({
@@ -28,6 +30,8 @@ import { GuildAuditModule } from './domain/audit/guild-audit.module';
     EconomyApiModule,
     GamesApiModule,
     SettingsModule,
+    AntiRaidModule,
+    AntiNukeModule,
     GuildAuditModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -61,8 +65,7 @@ import { GuildAuditModule } from './domain/audit/guild-audit.module';
             IntentsBitField.Flags.GuildMessages,
             IntentsBitField.Flags.GuildVoiceStates,
             ...(configService.get<string>('ENABLE_GUILD_MODERATION_INTENT') === 'true'
-              ? [IntentsBitField.Flags.GuildModeration]
-              : []),
+              ? [IntentsBitField.Flags.GuildModeration] : []),
             ...(configService.get<string>('ENABLE_GUILD_MEMBERS_INTENT') === 'true'
               ? [IntentsBitField.Flags.GuildMembers]
               : []),
