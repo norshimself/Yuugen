@@ -10,7 +10,7 @@ import {
 import type { ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { TicketService } from '../../../domain/tickets/ticket.service';
 import { TICKET_FEATURE_FLAG, isDefinitiveChannelCreateRejection,
-  privateTicketOverwrites, ticketChannelName, ticketStaffAllowed, validTicketSetup,
+  privateTicketOverwrites, hasExactPrivateTicketOverwrites, ticketChannelName, ticketStaffAllowed, validTicketSetup,
 } from '../../../domain/tickets/ticket-policy';
 
 const TicketGroup = createCommandGroupDecorator({
@@ -174,17 +174,28 @@ export class TicketCommands {
         reason:'Yuugen private support ticket #'+ticketId,
       });
       channel=opened;
+      // Refetch from Discord to avoid trusting the result of our own create
+      // request or a cached overwrite snapshot.
+      const confirmed = await guild.channels.fetch(opened.id, { force: true });
+      if (!confirmed || confirmed.type !== ChannelType.GuildText ||
+          confirmed.parentId !== config.categoryId ||
+          !hasExactPrivateTicketOverwrites(
+            confirmed.permissionOverwrites.cache.values(), guild.id, member.id,
+            role.id, bot.id, PermissionFlagsBits.ViewChannel,
+          )) {
+        throw new Error('Ticket provider overwrite set needs staff review');
+      }
       // A category/permission inheritance or Discord API mismatch must
       // never be treated as private merely because overwrites were requested.
       // Verify the channel's effective access before posting the ticket
       // control message or telling the user that opening succeeded.
-      if (opened.permissionsFor(guild.roles.everyone)
+      if (confirmed.permissionsFor(guild.roles.everyone)
             ?.has(PermissionFlagsBits.ViewChannel) !== false ||
-          opened.permissionsFor(member)
+          confirmed.permissionsFor(member)
             ?.has(PermissionFlagsBits.ViewChannel) !== true ||
-          opened.permissionsFor(role)
+          confirmed.permissionsFor(role)
             ?.has(PermissionFlagsBits.ViewChannel) !== true ||
-          opened.permissionsFor(bot)
+          confirmed.permissionsFor(bot)
             ?.has(PermissionFlagsBits.ViewChannel) !== true) {
         throw new Error('Ticket effective channel permissions need staff review');
       }
