@@ -56,6 +56,9 @@ export class PrivacyService {
       excludedFromAutomaticExport: [
         'moderation_audit_subject_or_staff_records',
         'guild_configuration',
+        'security_alerts_and_audit_metadata',
+        'scheduler_jobs_and_operator_audits',
+        'future_or_unmerged_ticket_records',
         'other_discord_and_third_party_data',
         'unmerged_feature_branch_datasets',
       ],
@@ -85,6 +88,10 @@ export class PrivacyService {
       truncated: rules.length > MAX_GUILD_RULES_EXPORT,
       excludedFromAutomaticExport: [
         'moderation_audit_requiring_staff_or_legal_review',
+        'anti_raid_and_anti_nuke_alert_data',
+        'guild_message_and_structural_audit_metadata',
+        'scheduler_jobs_and_operator_actions',
+        'future_ticket_configuration_and_events',
         'economy_global_user_profiles',
         'cross_guild_member_records',
       ],
