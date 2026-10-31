@@ -16,6 +16,7 @@ import { GamesApiModule } from './api/games/games.module';
 import { SettingsModule } from './api/settings/settings.module';
 import { AntiRaidModule } from './domain/security/anti-raid.module';
 import { AntiNukeModule } from './domain/security/anti-nuke.module';
+import { GuildAuditModule } from './domain/audit/guild-audit.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { AntiNukeModule } from './domain/security/anti-nuke.module';
     SettingsModule,
     AntiRaidModule,
     AntiNukeModule,
+    GuildAuditModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
