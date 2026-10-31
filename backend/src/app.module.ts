@@ -18,6 +18,7 @@ import { AntiRaidModule } from './domain/security/anti-raid.module';
 import { AntiNukeModule } from './domain/security/anti-nuke.module';
 import { GuildAuditModule } from './domain/audit/guild-audit.module';
 import { ScheduledJobsModule } from './domain/scheduler/scheduled-jobs.module';
+import { PrivacyModule } from './domain/privacy/privacy.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ScheduledJobsModule } from './domain/scheduler/scheduled-jobs.module';
     AntiNukeModule,
     GuildAuditModule,
     ScheduledJobsModule,
+    PrivacyModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
