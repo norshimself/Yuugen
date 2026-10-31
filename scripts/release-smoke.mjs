@@ -43,8 +43,8 @@ export async function runSmoke(apiUrl, transport = fetch, print = console.log) {
   const parsed = new URL(apiUrl);
   if (
     !['http:', 'https:'].includes(parsed.protocol) ||
-    parsed.username || parsed.password ||
-    !parsed.pathname.replace(/\/+$/, '').endsWith('/api/v1')
+    parsed.username || parsed.password || parsed.search || parsed.hash ||
+    !/^\/api\/v1\/?$/.test(parsed.pathname)
   ) {
     throw new Error('YUUGEN_API_URL must be an HTTP(S) URL ending in /api/v1 with no credentials');
   }
