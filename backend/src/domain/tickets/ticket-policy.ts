@@ -58,6 +58,7 @@ export function isDefinitiveChannelCreateRejection(error: unknown): boolean {
 }
 
 export function ticketChannelName(id: string): string {
-  if (!/^\d{1,18}$/.test(id) || id === '0') throw new Error('Invalid ticket sequence');
+  if (!/^\d{1,19}$/.test(id) || BigInt(id) < 1n ||
+      BigInt(id) > 9223372036854775807n) throw new Error('Invalid ticket sequence');
   return 'ticket-' + id;
 }
