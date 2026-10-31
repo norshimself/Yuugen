@@ -225,7 +225,15 @@ export async function runAcceptance(config, {
     }
   }
 
-  if (config.allowVoice && guildsOK) {
+  // Never issue even explicitly opted-in writes when any read-only
+  // prerequisite fails (including readiness, permissions and WebSockets).
+  // A broken staging deployment must fail closed, not mutate partial state.
+  const readOnlyOK = results.every(result => result.pass);
+  if (!readOnlyOK && (config.allowVoice || config.allowEconomy)) {
+    log('SKIP state-changing staging checks: read-only prerequisites failed');
+  }
+
+  if (config.allowVoice && guildsOK && readOnlyOK) {
     await check('live staging Lavalink join/play/pause/resume/stop', async () => {
       const current = await api('GET', `/player/nowplaying?guildId=${config.guildId}`);
       // Prevent the test from disconnecting another user's active session.
@@ -271,7 +279,7 @@ export async function runAcceptance(config, {
     });
   }
 
-  if (config.allowEconomy && guildsOK) {
+  if (config.allowEconomy && guildsOK && readOnlyOK && results.every(result => result.pass)) {
     await check('staging RPS cooldown across duplicate API calls', async () => {
       const a = await api('POST', '/games/rps', { choice: 'paper' });
       status(a, 201, '/games/rps');
