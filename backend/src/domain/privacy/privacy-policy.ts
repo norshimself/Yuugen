@@ -117,6 +117,7 @@ export function autoModRuleExport(value: {
   id:number;name:string;enabled:boolean;kind:string;action:string;priority:number;
   phrases:string[];threshold:number;windowSeconds:number;
   exemptChannelIds:string[];exemptRoleIds:string[];
+  allowedDomains?:string[];allowedInviteCodes?:string[];
 }) {
   return {
     id:value.id,name:value.name,enabled:value.enabled,kind:value.kind,
@@ -125,5 +126,9 @@ export function autoModRuleExport(value: {
     windowSeconds:value.windowSeconds,
     exemptChannelIds:[...value.exemptChannelIds],
     exemptRoleIds:[...value.exemptRoleIds],
+    // Explicitly include only the two reviewed AutoMod allowlists from #57.
+    // Do not serialize an entire entity or silently expose future columns.
+    allowedDomains:Array.isArray(value.allowedDomains)?[...value.allowedDomains]:[],
+    allowedInviteCodes:Array.isArray(value.allowedInviteCodes)?[...value.allowedInviteCodes]:[],
   };
 }
