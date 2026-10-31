@@ -176,17 +176,26 @@ export async function runAcceptance(config, {
     expect(result.status === expected, `${route}: expected ${expected}, received ${result.status}`);
   }
 
-  await check('backend dependency readiness', async () => {
+  const readyOK = await check('backend dependency readiness', async () => {
     const r = await api('GET', '/ready', undefined, '');
     status(r, 200, '/ready');
     expect(r.data?.status === 'ready' &&
       ['database', 'discord', 'lavalink'].every((name) => r.data?.dependencies?.[name] === 'up'),
     'database, Discord and Lavalink must all report up');
   });
-  await check('missing bearer token rejected', async () => {
+  const anonymousDenied = await check('missing bearer token rejected', async () => {
     const r = await api('GET', '/player/guilds', undefined, '');
     status(r, 401, '/player/guilds');
   });
+  // Do not transmit a valid bearer token at all when the backend is
+  // unhealthy or an anonymous request unexpectedly succeeds. Both must
+  // pass before the first credentialed request or native WebSocket.
+  if (!readyOK || !anonymousDenied) {
+    log('SKIP token-bearing staging checks: readiness or anonymous auth failed');
+    log(results.filter(result => result.pass).length + '/' + results.length +
+      ' staging checks passed; token-bearing checks not attempted');
+    return { passed: false, results };
+  }
   const guildsOK = await check('authenticated mutual-guild listing', async () => {
     const r = await api('GET', '/player/guilds');
     status(r, 200, '/player/guilds');
