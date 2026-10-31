@@ -57,6 +57,17 @@ describe('GuildAuditListener: metadata-only Discord event handling', () => {
     };
   }
 
+  it('global audit switch suppresses all event records and sends with intents enabled', async () => {
+    const x = setup();
+    x.config.get.mockImplementation((key: string) =>
+      key === 'ENABLE_GUILD_AUDIT_LOGGING' ? 'false' : 'true');
+    await x.listener.onMessageUpdate([{}, x.message] as any);
+    await x.listener.onKickAudit([{ id: messageId, action: AuditLogEvent.MemberKick }, x.guild] as any);
+    expect(x.audit.reserve).not.toHaveBeenCalled();
+    expect(x.audit.getConfig).not.toHaveBeenCalled();
+    expect(x.send).not.toHaveBeenCalled();
+  });
+
   it('records edit metadata without ever reading or logging message text', async () => {
     const x = setup();
     await x.listener.onMessageUpdate([{}, x.message] as any);
