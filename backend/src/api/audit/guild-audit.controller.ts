@@ -52,6 +52,9 @@ export class GuildAuditController {
           this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true') {
         throw new BadRequestException('Guild Moderation intent is required for ban/kick events');
       }
+      if (this.config.get<string>('ENABLE_GUILD_AUDIT_LOGGING') !== 'true') {
+        throw new BadRequestException('Guild audit logging is disabled until staging approval');
+      }
       const guild = this.client.guilds.cache.get(body.guildId);
       const channel = value.logChannelId
         ? await guild?.channels.fetch(value.logChannelId).catch(() => null)
