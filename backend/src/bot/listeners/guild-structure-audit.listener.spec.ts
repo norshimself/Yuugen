@@ -53,6 +53,15 @@ describe('GuildStructureAuditListener (#61)', () => {
     expect(x.delivery.record).not.toHaveBeenCalled();
   });
 
+  it('never loads audit configuration when the independent global audit switch is off', async () => {
+    const x = setup();
+    x.config.get.mockImplementation((key: string) =>
+      key === 'ENABLE_GUILD_AUDIT_LOGGING' ? 'false' : 'true');
+    await x.listener.onAudit([x.entry, x.guild] as any);
+    expect(x.audit.getConfig).not.toHaveBeenCalled();
+    expect(x.delivery.record).not.toHaveBeenCalled();
+  });
+
   it('ignores unrecognized or disabled event selections', async () => {
     const x = setup();
     await x.listener.onAudit([
