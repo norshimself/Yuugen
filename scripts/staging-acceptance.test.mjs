@@ -173,6 +173,34 @@ test('missing guild authorization fails acceptance rather than reporting success
   assert.ok(result.results.some((r) => r.name.includes('mutual-guild') && !r.pass));
 });
 
+test('unhealthy staging never attempts opted-in voice or economy mutations', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes', YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:test',
+    YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes',
+  }));
+  const backend = fakeBackend(config, { unhealthy: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.ok(result.results.some(r => !r.pass && r.name.includes('readiness')));
+  assert.equal(backend.calls.filter(call => call.method === 'POST').length, 0);
+  assert.ok(h.logs.some(line => line.includes('SKIP state-changing')));
+});
+
+test('failed non-manager authorization stops all opted-in writes', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes',
+    YUUGEN_TEST_NONADMIN_ACCESS_TOKEN: 'unprivileged-test-jwt',
+  }));
+  const backend = fakeBackend(config);
+  const result = await harness(config, backend).run();
+  // The mock returns 200 for non-admin, which MUST be treated as a leak.
+  assert.equal(result.passed, false);
+  assert.ok(result.results.some(r => !r.pass && r.name.includes('non-admin')));
+  assert.equal(backend.calls.filter(call => call.method === 'POST').length, 0);
+});
+
 test('voice acceptance checks join, play, pause, resume, cleanup; writes only when opted in', async () => {
   const config = configure(disposableEnv({
     YUUGEN_TEST_VOICE: 'yes',
