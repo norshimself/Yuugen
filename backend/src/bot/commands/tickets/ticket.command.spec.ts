@@ -27,6 +27,8 @@ function setup(enabled=true){
    permissions:{has:()=>false},roles:{cache:new Map()}};
  const bot={id:botId,permissions:permission,user:{id:botId,bot:true}};
  const role={id:roleId,guild:{id:guildId}};
+ const everyone={id:guildId};
+ const publicVisibility=jest.fn().mockReturnValue(false);
  const category={id:categoryId,guildId,type:ChannelType.GuildCategory,
    permissionsFor:()=>permission};
  const panelMessage={id:panelMessageId,delete:jest.fn().mockResolvedValue(undefined)};
@@ -34,14 +36,16 @@ function setup(enabled=true){
  const panel={id:panelId,guildId,type:ChannelType.GuildText,
    permissionsFor:()=>permission,send:jest.fn().mockResolvedValue(panelMessage)};
  const ticket={id:ticketId,guildId,type:ChannelType.GuildText,
-   permissionsFor:()=>permission,send:jest.fn().mockResolvedValue(controlMessage),
+   permissionsFor:jest.fn((subject:unknown)=>subject===everyone
+     ? {has:publicVisibility} : permission),
+   send:jest.fn().mockResolvedValue(controlMessage),
    permissionOverwrites:{edit:jest.fn().mockResolvedValue(undefined)}};
  const channels=new Map([[categoryId,category],[panelId,panel],[ticketId,ticket]]);
  const guild={id:guildId,
    members:{fetch:jest.fn(async({user}:{user:string})=>
      new Map([[memberId,member],[staffId,staff],[managerId,manager]]).get(user)||null),
      fetchMe:jest.fn().mockResolvedValue(bot)},
-   roles:{fetch:jest.fn().mockResolvedValue(role)},
+   roles:{everyone,fetch:jest.fn().mockResolvedValue(role)},
    channels:{fetch:jest.fn(async(id:string)=>channels.get(id)||null),
      create:jest.fn().mockResolvedValue(ticket)},
  };
@@ -68,7 +72,7 @@ function setup(enabled=true){
      deferReply:jest.fn().mockResolvedValue(undefined),editReply:jest.fn().mockResolvedValue(undefined)};
  }
  return {guild,category,panel,ticket,role,manager,member,staff,bot,service,
-   commands,events,interaction,record,panelMessage,config};
+   commands,events,interaction,record,panelMessage,config,publicVisibility};
 }
 
 describe('Ticket Discord interactions: permissions and restart-safe persistence',()=>{
@@ -136,6 +140,18 @@ describe('Ticket Discord interactions: permissions and restart-safe persistence'
    expect(t.service.activate).toHaveBeenCalledWith(guildId,'7',memberId,ticketId,controlsId);
    expect(t.ticket.send.mock.calls[0][0].allowedMentions).toEqual({parse:[]});
  });
+ it('never posts controls or opens a ticket if effective permissions expose the channel',async()=>{
+   const t=setup();
+   t.publicVisibility.mockReturnValue(true);
+   await t.commands.create([t.interaction(memberId)] as any);
+   expect(t.guild.channels.create).toHaveBeenCalledTimes(1);
+   expect(t.ticket.send).not.toHaveBeenCalled();
+   expect(t.service.activate).not.toHaveBeenCalled();
+   expect(t.service.markCreateFailure).toHaveBeenCalledWith(
+     guildId,'7',memberId,false);
+   expect(t.guild.channels.create.mock.calls[0][0].topic).not.toContain(memberId);
+ });
+
  it('unknown Discord result holds ticket for review; never blindly tries again',async()=>{
    const t=setup();
    t.guild.channels.create.mockRejectedValueOnce(new Error('timeout'));
