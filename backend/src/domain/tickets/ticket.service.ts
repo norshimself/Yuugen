@@ -8,7 +8,7 @@ export interface TicketConfig {
   panelMessageId:string|null;
 }
 export interface TicketRecord {
-  id:string; guildId:string; openerId:string; channelId:string|null;
+  id:string; guildId:string; openerId:string; staffRoleId:string; channelId:string|null;
   controlMessageId:string|null; status:TicketStatus;
   claimedById:string|null;
 }
@@ -76,8 +76,8 @@ export class TicketService {
     snowflake(panelMessageId,'panel message ID');
     const row=await this.first<{id:string}>(
       `WITH inserted AS (
-        INSERT INTO ${TICKETS} ("guildId","openerId")
-        SELECT $1,$2 FROM ${CONFIG}
+        INSERT INTO ${TICKETS} ("guildId","openerId","staffRoleId")
+        SELECT $1,$2,"staffRoleId" FROM ${CONFIG}
         WHERE "guildId"=$1 AND "panelMessageId"=$3
         ON CONFLICT DO NOTHING RETURNING id,"guildId"
       ), audit AS (
@@ -135,7 +135,7 @@ export class TicketService {
     snowflake(guildId,'guild ID');snowflake(channelId,'channel ID');
     return this.first<TicketRecord>(
       `SELECT id::text AS id,"guildId","openerId","channelId",
-         "controlMessageId","status","claimedById"
+         "controlMessageId","status","claimedById","staffRoleId"
        FROM ${TICKETS} WHERE "guildId"=$1 AND "channelId"=$2`,
       [guildId,channelId]);
   }
@@ -183,7 +183,7 @@ export class TicketService {
         INSERT INTO ${EVENTS} ("ticketId","guildId","actorId","event")
         SELECT id,"guildId",$3,'close_requested' FROM changed
       ) SELECT id::text AS id,"guildId","openerId","channelId",
-        "controlMessageId","status","claimedById" FROM changed`,
+        "controlMessageId","status","claimedById","staffRoleId" FROM changed`,
       [guildId,channelId,actorId]);
   }
 
