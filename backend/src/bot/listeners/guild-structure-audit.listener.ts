@@ -51,7 +51,8 @@ export class GuildStructureAuditListener {
     @Context() [entry, guild]: ContextOf<'guildAuditLogEntryCreate'>,
   ): Promise<void> {
     if (!guild?.id ||
-        this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true') return;
+        this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true' ||
+        this.config.get<string>('ENABLE_GUILD_AUDIT_LOGGING') !== 'true') return;
     const action = recognizedAction(entry.action);
     if (!action) return;
     const matched = classifyStructuralAudit(action, entry.changes);
