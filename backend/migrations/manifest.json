@@ -12,6 +12,7 @@
     "20261028_anti_raid_alerts.sql",
     "20261028_anti_nuke_monitoring.sql",
     "20261029_guild_audit_channels.sql",
-    "20261029_guild_audit_structure.sql"
+    "20261029_guild_audit_structure.sql",
+    "20261030_scheduled_jobs.sql"
   ]
 }
