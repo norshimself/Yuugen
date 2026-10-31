@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
 import { AutoModMessageListener } from './listeners/automod.listener';
+import { AntiRaidListener } from './listeners/anti-raid.listener';
+import { AntiRaidModule } from '../domain/security/anti-raid.module';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -39,10 +41,11 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
+    AntiRaidListener,
     PingCommand,
     PlayCommand,
     QueueCommand,

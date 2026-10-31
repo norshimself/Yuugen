@@ -8,6 +8,7 @@
     "20261028_moderation_channel_locks.sql",
     "20261028_moderation_voice.sql",
     "20261028_automod_rules.sql",
-    "20261028_automod_content_filters.sql"
+    "20261028_automod_content_filters.sql",
+    "20261028_anti_raid_alerts.sql"
   ]
 }

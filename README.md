@@ -42,6 +42,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Temporary timeouts, removal and case audit](docs/moderation-timeouts.md)
 - [Safe message purge and audit log](docs/moderation-purges.md)
 - [Channel lock/unlock and permission-safe restoration](docs/moderation-channel-locks.md)
+- [Anti-raid alert-only monitoring and safe staging rollout](docs/anti-raid-alerts.md)
 - [Per-guild AutoMod rules and dry-run](docs/automod-engine.md)
 - [Opt-in AutoMod content filters and staging safeguards](docs/automod-content-filters.md)
 - [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
