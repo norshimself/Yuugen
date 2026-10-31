@@ -262,3 +262,45 @@ test('subscribeSocket rejects a forbidden valid token response rather than count
   const response = await subscribeSocket(config.wsUrl, config.guildId, 'invalid-jwt', 'subscriptionError', (url) => new Mock(url));
   assert.equal(response.code, 'invalid_token');
 });
+
+test('WebSocket rejects null, scalar or array frames without throwing in event handlers', async () => {
+  const config = configure(env);
+  for (const invalidFrame of ['null', '7', '[]', '"subscribed"']) {
+    let closed = false;
+    const fake = () => {
+      const listeners = new Map();
+      const socket = {
+        addEventListener: (kind, listener) => listeners.set(kind, listener),
+        send: () => queueMicrotask(() => listeners.get('message')?.({ data: invalidFrame })),
+        close: () => { closed = true; },
+      };
+      queueMicrotask(() => listeners.get('open')?.());
+      return socket;
+    };
+    await assert.rejects(
+      () => subscribeSocket(config.wsUrl, config.guildId, config.token, 'subscribed', fake),
+      /WebSocket returned invalid event/,
+    );
+    assert.equal(closed, true);
+  }
+});
+
+test('WebSocket send errors fail immediately and close the socket', async () => {
+  const config = configure(env);
+  let closed = false;
+  const fake = () => {
+    const listeners = new Map();
+    const socket = {
+      addEventListener: (kind, listener) => listeners.set(kind, listener),
+      send: () => { throw new Error('Bearer ' + TOKEN); },
+      close: () => { closed = true; },
+    };
+    queueMicrotask(() => listeners.get('open')?.());
+    return socket;
+  };
+  await assert.rejects(
+    () => subscribeSocket(config.wsUrl, config.guildId, config.token, 'subscribed', fake),
+    /WebSocket subscription could not be sent/,
+  );
+  assert.equal(closed, true);
+});
