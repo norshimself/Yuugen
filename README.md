@@ -31,6 +31,7 @@ database. Never enable TypeORM auto-synchronization in production.
 
 - [Release-readiness matrix and test plan](docs/release-readiness.md)
 - [Staging OAuth, WebSocket, voice and economy acceptance](docs/staging-acceptance.md)
+- [Manual release evidence, staging go/no-go gate and rollback rehearsal](docs/manual-staging-release-gate.md)
 - [Manual authentication deployment](docs/manual-auth-deployment.md)
 - [Guild welcome and moderation](docs/guild-welcome-moderation.md)
 - [Moderation warnings and case history](docs/moderation-warnings.md)
