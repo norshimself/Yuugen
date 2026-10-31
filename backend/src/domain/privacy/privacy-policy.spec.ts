@@ -50,11 +50,12 @@ describe('Privacy policy: bounded retention, explicit consent and safe projectio
   });
 
   it('exports trivia metadata without arbitrary user-controlled fields',()=>{
-    expect(triviaExport({
+    const persisted = {
       questionId:4,messageId:'234567890123456789',correctIndex:2,
       reward:50,createdAt:new Date('2026-10-01T00:00:00Z'),
       secret:'not-exported',
-    })).toEqual({
+    };
+    expect(triviaExport(persisted)).toEqual({
       questionId:4,messageId:'234567890123456789',correctIndex:2,
       reward:50,createdAt:'2026-10-01T00:00:00.000Z',
     });
@@ -62,22 +63,24 @@ describe('Privacy policy: bounded retention, explicit consent and safe projectio
   });
 
   it('never exports refresh cookie IDs or hashed one-time OAuth codes',()=>{
-    const meta=sessionMetadata({
+    const savedSession={
       id:'oauth-code:secret-token-digest',
       userId:'123456789012345678',
       createdAt:new Date('2026-10-01T00:00:00Z'),
       expiresAt:new Date('2026-10-08T00:00:00Z'),
-    });
+    };
+    const meta=sessionMetadata(savedSession);
     expect(Object.keys(meta)).toEqual(['createdAt','expiresAt']);
     expect(JSON.stringify(meta)).not.toMatch(/oauth-code|secret-token|userId|id/);
   });
 
   it('restricts guild export to known fields and clones rule arrays',()=>{
-    const settings=guildSettingsExport({
+    const savedSettings={
       prefix:'?', welcomeChannelId:null,welcomeMessage:'Welcome',
       antiSpamEnabled:false,profanityFilterEnabled:false,blacklistedWords:['bad'],
       secret:'no',
-    });
+    };
+    const settings=guildSettingsExport(savedSettings);
     expect(settings).not.toHaveProperty('secret');
     expect(settings?.blacklistedWords).toEqual(['bad']);
     const rule={
