@@ -36,7 +36,8 @@ export class AntiNukeListener {
 
   @On('guildAuditLogEntryCreate')
   async onAudit(@Context() [entry, guild]: ContextOf<'guildAuditLogEntryCreate'>): Promise<void> {
-    if (this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true') return;
+    if (this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true' ||
+        this.config.get<string>('ENABLE_ANTI_NUKE_ALERTS') !== 'true') return;
     const action = knownAuditAction(entry.action);
     if (!action || !guild?.id) return;
     try {
