@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "environment": "disposable-staging",
+  "releaseSha": "0000000000000000000000000000000000000000",
+  "backendOrigin": "https://api.staging.example.test",
+  "frontendOrigin": "https://app.staging.example.test",
+  "disposableGuildId": "123456789012345678",
+  "checks": [
+    {
+      "id": "offline_tool_tests",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "backend_npm_install_build",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "backend_jest",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "backend_e2e",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "frontend_npm_install_build",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "compose_config",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "staging_database_backup",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "staging_migration_rehearsal",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "database_restore_rehearsal",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "frontend_preview_https",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "backend_https_wss",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "oauth_refresh_logout",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "api_smoke_readiness",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "authenticated_guild_checks",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "discord_voice_lavalink",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "moderation_permissions",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "dependency_outage_behavior",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "rollback_rehearsal",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    },
+    {
+      "id": "metrics_logs_redaction",
+      "status": "not_run",
+      "artifact": null,
+      "sha256": null,
+      "performedAt": null
+    }
+  ],
+  "approvals": []
+}
