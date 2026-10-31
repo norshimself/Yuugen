@@ -31,6 +31,7 @@ database. Never enable TypeORM auto-synchronization in production.
 
 - [PostgreSQL migration runner, safety checks and recovery](docs/postgresql-migrations.md)
 - [Durable scheduled-job queue and recovery (disabled by default)](docs/durable-scheduled-jobs.md)
+- [Opt-in private support tickets and safe staging recovery](docs/support-tickets.md)
 - [Release-readiness matrix and test plan](docs/release-readiness.md)
 - [Staging OAuth, WebSocket, voice and economy acceptance](docs/staging-acceptance.md)
 - [Manual release evidence, staging go/no-go gate and rollback rehearsal](docs/manual-staging-release-gate.md)

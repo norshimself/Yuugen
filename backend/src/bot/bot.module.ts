@@ -8,6 +8,9 @@ import { AntiNukeModule } from '../domain/security/anti-nuke.module';
 import { GuildAuditListener } from './listeners/guild-audit.listener';
 import { GuildStructureAuditListener } from './listeners/guild-structure-audit.listener';
 import { GuildAuditModule } from '../domain/audit/guild-audit.module';
+import { TicketModule } from '../domain/tickets/ticket.module';
+import { TicketCommands } from './commands/tickets/ticket.command';
+import { TicketChannelEvents } from './commands/tickets/ticket-channel.events';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -46,7 +49,7 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule, AntiNukeModule, GuildAuditModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule, AntiNukeModule, GuildAuditModule, TicketModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
@@ -54,6 +57,8 @@ import { WelcomeListener } from './listeners/welcome.listener';
     AntiNukeListener,
     GuildAuditListener,
     GuildStructureAuditListener,
+    TicketCommands,
+    TicketChannelEvents,
     PingCommand,
     PlayCommand,
     QueueCommand,
