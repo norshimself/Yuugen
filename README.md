@@ -16,7 +16,7 @@ are feature-flagged until their staging acceptance checks pass.
 
 ## Local release checks
 
-- `make verify`: Node smoke-tool tests, backend build/unit+isolated e2e tests, and frontend build.
+- `make verify`: Node smoke-tool, migration and release-gate tests, backend build/unit+isolated e2e tests, and frontend build.
 - `make staging-acceptance`: opt-in authenticated guild/WebSocket tests (read-only by default, see guide).
 - `make smoke-api`: harmless unauthenticated health/authorization probes against
   the running backend (default localhost:3001). Use `YUUGEN_API_URL` to override.
@@ -29,8 +29,10 @@ database. Never enable TypeORM auto-synchronization in production.
 
 ## Operator guides
 
+- [PostgreSQL migration runner, safety checks and recovery](docs/postgresql-migrations.md)
 - [Release-readiness matrix and test plan](docs/release-readiness.md)
 - [Staging OAuth, WebSocket, voice and economy acceptance](docs/staging-acceptance.md)
+- [Manual release evidence, staging go/no-go gate and rollback rehearsal](docs/manual-staging-release-gate.md)
 - [Manual authentication deployment](docs/manual-auth-deployment.md)
 - [Guild welcome and moderation](docs/guild-welcome-moderation.md)
 - [Moderation warnings and case history](docs/moderation-warnings.md)
@@ -41,6 +43,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Safe message purge and audit log](docs/moderation-purges.md)
 - [Channel lock/unlock and permission-safe restoration](docs/moderation-channel-locks.md)
 - [Per-guild AutoMod rules and dry-run](docs/automod-engine.md)
+- [Opt-in AutoMod content filters and staging safeguards](docs/automod-content-filters.md)
 - [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
 
