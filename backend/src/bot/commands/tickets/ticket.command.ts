@@ -74,10 +74,12 @@ export class TicketCommands {
        categoryLive?.type!==ChannelType.GuildCategory ||
        panelLive?.type!==ChannelType.GuildText ||
        !bot.permissions.has(PermissionFlagsBits.ManageChannels) ||
+       !bot.permissions.has(PermissionFlagsBits.ManageRoles) ||
        !categoryLive.permissionsFor(bot)?.has(PermissionFlagsBits.ManageChannels) ||
+       !categoryLive.permissionsFor(bot)?.has(PermissionFlagsBits.ManageRoles) ||
        !panelLive.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel) ||
        !panelLive.permissionsFor(bot)?.has(PermissionFlagsBits.SendMessages)) {
-      return interaction.editReply('Check the bot’s Manage Channels and panel posting permissions.');
+      return interaction.editReply('Check the bot’s Manage Channels, Manage Roles and panel posting permissions.');
     }
     await this.tickets.configure({guildId:guild.id,categoryId:category.id,
       panelChannelId:panelChannel.id,staffRoleId:role.id});
@@ -152,7 +154,9 @@ export class TicketCommands {
     if(!member || member.user.bot || !bot || !role || role.id===guild.id ||
        category?.type!==ChannelType.GuildCategory ||
        !bot.permissions.has(PermissionFlagsBits.ManageChannels) ||
-       !category.permissionsFor(bot)?.has(PermissionFlagsBits.ManageChannels)) {
+       !bot.permissions.has(PermissionFlagsBits.ManageRoles) ||
+       !category.permissionsFor(bot)?.has(PermissionFlagsBits.ManageChannels) ||
+       !category.permissionsFor(bot)?.has(PermissionFlagsBits.ManageRoles)) {
       return interaction.editReply('Private ticket creation is unavailable; notify server staff.');
     }
     const overwrites=privateTicketOverwrites(guild.id,member.id,role.id,bot.id,
@@ -215,7 +219,8 @@ export class TicketCommands {
     }
     if(!bot || !channel || channel.type!==ChannelType.GuildText ||
       !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel) ||
-      (action==='close' && !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ManageChannels))) {
+      (action==='close' && (!channel.permissionsFor(bot)?.has(PermissionFlagsBits.ManageChannels) ||
+        !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ManageRoles)))) {
       return interaction.editReply('Ticket permissions changed; ask an administrator to review.');
     }
     if(action==='claim') {
