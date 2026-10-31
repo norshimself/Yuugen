@@ -98,6 +98,18 @@ test('rejects malformed targets instead of probing arbitrary URLs', async () => 
     () => runSmoke('ftp://example.com/api/v1', async () => ({})),
     /must be an HTTP\(S\) URL/,
   );
+  for (const url of [
+    'https://api.staging.example.test/api/v1?token=should-not-be-sent',
+    'https://api.staging.example.test/api/v1#oauth-fragment',
+    'https://api.staging.example.test/other/api/v1',
+  ]) {
+    let requests = 0;
+    await assert.rejects(
+      () => runSmoke(url, async () => { requests++; return { status: 200 }; }),
+      /must be an HTTP\(S\) URL/,
+    );
+    assert.equal(requests, 0);
+  }
 });
 
 test('exercises the real HTTP transport against an isolated local server', async (t) => {
