@@ -29,7 +29,7 @@ clean:
 verify: verify-smoke-tool verify-backend verify-frontend
 
 verify-smoke-tool:
-	node --test scripts/release-smoke.test.mjs scripts/staging-acceptance.test.mjs
+	node --test scripts/release-smoke.test.mjs scripts/staging-acceptance.test.mjs backend/scripts/migrate.test.mjs
 
 verify-backend:
 	cd backend && npm ci && npm run build && npm test -- --runInBand && npm run test:e2e -- --runInBand
