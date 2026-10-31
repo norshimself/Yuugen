@@ -43,6 +43,7 @@ database. Never enable TypeORM auto-synchronization in production.
 - [Per-guild AutoMod rules and dry-run](docs/automod-engine.md)
 - [Voice moderation: mute, deafen, disconnect and move](docs/moderation-voice.md)
 - [Economy migration and transaction checks](docs/economy-integrity.md)
+- [Privacy inventory, user/guild exports, explicit erasure and opt-in TTL cleanup](docs/privacy-export-retention.md)
 
 GitHub Actions workflows are intentionally removed because CI usage is paused.
 Builds, database migrations, and Discord/Lavalink acceptance tests therefore
