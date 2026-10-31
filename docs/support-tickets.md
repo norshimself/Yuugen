@@ -34,7 +34,8 @@ SLA alerts, ratings and participant management belong to issue #66.
    have a restrictive foreign key and are not deleted by cascading tickets.
 3. In a disposable Discord guild, enable ENABLE_TICKETS=true on a separate
    test bot only AFTER database setup. Other environments keep it false.
-   The bot needs Manage Channels and access/posting rights in the selected
+   The bot needs **Manage Channels and Manage Roles** for private channel
+   overwrites and close, plus View Channel and Send Messages in the selected
    category/panel. No Message Content privileged intent is required.
 
 An install with the flag off performs no ticket database/Discord operations
