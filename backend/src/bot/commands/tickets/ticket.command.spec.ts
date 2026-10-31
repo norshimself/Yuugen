@@ -91,6 +91,17 @@ describe('Ticket Discord interactions: permissions and restart-safe persistence'
      guildId,categoryId,panelChannelId:panelId,staffRoleId:roleId,
    });
  });
+ it('bot without Manage Roles cannot configure, create, or close private ticket overwrites',async()=>{
+   const t=setup();
+   t.bot.permissions.has.mockImplementation((flag:bigint)=>flag!==PermissionFlagsBits.ManageRoles);
+   const opts={category:t.category,staffRole:t.role,panelChannel:t.panel};
+   await t.commands.setup([t.interaction(managerId)] as any,opts as any);
+   await t.commands.create([t.interaction(memberId)] as any);
+   await t.commands.close([t.interaction(staffId,ticketId,controlsId)] as any);
+   expect(t.service.configure).not.toHaveBeenCalled();
+   expect(t.service.reserve).not.toHaveBeenCalled();
+   expect(t.service.beginClose).not.toHaveBeenCalled();
+ });
  it('saves panel message identity and deletes orphan post when DB bind fails',async()=>{
    const t=setup();
    await t.commands.panel([t.interaction(managerId)] as any);
