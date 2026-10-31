@@ -32,6 +32,7 @@ describe('Privacy policy: bounded retention, explicit consent and safe projectio
     expect(RETENTION.sweepIntervalMinutes).toBe(30);
     expect(Object.isFrozen(RETENTION)).toBe(true);
     expect(RETAINED_ON_SELF_ERASURE).toContain('moderation_and_purge_audit');
+    expect(RETAINED_ON_SELF_ERASURE).toContain('guild_message_and_structural_audit_metadata');
   });
 
   it('returns explicit economy fields, not future private properties',()=>{
