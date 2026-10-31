@@ -155,3 +155,9 @@ Do not drop data or mutate live guild permissions without review.
 reliable retention and operational sign-off are complete.
 No GitHub Actions were re-enabled and no database migration, production
 deployment or live Discord operation was performed by this PR.
+
+
+**Independent activation:** structural and basic audit listeners both require
+`ENABLE_GUILD_AUDIT_LOGGING=true`, in addition to the optional Guild Moderation
+intent. The switch defaults false on the merged #60 foundation. Enable only
+after both audit SQL migrations and disposable privacy/permission acceptance.
