@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS "tickets" (
   "id" BIGSERIAL PRIMARY KEY,
   "guildId" VARCHAR(20) NOT NULL,
   "openerId" VARCHAR(20) NOT NULL,
+  "staffRoleId" VARCHAR(20) NOT NULL,
   "channelId" VARCHAR(20) UNIQUE NULL,
   "controlMessageId" VARCHAR(20) NULL,
   "status" VARCHAR(24) NOT NULL DEFAULT 'provisioning',
