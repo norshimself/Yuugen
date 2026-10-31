@@ -26,8 +26,10 @@ SLA alerts, ratings and participant management belong to issue #66.
 1. Back up a DISPOSABLE PostgreSQL 17 staging database and apply previously
    reviewed 20261019, 20261020 and 20261028 migrations in sequence.
    Then review and apply backend/migrations/20261031_support_tickets.sql.
-   Integrate this file with migration runner issue #89 / draft PR #109 once
-   that prerequisite is approved. Never enable TypeORM production auto-sync.
+   The migration runner source (#89 / PR #109) is now merged. Register
+   the ticket migration AFTER all existing strict manifest entries before
+   any source integration; no runtime migration has yet been approved.
+   Never enable TypeORM production auto-sync.
 2. Verify three new tables: ticket_configs, tickets and ticket_events. The
    partial unique index UQ_tickets_guild_opener_active permits at most one
    provisioning/open/closing/needs_review ticket per guild member. Events
@@ -60,9 +62,11 @@ Then the manager publishes a button with:
 Only the exact current panel message can create a ticket. The member clicks
 "Open private ticket" and the bot force-fetches membership and checks
 category, staff role and bot rights. A database reservation happens BEFORE
-any Discord channel creation. The bot creates a private text channel, posts
-Claim/Release/Close controls and marks the ticket open only after the channel
-and control message exist.
+any Discord channel creation. After Discord returns the new channel, the bot
+**checks actual effective visibility**: @everyone must be unable to view it,
+while the opener, configured staff role and bot must be able to view it.
+Only then are Claim/Release/Close controls posted and the ticket made open.
+Its Discord topic contains the ticket sequence, not the opener's ID.
 
 Support staff with the ticket's PERSISTED role (or a freshly validated Manage
 Server member) may press those control buttons inside the ticket. Claim has
@@ -88,7 +92,10 @@ Known Discord create rejections 50001/50013/50035 may be marked failed when
 no channel exists, allowing a new attempt. A network timeout, unknown
 acknowledgment, crash or failure after a channel is created is uncertain:
 the ticket remains needs_review and its unique active slot stays reserved.
-No automatic second channel is created. An unknown close outcome similarly
+No automatic second channel is created. An unexpectedly public or inaccessible
+created channel is **not activated**; it stays needs_review and must be
+inspected and secured by a manager. Never assume the requested permission
+overwrites were applied successfully. An unknown close outcome similarly
 requires staff to inspect actual channel posting permissions before any
 manual correction. Use the ticket sequence in the channel name/topic to
 inspect possible orphan channels.
