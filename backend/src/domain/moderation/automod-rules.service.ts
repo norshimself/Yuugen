@@ -51,6 +51,8 @@ export class AutoModRulesService {
       windowSeconds: input.windowSeconds,
       exemptChannelIds: [...new Set(input.exemptChannelIds)],
       exemptRoleIds: [...new Set(input.exemptRoleIds)],
+      allowedDomains: [...new Set((input.allowedDomains || []).map(host => host.toLowerCase()))],
+      allowedInviteCodes: [...new Set(input.allowedInviteCodes || [])],
     }));
     this.cache.delete(guildId);
     return saved;
