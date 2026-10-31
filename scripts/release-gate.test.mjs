@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, symlink, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, symlink, rm, readFile, link } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { evaluateReleaseEvidence, REQUIRED_CHECKS, REQUIRED_APPROVALS,
@@ -176,4 +176,47 @@ test('bad JSON parser errors never echo untrusted JSON or potential secrets', as
     () => runReleaseGate([path, '--commit', COMMIT], () => {}),
     /^Error: Cannot read valid local release evidence JSON$/,
   );
+});
+
+
+test('one check log cannot be reused for another check or reviewer approval', async (t) => {
+  const f = await fixture(t);
+  const original = f.manifest.checks[0];
+  f.manifest.checks[1].artifact = original.artifact;
+  f.manifest.checks[1].sha256 = original.sha256;
+  let result = await evaluate(f);
+  assert.equal(result.passed, false);
+  assert.equal(result.results[1].reason, 'reused_evidence_file');
+  f.manifest.checks[1].artifact = 'evidence/check-' + REQUIRED_CHECKS[1] + '.log';
+  const restored = await f.file('check-' + REQUIRED_CHECKS[1], 'offline artifact ' + REQUIRED_CHECKS[1]);
+  f.manifest.checks[1].sha256 = restored.sha256;
+  f.manifest.approvals[0].artifact = original.artifact;
+  f.manifest.approvals[0].sha256 = original.sha256;
+  result = await evaluate(f);
+  assert.equal(result.passed, false);
+  assert.equal(result.results.at(-3).reason, 'reused_evidence_file');
+});
+
+test('hard links cannot dress up one evidence file as multiple independent artifacts', async (t) => {
+  const f = await fixture(t);
+  const first = f.manifest.checks[0];
+  const second = f.manifest.checks[1];
+  await rm(join(f.dir, second.artifact));
+  await link(join(f.dir, first.artifact), join(f.dir, second.artifact));
+  second.sha256 = first.sha256;
+  const result = await evaluate(f);
+  assert.equal(result.passed, false);
+  assert.equal(result.results[1].reason, 'reused_evidence_file');
+});
+
+test('symlinks are invalid even when the link stays within the evidence folder', async (t) => {
+  const f = await fixture(t);
+  const first = f.manifest.checks[0];
+  const second = f.manifest.checks[1];
+  await rm(join(f.dir, second.artifact));
+  await symlink('check-' + REQUIRED_CHECKS[0] + '.log', join(f.dir, second.artifact));
+  second.sha256 = first.sha256;
+  const result = await evaluate(f);
+  assert.equal(result.passed, false);
+  assert.equal(result.results[1].reason, 'unsafe_artifact_path');
 });
