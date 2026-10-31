@@ -8,3 +8,8 @@ nginx/certs/
 nginx/certbot/
 .vercel
 .env*.local
+
+# Keep operator staging evidence and reports off GitHub.
+release-evidence.json
+release-evidence/
+evidence/
