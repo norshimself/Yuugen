@@ -59,6 +59,7 @@ Set the variables locally, without checking credentials into Git:
 
 ```bash
 export YUUGEN_STAGING_API_URL=https://api.staging.example.test/api/v1
+export YUUGEN_STAGING_HOST=api.staging.example.test
 export YUUGEN_TEST_GUILD_ID=123456789012345678
 read -rsp 'Temporary staging JWT: ' YUUGEN_TEST_ACCESS_TOKEN
 echo
@@ -66,6 +67,14 @@ export YUUGEN_TEST_ACCESS_TOKEN
 make staging-acceptance
 unset YUUGEN_TEST_ACCESS_TOKEN
 ```
+
+Even read-only requests contain an authenticated bearer JWT. All runs now
+require `YUUGEN_STAGING_HOST` exactly matching the backend hostname and a
+staging/test/development host marker. This prevents a mistyped backend URL
+from silently sending a disposable account's token to an unrelated server.
+The hostname check is a guardrail, **not** an independent proof that the
+destination is non-production. Error logs/results redact supplied bearer
+tokens and named authentication fields.
 
 The default harness makes **no state-changing API requests**. It checks:
 backend dependency readiness, unauthenticated JWT rejection, the authenticated
