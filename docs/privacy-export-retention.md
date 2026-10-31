@@ -96,6 +96,27 @@ audit table is ever targeted by the worker.
    truncated; complete pagination and additional feature data remain future
    work.
 
+### Opt-in real PostgreSQL test harness
+
+The committed `backend/test/privacy.pg.e2e-spec.ts` suite is **skipped by default**.
+It creates and then drops a randomly named disposable database on an explicitly
+configured **loopback** PostgreSQL instance (requires CREATEDB), synchronizes
+the six current test entities only inside that new test database, and runs
+actual two-user/two-guild isolation, idempotent erasure/audit preservation and
+concurrent TTL reaper checks. It must never be pointed at production, a staging
+database, or a production port-forward.
+
+```sh
+cd backend
+YUUGEN_PRIVACY_TEST_ADMIN_URL='postgres://testuser:localpass@127.0.0.1:5432/postgres' \
+YUUGEN_PRIVACY_TEST_CONFIRM=disposable \
+  npm run test:e2e -- --runInBand privacy.pg.e2e-spec.ts
+```
+
+**This suite has not yet run** because PostgreSQL and project dependencies are
+unavailable in the current execution environment. Its presence in GitHub is
+not evidence of database acceptance.
+
 ## Disposable staging acceptance and rollback
 
 1. Install real NestJS dependencies, run backend build/Jest/e2e and frontend
