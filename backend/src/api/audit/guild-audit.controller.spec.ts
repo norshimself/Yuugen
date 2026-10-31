@@ -90,6 +90,22 @@ describe('GuildAuditController: guarded guild admin configuration', () => {
     expect(x.audit.setConfig).not.toHaveBeenCalled();
   });
 
+  it('requires explicit global audit activation before configuring structural capture', async () => {
+    const x = setup();
+    x.config.get.mockImplementation((key: string) =>
+      key === 'ENABLE_GUILD_AUDIT_LOGGING' ? 'false' : 'true');
+    await expect(x.controller.configure({
+      guildId, settings: {enabled: true, logChannelId: channelId,
+        selectedEvents: ['role_create'], retentionDays: 7},
+    })).rejects.toThrow('disabled until staging approval');
+    expect(x.audit.setConfig).not.toHaveBeenCalled();
+    await x.controller.configure({
+      guildId, settings: {enabled: false, logChannelId: null,
+        selectedEvents: [], retentionDays: 7},
+    });
+    expect(x.audit.setConfig).toHaveBeenCalledTimes(1);
+  });
+
   it('requires View Audit Log for kick attribution', async () => {
     const x = setup();
     x.bot.permissions.has.mockReturnValue(false);
