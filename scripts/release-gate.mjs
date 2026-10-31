@@ -156,7 +156,9 @@ export async function runReleaseGate(argv = process.argv.slice(2), log = console
   if (argv.length !== 3 || argv[1] !== '--commit' || !SHA.test(argv[2])) {
     throw new Error('Usage: node scripts/release-gate.mjs <local-evidence.json> --commit <40-hex-sha>');
   }
-  const manifest = JSON.parse(await readFile(argv[0], 'utf8'));
+  let manifest;
+  try { manifest = JSON.parse(await readFile(argv[0], 'utf8')); }
+  catch { throw new Error('Cannot read valid local release evidence JSON'); }
   const decision = await evaluateReleaseEvidence(manifest, {
     expectedSha: argv[2], baseDirectory: dirname(await realpath(argv[0])),
   });
