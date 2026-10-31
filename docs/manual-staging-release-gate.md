@@ -70,13 +70,22 @@ by the release evidence verifier. The operator runs approved steps manually.
 
 Use `make smoke-api` with `YUUGEN_API_URL=https://.../api/v1` to verify
 liveness, true database/Discord/Lavalink readiness and protected routes.
+The unauthenticated smoke runner now rejects query strings, URL fragments,
+credential-bearing URLs and any base path other than exactly `/api/v1`;
+it never forwards an operator-supplied OAuth fragment/token in probe URLs.
+A 200 response with malformed readiness JSON or a 503 from a required
+dependency is a release blocker.
 Run `make staging-acceptance` with a 15-minute disposable test JWT and
 `YUUGEN_STAGING_HOST` *exactly matching* `YUUGEN_STAGING_API_URL`'s
 hostname. It is read-only by default. The host requirement is enforced
 even for GET probes because the script transmits a bearer token.
 
 The voice and economy write modes are separately opt-in and require a
-disposable guild, staging host and test account. See
+disposable guild, staging host and test account.
+Before **any** opted-in POST, all read-only prerequisites (including available
+services, cross-guild authorization and WebSocket checks) must succeed. A
+failed prerequisite results in a SKIP and a failed run, not a partial action.
+Malformed WebSocket frames/send failures are contained as failed checks. See
 `docs/staging-acceptance.md`. Neither the smoke script nor simulated
 Node unit tests replace a browser OAuth, HTTP-only refresh cookie, logout,
 WSS, music/Lavalink, moderation or permissions rehearsal.
