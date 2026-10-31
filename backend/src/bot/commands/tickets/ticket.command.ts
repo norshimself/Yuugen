@@ -170,10 +170,24 @@ export class TicketCommands {
       const opened: TextChannel = await guild.channels.create({
         name:ticketChannelName(ticketId),type:ChannelType.GuildText,
         parent:config.categoryId,permissionOverwrites:overwrites,
-        topic:'Yuugen ticket #'+ticketId+' | opener '+member.id,
+        topic:'Yuugen private support ticket #'+ticketId,
         reason:'Yuugen private support ticket #'+ticketId,
       });
       channel=opened;
+      // A category/permission inheritance or Discord API mismatch must
+      // never be treated as private merely because overwrites were requested.
+      // Verify the channel's effective access before posting the ticket
+      // control message or telling the user that opening succeeded.
+      if (opened.permissionsFor(guild.roles.everyone)
+            ?.has(PermissionFlagsBits.ViewChannel) !== false ||
+          opened.permissionsFor(member)
+            ?.has(PermissionFlagsBits.ViewChannel) !== true ||
+          opened.permissionsFor(role)
+            ?.has(PermissionFlagsBits.ViewChannel) !== true ||
+          opened.permissionsFor(bot)
+            ?.has(PermissionFlagsBits.ViewChannel) !== true) {
+        throw new Error('Ticket effective channel permissions need staff review');
+      }
       const control=await opened.send({
         content:'Support ticket #'+ticketId+' opened by <@'+member.id+'>. Staff can claim, release or close it. No message transcript is stored by the bot.',
         components:[controls()],allowedMentions:{parse:[]},
