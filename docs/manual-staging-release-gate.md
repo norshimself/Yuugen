@@ -78,7 +78,12 @@ dependency is a release blocker.
 Run `make staging-acceptance` with a 15-minute disposable test JWT and
 `YUUGEN_STAGING_HOST` *exactly matching* `YUUGEN_STAGING_API_URL`'s
 hostname. It is read-only by default. The host requirement is enforced
-even for GET probes because the script transmits a bearer token.
+even for GET probes because the script can transmit a bearer token.
+Before the **first** bearer-token request, it requires successful database,
+Discord and Lavalink readiness and a 401 denial for an anonymous guild
+listing request. If either preflight fails it records a blocked run and
+skips all token-bearing HTTP and WebSocket probes, even when writes were
+explicitly opted in.
 
 The voice and economy write modes are separately opt-in and require a
 disposable guild, staging host and test account.
@@ -128,12 +133,16 @@ Each of the 19 named check entries uses exactly:
 
 Do **not** change a status to `pass` without executing that check and
 recording its redacted local evidence under the manifest directory's
-`evidence/` subfolder. Each PASS requires a real file, exact SHA-256
-digest and UTC timestamp within **14 days** of verification. Failed,
-blocked and not-run checks always block promotion. The verifier rejects
-unknown/duplicate checks, mismatched release commits, insecure/credentialed
-origins, paths outside the manifest's directory, unsafe symlinks, missing
-or modified artifacts, stale results and extra fields.
+`evidence/` subfolder. Each PASS requires a **different regular file** with an exact SHA-256
+digest and UTC timestamp within **14 days** of verification. Sharing a
+logfile between checks or reviewer approvals, even through a hard link,
+fails the gate; symlinks are rejected even when they resolve inside the
+evidence directory. This stops one successful offline log from standing
+in for unrelated database, browser, Discord and rollback checks.
+Failed, blocked and not-run checks always block promotion. The verifier
+rejects unknown/duplicate checks, mismatched release commits,
+insecure/credentialed origins, paths outside the manifest's directory,
+missing/modified artifacts, stale results and extra fields.
 
 Three *distinct* reviewers must add independently reviewed local artifacts
 for `backend_owner`, `staging_operator` and `security_reviewer` approvals.
