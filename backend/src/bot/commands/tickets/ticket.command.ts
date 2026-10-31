@@ -230,7 +230,9 @@ export class TicketCommands {
     if(!pending)return interaction.editReply('Ticket was already closing or closed.');
     try {
       await (channel as TextChannel).permissionOverwrites.edit(pending.openerId,
-        {SendMessages:false},{reason:'Yuugen ticket #'+pending.id+' closed by staff'});
+        {SendMessages:false,SendMessagesInThreads:false,CreatePublicThreads:false,
+         CreatePrivateThreads:false,AddReactions:false},
+        {reason:'Yuugen ticket #'+pending.id+' closed by staff'});
       const done=await this.tickets.finishClose(guild.id,channel.id,actor.id,true);
       if(!done)throw new Error('Ticket was not finalized');
     } catch {
