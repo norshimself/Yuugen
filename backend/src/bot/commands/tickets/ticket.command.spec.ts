@@ -165,7 +165,8 @@ describe('Ticket Discord interactions: permissions and restart-safe persistence'
    expect(t.service.beginClose.mock.invocationCallOrder[0])
      .toBeLessThan(t.ticket.permissionOverwrites.edit.mock.invocationCallOrder[0]);
    expect(t.ticket.permissionOverwrites.edit).toHaveBeenCalledWith(
-     memberId,{SendMessages:false},expect.any(Object));
+     memberId,{SendMessages:false,SendMessagesInThreads:false,
+       CreatePublicThreads:false,CreatePrivateThreads:false,AddReactions:false},expect.any(Object));
    expect(t.service.finishClose).toHaveBeenCalledWith(guildId,ticketId,staffId,true);
  });
  it('lost close result is kept in needs_review, never auto-repeated',async()=>{
