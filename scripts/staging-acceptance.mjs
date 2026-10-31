@@ -118,12 +118,20 @@ export async function subscribeSocket(url, guildId, token, expectedEvent, makeSo
       else resolve(result);
     }
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ event: 'subscribeGuild', data: { guildId, token } }));
+      try {
+        socket.send(JSON.stringify({ event: 'subscribeGuild', data: { guildId, token } }));
+      } catch {
+        finish(new Error('WebSocket subscription could not be sent'));
+      }
     });
     socket.addEventListener('message', (event) => {
       let body;
       try { body = JSON.parse(String(event.data)); }
       catch { finish(new Error('WebSocket returned invalid JSON')); return; }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        finish(new Error('WebSocket returned invalid event'));
+        return;
+      }
       if (body.event === expectedEvent) {
         if (expectedEvent === 'subscribed' && body.guildId !== guildId) {
           finish(new Error('WebSocket subscribed to the wrong guild'));
