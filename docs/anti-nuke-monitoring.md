@@ -65,7 +65,8 @@ lag changes; no punitive actions are available.
 
 Discord's **Guild Moderation** gateway intent is optional and disabled
 by default. For a disposable test guild, set
-\`ENABLE_GUILD_MODERATION_INTENT=true\`; ensure the bot also has
+\`ENABLE_GUILD_MODERATION_INTENT=true and also
+\`ENABLE_ANTI_NUKE_ALERTS=true\` after the audited migration is installed\`; ensure the bot also has
 **View Audit Log**. The listener will skip events without that permission.
 No Message Content or Guild Members intent is required by this module.
 
