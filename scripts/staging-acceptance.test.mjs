@@ -7,6 +7,7 @@ const CHANNEL = '234567890123456789';
 const TOKEN = 'test-jwt-do-not-use';
 const env = {
   YUUGEN_STAGING_API_URL: 'https://api.staging.example.test/api/v1',
+  YUUGEN_STAGING_HOST: 'api.staging.example.test',
   YUUGEN_TEST_ACCESS_TOKEN: TOKEN,
   YUUGEN_TEST_GUILD_ID: GUILD,
 };
@@ -44,7 +45,10 @@ function fakeSocketFactory(address) {
   };
 }
 
-function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuthorization = false } = {}) {
+function fakeBackend(config, {
+  unhealthy = false, failVoicePlay = false, badAuthorization = false,
+  echoAccessTokenInPlayError = false,
+} = {}) {
   const calls = [];
   let connected = false;
   let playing = false;
@@ -70,7 +74,12 @@ function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuth
       success: connected, connected, playing, ...(playing ? { track: { title: 'QA track' } } : {}),
     });
     if (path === '/player/join') { connected = true; return respond(201, { success: true }); }
-    if (path === '/player/play') { playing = !failVoicePlay; return respond(201, { success: !failVoicePlay }); }
+    if (path === '/player/play') {
+      playing = !failVoicePlay;
+      return respond(201, { success: !failVoicePlay,
+        ...(echoAccessTokenInPlayError ? {message: 'Authorization: Bearer ' + TOKEN} : {}),
+      });
+    }
     if (path === '/player/pause' || path === '/player/resume') return respond(201, { success: true });
     if (path === '/player/stop') { playing = false; connected = false; return respond(201, { success: true }); }
     if (path === '/games/rps') {
@@ -113,19 +122,27 @@ test('read-only configuration is strict about URLs and JWT/guild inputs', () => 
   assert.throws(() => configure({ ...env, YUUGEN_STAGING_API_URL: 'http://api.staging.example.test/api/v1' }), /HTTPS/);
   assert.throws(() => configure({ ...env, YUUGEN_STAGING_API_URL: 'https://user:password@api.staging.example.test/api/v1' }), /clean HTTP/);
   assert.throws(() => configure({ ...env, YUUGEN_TEST_GUILD_ID: 'wrong' }), /valid YUUGEN_TEST_GUILD_ID/);
+  assert.throws(() => configure({ ...env, YUUGEN_STAGING_HOST: '' }), /explicit matching safe/);
+  assert.throws(() => configure({
+    ...env, YUUGEN_STAGING_API_URL: 'https://api.staging.attacker.test/api/v1',
+  }), /explicit matching safe/);
+  assert.throws(() => configure({
+    ...env, YUUGEN_STAGING_API_URL: 'https://api.production.example.com/api/v1',
+    YUUGEN_STAGING_HOST: 'api.production.example.com',
+  }), /explicit matching safe/);
 });
 
 test('state-changing tests require explicit staging, host match, and disposable resources', () => {
   const base = { ...env, YUUGEN_TEST_ECONOMY: 'yes' };
   assert.throws(() => configure(base), /Writes require/);
-  assert.throws(() => configure({ ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' }), YUUGEN_STAGING_HOST: 'wrong.example.com' }), /Writes require/);
+  assert.throws(() => configure({ ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' }), YUUGEN_STAGING_HOST: 'wrong.example.com' }), /explicit matching safe/);
   assert.throws(() => configure(disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' })), /disposable staging Discord account/);
   assert.throws(() => configure(disposableEnv({ YUUGEN_TEST_VOICE: 'yes' })), /voice channel ID and track query/);
   assert.throws(() => configure({
     ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes' }),
     YUUGEN_STAGING_API_URL: 'https://api.production.example.com/api/v1',
     YUUGEN_STAGING_HOST: 'api.production.example.com',
-  }), /Writes require/);
+  }), /explicit matching safe/);
 });
 
 test('read-only acceptance exercises access, readiness, and WebSocket without any API writes', async () => {
@@ -179,6 +196,24 @@ test('voice test stops player if playback fails', async () => {
   const result = await harness(config, backend).run();
   assert.equal(result.passed, false);
   assert.ok(backend.calls.some((c) => c.path === '/player/stop'));
+});
+
+test('staging failures redact token values in logs and returned check metadata', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes',
+    YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:short QA track',
+  }));
+  const backend = fakeBackend(config, {
+    failVoicePlay: true, echoAccessTokenInPlayError: true,
+  });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.ok(h.logs.some(line => line.includes('[redacted]')));
+  assert.ok(!h.logs.join('\n').includes(TOKEN));
+  assert.ok(!JSON.stringify(result).includes(TOKEN));
+  assert.ok(backend.calls.some(call => call.path === '/player/stop'));
 });
 
 test('economy acceptance detects repeated RPS and trivia payouts on disposable account', async () => {
