@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, writeFile, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, symlink, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { evaluateReleaseEvidence, REQUIRED_CHECKS, REQUIRED_APPROVALS,
@@ -155,4 +155,25 @@ test('CLI returns only fixed pass/block labels, never artifact content or secret
     assert.ok(!output.join('\n').includes(f.manifest.backendOrigin));
     assert.ok(!output.join('\n').includes('reviewer_1'));
   } finally { Date.now = original; }
+});
+
+test('source-controlled evidence template is always blocked and has every check ID', async () => {
+  const template = JSON.parse(await readFile(
+    new URL('../docs/release-evidence.template.json', import.meta.url), 'utf8',
+  ));
+  assert.deepEqual(template.checks.map(item => item.id), REQUIRED_CHECKS);
+  assert.ok(template.checks.every(item => item.status === 'not_run' &&
+    item.artifact === null && item.sha256 === null && item.performedAt === null));
+  assert.deepEqual(template.approvals, []);
+  assert.notEqual(template.releaseSha, COMMIT);
+});
+
+test('bad JSON parser errors never echo untrusted JSON or potential secrets', async (t) => {
+  const f = await fixture(t);
+  const path = join(f.dir, 'release-evidence.json');
+  await writeFile(path, '{"oauth_code":"very-secret-grant", broken JSON');
+  await assert.rejects(
+    () => runReleaseGate([path, '--commit', COMMIT], () => {}),
+    /^Error: Cannot read valid local release evidence JSON$/,
+  );
 });
