@@ -19,6 +19,8 @@ builds, Jest, live API, Discord, Lavalink, and production deployments are
 | Vercel deployment inspection | Blocked by 403 access to the project team scope |
 | GitHub Actions | Remain removed by request |
 
+For issue #92, use the separate [manual staging evidence and no-go gate](manual-staging-release-gate.md) to bind each PASS to an exact commit, redacted local artifact, verified SHA-256 checksum, and independent operator/security sign-off. Its deliberately incomplete template is not release evidence. No deployment or CI is enabled by this guide.
+
 ## 1. Manual build and tests
 
 Use Node.js 22 LTS, a suitable npm version, and the checked-in lockfiles.
