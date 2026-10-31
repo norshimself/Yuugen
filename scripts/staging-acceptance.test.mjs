@@ -47,7 +47,7 @@ function fakeSocketFactory(address) {
 
 function fakeBackend(config, {
   unhealthy = false, failVoicePlay = false, badAuthorization = false,
-  echoAccessTokenInPlayError = false,
+  anonymousAllowed = false, echoAccessTokenInPlayError = false,
 } = {}) {
   const calls = [];
   let connected = false;
@@ -64,7 +64,10 @@ function fakeBackend(config, {
     if (path === '/ready') return respond(200, {
       status: 'ready', dependencies: { database: 'up', discord: 'up', lavalink: unhealthy ? 'down' : 'up' },
     });
-    if (!options.headers.Authorization || badAuthorization) return respond(401, { message: 'Unauthenticated' });
+    if (!options.headers.Authorization) {
+      return respond(anonymousAllowed ? 200 : 401, { message: 'Unauthenticated' });
+    }
+    if (badAuthorization) return respond(401, { message: 'Unauthenticated' });
     if (path === '/player/guilds') return respond(200, [{ id: GUILD, name: 'Disposable QA guild' }]);
     if (path === `/player/channels?guildId=${GUILD}`) return respond(200, {
       success: true, channels: [{ id: CHANNEL, name: 'qa-voice' }],
@@ -185,7 +188,7 @@ test('unhealthy staging never attempts opted-in voice or economy mutations', asy
   assert.equal(result.passed, false);
   assert.ok(result.results.some(r => !r.pass && r.name.includes('readiness')));
   assert.equal(backend.calls.filter(call => call.method === 'POST').length, 0);
-  assert.ok(h.logs.some(line => line.includes('SKIP state-changing')));
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
 });
 
 test('failed non-manager authorization stops all opted-in writes', async () => {
@@ -303,4 +306,31 @@ test('WebSocket send errors fail immediately and close the socket', async () => 
     /WebSocket subscription could not be sent/,
   );
   assert.equal(closed, true);
+});
+
+
+test('readiness failure blocks every request carrying the staging JWT', async () => {
+  const config = configure(env);
+  const backend = fakeBackend(config, { unhealthy: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.equal(result.results.length, 2);
+  assert.deepEqual(backend.calls.map(call => call.path), ['/ready', '/player/guilds']);
+  assert.ok(backend.calls.every(call => !call.authorization));
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
+});
+
+test('anonymous guild-access failure prevents any bearer token disclosure', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes', YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:short QA track',
+  }));
+  const backend = fakeBackend(config, { anonymousAllowed: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.equal(result.results[1].pass, false);
+  assert.ok(backend.calls.every(call => !call.authorization && call.method === 'GET'));
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
 });
