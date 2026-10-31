@@ -1,6 +1,16 @@
 import { Module } from '@nestjs/common';
 import { BotGateway } from './bot.gateway';
 import { AutoModMessageListener } from './listeners/automod.listener';
+import { AntiRaidListener } from './listeners/anti-raid.listener';
+import { AntiRaidModule } from '../domain/security/anti-raid.module';
+import { AntiNukeListener } from './listeners/anti-nuke.listener';
+import { AntiNukeModule } from '../domain/security/anti-nuke.module';
+import { GuildAuditListener } from './listeners/guild-audit.listener';
+import { GuildStructureAuditListener } from './listeners/guild-structure-audit.listener';
+import { GuildAuditModule } from '../domain/audit/guild-audit.module';
+import { TicketModule } from '../domain/tickets/ticket.module';
+import { TicketCommands } from './commands/tickets/ticket.command';
+import { TicketChannelEvents } from './commands/tickets/ticket-channel.events';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -37,15 +47,18 @@ import { BuyCommand } from './commands/economy/buy.command';
 import { TriviaCommand } from './commands/economy/trivia.command';
 import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
-import { TicketModule } from '../domain/tickets/ticket.module';
-import { TicketCommands } from './commands/tickets/ticket.command';
-import { TicketChannelEvents } from './commands/tickets/ticket-channel.events';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule, TicketModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule, AntiNukeModule, GuildAuditModule, TicketModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
+    AntiRaidListener,
+    AntiNukeListener,
+    GuildAuditListener,
+    GuildStructureAuditListener,
+    TicketCommands,
+    TicketChannelEvents,
     PingCommand,
     PlayCommand,
     QueueCommand,
@@ -78,8 +91,6 @@ import { TicketChannelEvents } from './commands/tickets/ticket-channel.events';
     ModerationCommands,
     VoiceModerationCommands,
     WelcomeListener,
-    TicketCommands,
-    TicketChannelEvents,
   ],
 })
 export class BotModule {}

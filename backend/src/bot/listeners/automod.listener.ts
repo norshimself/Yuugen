@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Context, On } from 'necord';
@@ -14,6 +15,8 @@ import { evaluateAutoMod } from '../../domain/moderation/automod-policy';
 export class AutoModMessageListener {
   private readonly logger = new Logger(AutoModMessageListener.name);
   private readonly windows = new Map<string, number[]>();
+  private readonly attachments = new Map<string, { time: number; count: number }[]>();
+  private readonly repeated = new Map<string, { time: number; hash: string }[]>();
   private readonly seen = new Map<string, number>();
   private readonly lastDryRun = new Map<string, number>();
   private readonly lastDelete = new Map<string, number>();
@@ -43,6 +46,23 @@ export class AutoModMessageListener {
     const previous = (this.windows.get(key) || [])
       .filter(time => now - time < 60000);
     previous.push(now);
+    // Never retain plaintext user messages. Hash only normalized non-empty
+    // content for per-author, per-guild duplicate detection.
+    const normalized = (message.content || '').normalize('NFKC').trim().toLowerCase().slice(0, 2000);
+    const hash = normalized.length >= 8
+      ? createHash('sha256').update(normalized).digest('hex') : '';
+    const recentAttachments = (this.attachments.get(key) || [])
+      .filter(entry => now - entry.time < 60000);
+    recentAttachments.push({ time: now, count: Math.min(message.attachments.size, 20) });
+    const recentContent = (this.repeated.get(key) || [])
+      .filter(entry => now - entry.time < 60000);
+    if (hash) recentContent.push({ time: now, hash });
+    this.attachments.delete(key);
+    this.attachments.set(key, recentAttachments.slice(-100));
+    this.repeated.delete(key);
+    this.repeated.set(key, recentContent.slice(-100));
+    if (this.attachments.size > 5000) this.attachments.delete(this.attachments.keys().next().value!);
+    if (this.repeated.size > 5000) this.repeated.delete(this.repeated.keys().next().value!);
     this.windows.delete(key);
     this.windows.set(key, previous);
     if (this.windows.size > 5000) {
@@ -66,6 +86,17 @@ export class AutoModMessageListener {
         channelId: message.channelId,
         roleIds: roles ? [...roles] : [],
         content: message.content || '',
+        // Discord.js collections deduplicate user and role mentions. Count
+        // @everyone/@here once as a broadcast; never parse spoofed text.
+        mentionCount: message.mentions.users.size + message.mentions.roles.size +
+          (message.mentions.everyone ? 1 : 0),
+        attachmentCountInWindow: seconds => recentAttachments
+          .filter(entry => now - entry.time < seconds * 1000)
+          .reduce((total, entry) => total + entry.count, 0),
+        sameContentCountInWindow: seconds => hash
+          ? recentContent.filter(entry =>
+              entry.hash === hash && now - entry.time < seconds * 1000).length
+          : 0,
         messageCountInWindow: seconds =>
           previous.filter(time => now - time < seconds * 1000).length,
       });

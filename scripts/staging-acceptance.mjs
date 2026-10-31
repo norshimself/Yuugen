@@ -25,6 +25,13 @@ export function configure(env = process.env) {
   if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
     throw new Error('A remote staging backend must use HTTPS');
   }
+  // Even GET probes send the bearer JWT. Require an explicit exact host
+  // binding so a mistyped URL cannot silently disclose it elsewhere.
+  if (!env.YUUGEN_STAGING_HOST ||
+      url.hostname !== env.YUUGEN_STAGING_HOST ||
+      !SAFE_HOST.test(url.hostname)) {
+    throw new Error('Every staging run requires an explicit matching safe YUUGEN_STAGING_HOST');
+  }
   if (!token || !guildId || !SNOWFLAKE.test(guildId)) {
     throw new Error('Provide YUUGEN_TEST_ACCESS_TOKEN and a valid YUUGEN_TEST_GUILD_ID');
   }
@@ -61,10 +68,20 @@ export function configure(env = process.env) {
   };
 }
 
-function shortError(value) {
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  // Never show user-entered access tokens in failures.
-  return (text || 'unspecified error').slice(0, MAX_ERROR_TEXT);
+function shortError(value, secrets = []) {
+  let text = typeof value === 'string' ? value : JSON.stringify(value);
+  text = text || 'unspecified error';
+  for (const secret of secrets) {
+    if (typeof secret === 'string' && secret.length >= 8) {
+      text = text.split(secret).join('[redacted]');
+    }
+  }
+  // Server errors may echo headers or tokens. Never print those values.
+  return text
+    .replace(/(access_token|refresh_token|authorization|yuugen_session)\s*[:=]\s*[^\s,]+/gi,
+      '$1=[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]{8,}/gi, 'Bearer [redacted]')
+    .slice(0, MAX_ERROR_TEXT);
 }
 
 export function createApi(config, transport = fetch) {
@@ -101,12 +118,20 @@ export async function subscribeSocket(url, guildId, token, expectedEvent, makeSo
       else resolve(result);
     }
     socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ event: 'subscribeGuild', data: { guildId, token } }));
+      try {
+        socket.send(JSON.stringify({ event: 'subscribeGuild', data: { guildId, token } }));
+      } catch {
+        finish(new Error('WebSocket subscription could not be sent'));
+      }
     });
     socket.addEventListener('message', (event) => {
       let body;
       try { body = JSON.parse(String(event.data)); }
       catch { finish(new Error('WebSocket returned invalid JSON')); return; }
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        finish(new Error('WebSocket returned invalid event'));
+        return;
+      }
       if (body.event === expectedEvent) {
         if (expectedEvent === 'subscribed' && body.guildId !== guildId) {
           finish(new Error('WebSocket subscribed to the wrong guild'));
@@ -114,7 +139,7 @@ export async function subscribeSocket(url, guildId, token, expectedEvent, makeSo
           finish(new Error('Invalid token did not produce invalid_token response'));
         } else finish(body);
       } else if (body.event === 'subscriptionError') {
-        finish(new Error(`WebSocket authorization rejected: ${shortError(body.code)}`));
+        finish(new Error(`WebSocket authorization rejected: ${shortError(body.code, [token])}`));
       }
     });
     socket.addEventListener('error', () => finish(new Error('WebSocket connection failed')));
@@ -129,6 +154,7 @@ export async function runAcceptance(config, {
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   const api = createApi(config, transport);
+  const secrets = [config.token, config.outsiderToken, config.nonAdminToken];
   const results = [];
   async function check(name, action) {
     try {
@@ -137,9 +163,9 @@ export async function runAcceptance(config, {
       log(`PASS ${name}`);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : shortError(error);
+      const message = shortError(error instanceof Error ? error.message : error, secrets);
       results.push({ name, pass: false, message });
-      log(`FAIL ${name}: ${shortError(message)}`);
+      log(`FAIL ${name}: ${message}`);
       return false;
     }
   }
@@ -150,17 +176,26 @@ export async function runAcceptance(config, {
     expect(result.status === expected, `${route}: expected ${expected}, received ${result.status}`);
   }
 
-  await check('backend dependency readiness', async () => {
+  const readyOK = await check('backend dependency readiness', async () => {
     const r = await api('GET', '/ready', undefined, '');
     status(r, 200, '/ready');
     expect(r.data?.status === 'ready' &&
       ['database', 'discord', 'lavalink'].every((name) => r.data?.dependencies?.[name] === 'up'),
     'database, Discord and Lavalink must all report up');
   });
-  await check('missing bearer token rejected', async () => {
+  const anonymousDenied = await check('missing bearer token rejected', async () => {
     const r = await api('GET', '/player/guilds', undefined, '');
     status(r, 401, '/player/guilds');
   });
+  // Do not transmit a valid bearer token at all when the backend is
+  // unhealthy or an anonymous request unexpectedly succeeds. Both must
+  // pass before the first credentialed request or native WebSocket.
+  if (!readyOK || !anonymousDenied) {
+    log('SKIP token-bearing staging checks: readiness or anonymous auth failed');
+    log(results.filter(result => result.pass).length + '/' + results.length +
+      ' staging checks passed; token-bearing checks not attempted');
+    return { passed: false, results };
+  }
   const guildsOK = await check('authenticated mutual-guild listing', async () => {
     const r = await api('GET', '/player/guilds');
     status(r, 200, '/player/guilds');
@@ -207,7 +242,15 @@ export async function runAcceptance(config, {
     }
   }
 
-  if (config.allowVoice && guildsOK) {
+  // Never issue even explicitly opted-in writes when any read-only
+  // prerequisite fails (including readiness, permissions and WebSockets).
+  // A broken staging deployment must fail closed, not mutate partial state.
+  const readOnlyOK = results.every(result => result.pass);
+  if (!readOnlyOK && (config.allowVoice || config.allowEconomy)) {
+    log('SKIP state-changing staging checks: read-only prerequisites failed');
+  }
+
+  if (config.allowVoice && guildsOK && readOnlyOK) {
     await check('live staging Lavalink join/play/pause/resume/stop', async () => {
       const current = await api('GET', `/player/nowplaying?guildId=${config.guildId}`);
       // Prevent the test from disconnecting another user's active session.
@@ -228,7 +271,7 @@ export async function runAcceptance(config, {
           query: config.trackQuery,
         });
         status(play, 201, '/player/play');
-        expect(play.data?.success === true, `play rejected: ${shortError(play.data?.message)}`);
+        expect(play.data?.success === true, `play rejected: ${shortError(play.data?.message, secrets)}`);
 
         let started = false;
         for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -253,7 +296,7 @@ export async function runAcceptance(config, {
     });
   }
 
-  if (config.allowEconomy && guildsOK) {
+  if (config.allowEconomy && guildsOK && readOnlyOK && results.every(result => result.pass)) {
     await check('staging RPS cooldown across duplicate API calls', async () => {
       const a = await api('POST', '/games/rps', { choice: 'paper' });
       status(a, 201, '/games/rps');

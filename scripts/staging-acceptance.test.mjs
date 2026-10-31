@@ -7,6 +7,7 @@ const CHANNEL = '234567890123456789';
 const TOKEN = 'test-jwt-do-not-use';
 const env = {
   YUUGEN_STAGING_API_URL: 'https://api.staging.example.test/api/v1',
+  YUUGEN_STAGING_HOST: 'api.staging.example.test',
   YUUGEN_TEST_ACCESS_TOKEN: TOKEN,
   YUUGEN_TEST_GUILD_ID: GUILD,
 };
@@ -44,7 +45,10 @@ function fakeSocketFactory(address) {
   };
 }
 
-function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuthorization = false } = {}) {
+function fakeBackend(config, {
+  unhealthy = false, failVoicePlay = false, badAuthorization = false,
+  anonymousAllowed = false, echoAccessTokenInPlayError = false,
+} = {}) {
   const calls = [];
   let connected = false;
   let playing = false;
@@ -60,7 +64,10 @@ function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuth
     if (path === '/ready') return respond(200, {
       status: 'ready', dependencies: { database: 'up', discord: 'up', lavalink: unhealthy ? 'down' : 'up' },
     });
-    if (!options.headers.Authorization || badAuthorization) return respond(401, { message: 'Unauthenticated' });
+    if (!options.headers.Authorization) {
+      return respond(anonymousAllowed ? 200 : 401, { message: 'Unauthenticated' });
+    }
+    if (badAuthorization) return respond(401, { message: 'Unauthenticated' });
     if (path === '/player/guilds') return respond(200, [{ id: GUILD, name: 'Disposable QA guild' }]);
     if (path === `/player/channels?guildId=${GUILD}`) return respond(200, {
       success: true, channels: [{ id: CHANNEL, name: 'qa-voice' }],
@@ -70,7 +77,12 @@ function fakeBackend(config, { unhealthy = false, failVoicePlay = false, badAuth
       success: connected, connected, playing, ...(playing ? { track: { title: 'QA track' } } : {}),
     });
     if (path === '/player/join') { connected = true; return respond(201, { success: true }); }
-    if (path === '/player/play') { playing = !failVoicePlay; return respond(201, { success: !failVoicePlay }); }
+    if (path === '/player/play') {
+      playing = !failVoicePlay;
+      return respond(201, { success: !failVoicePlay,
+        ...(echoAccessTokenInPlayError ? {message: 'Authorization: Bearer ' + TOKEN} : {}),
+      });
+    }
     if (path === '/player/pause' || path === '/player/resume') return respond(201, { success: true });
     if (path === '/player/stop') { playing = false; connected = false; return respond(201, { success: true }); }
     if (path === '/games/rps') {
@@ -113,19 +125,27 @@ test('read-only configuration is strict about URLs and JWT/guild inputs', () => 
   assert.throws(() => configure({ ...env, YUUGEN_STAGING_API_URL: 'http://api.staging.example.test/api/v1' }), /HTTPS/);
   assert.throws(() => configure({ ...env, YUUGEN_STAGING_API_URL: 'https://user:password@api.staging.example.test/api/v1' }), /clean HTTP/);
   assert.throws(() => configure({ ...env, YUUGEN_TEST_GUILD_ID: 'wrong' }), /valid YUUGEN_TEST_GUILD_ID/);
+  assert.throws(() => configure({ ...env, YUUGEN_STAGING_HOST: '' }), /explicit matching safe/);
+  assert.throws(() => configure({
+    ...env, YUUGEN_STAGING_API_URL: 'https://api.staging.attacker.test/api/v1',
+  }), /explicit matching safe/);
+  assert.throws(() => configure({
+    ...env, YUUGEN_STAGING_API_URL: 'https://api.production.example.com/api/v1',
+    YUUGEN_STAGING_HOST: 'api.production.example.com',
+  }), /explicit matching safe/);
 });
 
 test('state-changing tests require explicit staging, host match, and disposable resources', () => {
   const base = { ...env, YUUGEN_TEST_ECONOMY: 'yes' };
   assert.throws(() => configure(base), /Writes require/);
-  assert.throws(() => configure({ ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' }), YUUGEN_STAGING_HOST: 'wrong.example.com' }), /Writes require/);
+  assert.throws(() => configure({ ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' }), YUUGEN_STAGING_HOST: 'wrong.example.com' }), /explicit matching safe/);
   assert.throws(() => configure(disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes' })), /disposable staging Discord account/);
   assert.throws(() => configure(disposableEnv({ YUUGEN_TEST_VOICE: 'yes' })), /voice channel ID and track query/);
   assert.throws(() => configure({
     ...disposableEnv({ YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes' }),
     YUUGEN_STAGING_API_URL: 'https://api.production.example.com/api/v1',
     YUUGEN_STAGING_HOST: 'api.production.example.com',
-  }), /Writes require/);
+  }), /explicit matching safe/);
 });
 
 test('read-only acceptance exercises access, readiness, and WebSocket without any API writes', async () => {
@@ -156,6 +176,34 @@ test('missing guild authorization fails acceptance rather than reporting success
   assert.ok(result.results.some((r) => r.name.includes('mutual-guild') && !r.pass));
 });
 
+test('unhealthy staging never attempts opted-in voice or economy mutations', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes', YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:test',
+    YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes',
+  }));
+  const backend = fakeBackend(config, { unhealthy: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.ok(result.results.some(r => !r.pass && r.name.includes('readiness')));
+  assert.equal(backend.calls.filter(call => call.method === 'POST').length, 0);
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
+});
+
+test('failed non-manager authorization stops all opted-in writes', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_ECONOMY: 'yes', YUUGEN_TEST_DISPOSABLE_ACCOUNT: 'yes',
+    YUUGEN_TEST_NONADMIN_ACCESS_TOKEN: 'unprivileged-test-jwt',
+  }));
+  const backend = fakeBackend(config);
+  const result = await harness(config, backend).run();
+  // The mock returns 200 for non-admin, which MUST be treated as a leak.
+  assert.equal(result.passed, false);
+  assert.ok(result.results.some(r => !r.pass && r.name.includes('non-admin')));
+  assert.equal(backend.calls.filter(call => call.method === 'POST').length, 0);
+});
+
 test('voice acceptance checks join, play, pause, resume, cleanup; writes only when opted in', async () => {
   const config = configure(disposableEnv({
     YUUGEN_TEST_VOICE: 'yes',
@@ -181,6 +229,24 @@ test('voice test stops player if playback fails', async () => {
   assert.ok(backend.calls.some((c) => c.path === '/player/stop'));
 });
 
+test('staging failures redact token values in logs and returned check metadata', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes',
+    YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:short QA track',
+  }));
+  const backend = fakeBackend(config, {
+    failVoicePlay: true, echoAccessTokenInPlayError: true,
+  });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.ok(h.logs.some(line => line.includes('[redacted]')));
+  assert.ok(!h.logs.join('\n').includes(TOKEN));
+  assert.ok(!JSON.stringify(result).includes(TOKEN));
+  assert.ok(backend.calls.some(call => call.path === '/player/stop'));
+});
+
 test('economy acceptance detects repeated RPS and trivia payouts on disposable account', async () => {
   const config = configure(disposableEnv({
     YUUGEN_TEST_ECONOMY: 'yes',
@@ -198,4 +264,73 @@ test('subscribeSocket rejects a forbidden valid token response rather than count
   const Mock = fakeSocketFactory(config.wsUrl);
   const response = await subscribeSocket(config.wsUrl, config.guildId, 'invalid-jwt', 'subscriptionError', (url) => new Mock(url));
   assert.equal(response.code, 'invalid_token');
+});
+
+test('WebSocket rejects null, scalar or array frames without throwing in event handlers', async () => {
+  const config = configure(env);
+  for (const invalidFrame of ['null', '7', '[]', '"subscribed"']) {
+    let closed = false;
+    const fake = () => {
+      const listeners = new Map();
+      const socket = {
+        addEventListener: (kind, listener) => listeners.set(kind, listener),
+        send: () => queueMicrotask(() => listeners.get('message')?.({ data: invalidFrame })),
+        close: () => { closed = true; },
+      };
+      queueMicrotask(() => listeners.get('open')?.());
+      return socket;
+    };
+    await assert.rejects(
+      () => subscribeSocket(config.wsUrl, config.guildId, config.token, 'subscribed', fake),
+      /WebSocket returned invalid event/,
+    );
+    assert.equal(closed, true);
+  }
+});
+
+test('WebSocket send errors fail immediately and close the socket', async () => {
+  const config = configure(env);
+  let closed = false;
+  const fake = () => {
+    const listeners = new Map();
+    const socket = {
+      addEventListener: (kind, listener) => listeners.set(kind, listener),
+      send: () => { throw new Error('Bearer ' + TOKEN); },
+      close: () => { closed = true; },
+    };
+    queueMicrotask(() => listeners.get('open')?.());
+    return socket;
+  };
+  await assert.rejects(
+    () => subscribeSocket(config.wsUrl, config.guildId, config.token, 'subscribed', fake),
+    /WebSocket subscription could not be sent/,
+  );
+  assert.equal(closed, true);
+});
+
+
+test('readiness failure blocks every request carrying the staging JWT', async () => {
+  const config = configure(env);
+  const backend = fakeBackend(config, { unhealthy: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.equal(result.results.length, 2);
+  assert.deepEqual(backend.calls.map(call => call.path), ['/ready', '/player/guilds']);
+  assert.ok(backend.calls.every(call => !call.authorization));
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
+});
+
+test('anonymous guild-access failure prevents any bearer token disclosure', async () => {
+  const config = configure(disposableEnv({
+    YUUGEN_TEST_VOICE: 'yes', YUUGEN_TEST_VOICE_CHANNEL_ID: CHANNEL,
+    YUUGEN_TEST_TRACK_QUERY: 'ytsearch:short QA track',
+  }));
+  const backend = fakeBackend(config, { anonymousAllowed: true });
+  const h = harness(config, backend);
+  const result = await h.run();
+  assert.equal(result.passed, false);
+  assert.equal(result.results[1].pass, false);
+  assert.ok(backend.calls.every(call => !call.authorization && call.method === 'GET'));
+  assert.ok(h.logs.some(line => line.includes('SKIP token-bearing')));
 });
