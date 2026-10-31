@@ -25,6 +25,13 @@ export function configure(env = process.env) {
   if (url.protocol !== 'https:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
     throw new Error('A remote staging backend must use HTTPS');
   }
+  // Even GET probes send the bearer JWT. Require an explicit exact host
+  // binding so a mistyped URL cannot silently disclose it elsewhere.
+  if (!env.YUUGEN_STAGING_HOST ||
+      url.hostname !== env.YUUGEN_STAGING_HOST ||
+      !SAFE_HOST.test(url.hostname)) {
+    throw new Error('Every staging run requires an explicit matching safe YUUGEN_STAGING_HOST');
+  }
   if (!token || !guildId || !SNOWFLAKE.test(guildId)) {
     throw new Error('Provide YUUGEN_TEST_ACCESS_TOKEN and a valid YUUGEN_TEST_GUILD_ID');
   }
@@ -61,10 +68,20 @@ export function configure(env = process.env) {
   };
 }
 
-function shortError(value) {
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
-  // Never show user-entered access tokens in failures.
-  return (text || 'unspecified error').slice(0, MAX_ERROR_TEXT);
+function shortError(value, secrets = []) {
+  let text = typeof value === 'string' ? value : JSON.stringify(value);
+  text = text || 'unspecified error';
+  for (const secret of secrets) {
+    if (typeof secret === 'string' && secret.length >= 8) {
+      text = text.split(secret).join('[redacted]');
+    }
+  }
+  // Server errors may echo headers or tokens. Never print those values.
+  return text
+    .replace(/(access_token|refresh_token|authorization|yuugen_session)\s*[:=]\s*[^\s,]+/gi,
+      '$1=[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+/-]{8,}/gi, 'Bearer [redacted]')
+    .slice(0, MAX_ERROR_TEXT);
 }
 
 export function createApi(config, transport = fetch) {
@@ -114,7 +131,7 @@ export async function subscribeSocket(url, guildId, token, expectedEvent, makeSo
           finish(new Error('Invalid token did not produce invalid_token response'));
         } else finish(body);
       } else if (body.event === 'subscriptionError') {
-        finish(new Error(`WebSocket authorization rejected: ${shortError(body.code)}`));
+        finish(new Error(`WebSocket authorization rejected: ${shortError(body.code, [token])}`));
       }
     });
     socket.addEventListener('error', () => finish(new Error('WebSocket connection failed')));
@@ -129,6 +146,7 @@ export async function runAcceptance(config, {
   sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 } = {}) {
   const api = createApi(config, transport);
+  const secrets = [config.token, config.outsiderToken, config.nonAdminToken];
   const results = [];
   async function check(name, action) {
     try {
@@ -137,9 +155,9 @@ export async function runAcceptance(config, {
       log(`PASS ${name}`);
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : shortError(error);
+      const message = shortError(error instanceof Error ? error.message : error, secrets);
       results.push({ name, pass: false, message });
-      log(`FAIL ${name}: ${shortError(message)}`);
+      log(`FAIL ${name}: ${message}`);
       return false;
     }
   }
@@ -228,7 +246,7 @@ export async function runAcceptance(config, {
           query: config.trackQuery,
         });
         status(play, 201, '/player/play');
-        expect(play.data?.success === true, `play rejected: ${shortError(play.data?.message)}`);
+        expect(play.data?.success === true, `play rejected: ${shortError(play.data?.message, secrets)}`);
 
         let started = false;
         for (let attempt = 0; attempt < 5; attempt += 1) {
