@@ -1,6 +1,7 @@
 import {
   TICKET_FEATURE_FLAG, MAX_ACTIVE_TICKETS_PER_USER,
   isDefinitiveChannelCreateRejection, privateTicketOverwrites,
+  hasExactPrivateTicketOverwrites,
   requireTicketId, ticketChannelName, ticketStaffAllowed, validTicketSetup,
 } from './ticket-policy';
 
@@ -36,6 +37,28 @@ describe('Private ticket policy',()=>{
     expect(rows[3]).toEqual({id:bot,
       allow:[bits.ViewChannel,bits.SendMessages,bits.ReadMessageHistory,bits.ManageChannels]});
     expect(rows.filter(row=>row.id===guild && 'allow' in row)).toHaveLength(0);
+  });
+  it('checks the full provider overwrite set rather than only everyone visibility',()=>{
+    const view = bits.ViewChannel;
+    const row = (id:string,type:number,allow:boolean,deny:boolean)=>({
+      id,type,allow:{has:(bit:bigint)=>bit===view && allow},
+      deny:{has:(bit:bigint)=>bit===view && deny},
+    });
+    const valid = [
+      row(guild,0,false,true),row(opener,1,true,false),
+      row(staff,0,true,false),row(bot,1,true,false),
+    ];
+    const check = (entries:typeof valid)=>
+      hasExactPrivateTicketOverwrites(entries,guild,opener,staff,bot,view);
+    expect(check(valid)).toBe(true);
+    expect(check([...valid,row('567890123456789012',0,true,false)])).toBe(false);
+    expect(check([...valid,row('567890123456789012',1,true,false)])).toBe(false);
+    expect(check(valid.slice(1))).toBe(false);
+    expect(check([valid[0],valid[1],valid[2],valid[2]])).toBe(false);
+    expect(check([row(guild,0,true,true),...valid.slice(1)])).toBe(false);
+    expect(check([valid[0],row(opener,1,false,false),...valid.slice(2)])).toBe(false);
+    expect(check([row(guild,1,false,true),...valid.slice(1)])).toBe(false);
+    expect(check([valid[0],valid[1],row(staff,0,false,true),valid[3]])).toBe(false);
   });
   it('refuses colliding permission principals (no public fallback)',()=>{
     expect(()=>privateTicketOverwrites(guild,opener,guild,bot,bits))
