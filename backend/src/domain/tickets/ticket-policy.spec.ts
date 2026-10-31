@@ -59,6 +59,8 @@ describe('Private ticket policy',()=>{
   });
   it('generates deterministic private channel names from database sequence only',()=>{
     expect(ticketChannelName('24')).toBe('ticket-24');
+    expect(ticketChannelName('9223372036854775807')).toBe('ticket-9223372036854775807');
+    expect(()=>ticketChannelName('9223372036854775808')).toThrow();
     for(const value of ['0','abc','1; @everyone','-4']) {
       expect(()=>ticketChannelName(value)).toThrow();
     }
