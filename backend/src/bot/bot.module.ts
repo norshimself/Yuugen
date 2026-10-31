@@ -3,6 +3,8 @@ import { BotGateway } from './bot.gateway';
 import { AutoModMessageListener } from './listeners/automod.listener';
 import { AntiRaidListener } from './listeners/anti-raid.listener';
 import { AntiRaidModule } from '../domain/security/anti-raid.module';
+import { AntiNukeListener } from './listeners/anti-nuke.listener';
+import { AntiNukeModule } from '../domain/security/anti-nuke.module';
 import { PingCommand } from './commands/ping.command';
 import { PlayCommand } from './commands/player/play.command';
 import { QueueCommand } from './commands/player/queue.command';
@@ -41,11 +43,12 @@ import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, AntiRaidModule, AntiNukeModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
     AntiRaidListener,
+    AntiNukeListener,
     PingCommand,
     PlayCommand,
     QueueCommand,
