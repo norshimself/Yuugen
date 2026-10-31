@@ -22,6 +22,9 @@ export const RETAINED_ON_SELF_ERASURE = Object.freeze([
   'guild_settings_and_automod_rules',
   'moderation_and_purge_audit',
   'moderation_channel_lock_and_voice_audit',
+  'anti_raid_and_anti_nuke_alert_audit',
+  'guild_message_and_structural_audit_metadata',
+  'scheduled_job_and_operator_audit',
   'discord_or_third_party_data',
   'backups_until_their_separate_retention_expiry',
 ] as const);
