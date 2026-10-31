@@ -56,6 +56,16 @@ describe('AntiNukeListener: permissioned audit entry alerts', () => {
     expect(x.antiNuke.observe).not.toHaveBeenCalled();
   });
 
+  it('global anti-nuke switch blocks audit DB work with Guild Moderation intent enabled', async () => {
+    const x = setup();
+    x.config.get.mockImplementation((key: string) =>
+      key === 'ENABLE_ANTI_NUKE_ALERTS' ? 'false' : 'true');
+    await x.listener.onAudit([x.entry, x.guild] as any);
+    expect(x.antiNuke.getConfig).not.toHaveBeenCalled();
+    expect(x.antiNuke.observe).not.toHaveBeenCalled();
+    expect(x.send).not.toHaveBeenCalled();
+  });
+
   it('does not inspect audit log entries when the guild did not enable alerts', async () => {
     const x = setup();
     x.antiNuke.getConfig.mockResolvedValue({ enabled: false });
