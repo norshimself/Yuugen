@@ -8,6 +8,11 @@
     "20261028_moderation_channel_locks.sql",
     "20261028_moderation_voice.sql",
     "20261028_automod_rules.sql",
+    "20261028_automod_content_filters.sql",
+    "20261028_anti_raid_alerts.sql",
+    "20261028_anti_nuke_monitoring.sql",
+    "20261029_guild_audit_channels.sql",
+    "20261029_guild_audit_structure.sql",
     "20261030_scheduled_jobs.sql"
   ]
 }

@@ -59,6 +59,7 @@ Set the variables locally, without checking credentials into Git:
 
 ```bash
 export YUUGEN_STAGING_API_URL=https://api.staging.example.test/api/v1
+export YUUGEN_STAGING_HOST=api.staging.example.test
 export YUUGEN_TEST_GUILD_ID=123456789012345678
 read -rsp 'Temporary staging JWT: ' YUUGEN_TEST_ACCESS_TOKEN
 echo
@@ -67,10 +68,23 @@ make staging-acceptance
 unset YUUGEN_TEST_ACCESS_TOKEN
 ```
 
-The default harness makes **no state-changing API requests**. It checks:
-backend dependency readiness, unauthenticated JWT rejection, the authenticated
-mutual guild list, accessible voice channels, current player state and queue,
+Even read-only requests contain an authenticated bearer JWT. All runs now
+require `YUUGEN_STAGING_HOST` exactly matching the backend hostname and a
+staging/test/development host marker. This prevents a mistyped backend URL
+from silently sending a disposable account's token to an unrelated server.
+The hostname check is a guardrail, **not** an independent proof that the
+destination is non-production. Error logs/results redact supplied bearer
+tokens and named authentication fields.
+
+The default harness makes **no state-changing API requests**. Its first
+two **anonymous** checks verify dependency readiness (database, Discord and
+Lavalink all up) and a 401 denial for an unauthenticated guild listing.
+If either fails, it stops **without sending the supplied JWT over HTTP or
+WebSocket**. Only after both pass does it check the authenticated mutual
+guild list, accessible voice channels, current player state and queue,
 a valid native WebSocket guild subscription, and invalid-token rejection.
+This is a defense against disclosing a bearer token to a malfunctioning
+or misconfigured endpoint, not proof of staging identity.
 
 Optional additional access-control checks, using temporary test account
 tokens in the environment:
@@ -86,6 +100,16 @@ skipped if the matching tokens are absent.
 
 Each check is reported PASS/FAIL, exits nonzero on failures, and does not
 print token values.
+
+**Fail-closed write preflight:** Even with `YUUGEN_TEST_VOICE=yes` or
+`YUUGEN_TEST_ECONOMY=yes`, *no POST requests are issued* if **any** prior
+read-only check fails—database/Discord/Lavalink readiness, anonymous JWT
+rejection, mutual guild membership, channel/queue reads, live WebSocket
+authorization, or optional outsider/non-manager permissions. A failed voice
+test also prevents the economy test from proceeding in the same run. The
+harness prints a SKIP notice; the original failed check still blocks release.
+Malformed WebSocket frames and send errors fail gracefully without logging
+bearer credentials. Test only against a completely disposable guild.
 
 ## 3. Opt-in voice and Lavalink acceptance
 

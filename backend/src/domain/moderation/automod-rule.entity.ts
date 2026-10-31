@@ -1,3 +1,4 @@
+import type { AutoModKind } from './automod-policy';
 import { Column, CreateDateColumn, Entity, Index, PrimaryGeneratedColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('automod_rules')
@@ -16,7 +17,7 @@ export class AutoModRule {
   enabled: boolean;
 
   @Column({ type: 'varchar', length: 24 })
-  kind: 'blocked_phrases' | 'message_rate';
+  kind: AutoModKind;
 
   @Column({ type: 'varchar', length: 16, default: 'dry_run' })
   action: 'dry_run' | 'delete';
@@ -38,6 +39,12 @@ export class AutoModRule {
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   exemptRoleIds: string[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  allowedDomains: string[];
+
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  allowedInviteCodes: string[];
 
   @CreateDateColumn({ type: 'timestamptz' })
   createdAt: Date;
