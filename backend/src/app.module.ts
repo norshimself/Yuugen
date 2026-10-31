@@ -14,6 +14,7 @@ import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
 import { SettingsModule } from './api/settings/settings.module';
+import { AntiRaidModule } from './domain/security/anti-raid.module';
 import { AntiNukeModule } from './domain/security/anti-nuke.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { AntiNukeModule } from './domain/security/anti-nuke.module';
     EconomyApiModule,
     GamesApiModule,
     SettingsModule,
+    AntiRaidModule,
     AntiNukeModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -61,8 +63,7 @@ import { AntiNukeModule } from './domain/security/anti-nuke.module';
             IntentsBitField.Flags.GuildMessages,
             IntentsBitField.Flags.GuildVoiceStates,
             ...(configService.get<string>('ENABLE_GUILD_MODERATION_INTENT') === 'true'
-              ? [IntentsBitField.Flags.GuildModeration]
-              : []),
+              ? [IntentsBitField.Flags.GuildModeration] : []),
             ...(configService.get<string>('ENABLE_GUILD_MEMBERS_INTENT') === 'true'
               ? [IntentsBitField.Flags.GuildMembers]
               : []),
