@@ -31,6 +31,9 @@ export class GuildAuditListener {
 
   /** Shared, permission-checked delivery for every audit-log listener. */
   async record(input: GuildAuditInput): Promise<void> {
+    // Even when Discord's shared intents are enabled, guild-audit recording
+    // stays inert until the separate staging-approved switch is explicit.
+    if (this.config.get<string>('ENABLE_GUILD_AUDIT_LOGGING') !== 'true') return;
     try {
       const item = await this.audit.reserve(input);
       if (!item) return;
@@ -181,7 +184,8 @@ export class GuildAuditListener {
     @Context() [entry, guild]: ContextOf<'guildAuditLogEntryCreate'>,
   ): Promise<void> {
     if (this.config.get<string>('ENABLE_GUILD_MODERATION_INTENT') !== 'true' ||
-        entry.action !== AuditLogEvent.MemberKick || !guild) return;
+        entry.action !== AuditLogEvent.MemberKick || !guild ||
+        this.config.get<string>('ENABLE_GUILD_AUDIT_LOGGING') !== 'true') return;
     // Kick actor attribution is accepted ONLY from this actual Discord audit
     // entry, not an adjacent guildMemberRemove event.
     const bot = guild.members.me || await guild.members.fetchMe().catch(() => null);
