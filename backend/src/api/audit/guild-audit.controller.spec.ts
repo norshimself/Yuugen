@@ -90,6 +90,20 @@ describe('GuildAuditController: guarded guild admin configuration', () => {
     expect(x.audit.setConfig).not.toHaveBeenCalled();
   });
 
+  it('refuses enabled audit while global switch is off; can still disable', async () => {
+    const x = setup();
+    x.config.get.mockImplementation((key: string) =>
+      key === 'ENABLE_GUILD_AUDIT_LOGGING' ? 'false' : 'true');
+    await expect(x.controller.configure({guildId,
+      settings: {...enabled, selectedEvents: [...enabled.selectedEvents]},
+    })).rejects.toThrow('disabled until staging approval');
+    expect(x.audit.setConfig).not.toHaveBeenCalled();
+    await x.controller.configure({guildId, settings: {
+      enabled: false, logChannelId: channelId, selectedEvents: [],
+    }});
+    expect(x.audit.setConfig).toHaveBeenCalledTimes(1);
+  });
+
   it('requires View Audit Log for kick attribution', async () => {
     const x = setup();
     x.bot.permissions.has.mockReturnValue(false);
