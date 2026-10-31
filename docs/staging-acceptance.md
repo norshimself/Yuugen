@@ -76,10 +76,15 @@ The hostname check is a guardrail, **not** an independent proof that the
 destination is non-production. Error logs/results redact supplied bearer
 tokens and named authentication fields.
 
-The default harness makes **no state-changing API requests**. It checks:
-backend dependency readiness, unauthenticated JWT rejection, the authenticated
-mutual guild list, accessible voice channels, current player state and queue,
+The default harness makes **no state-changing API requests**. Its first
+two **anonymous** checks verify dependency readiness (database, Discord and
+Lavalink all up) and a 401 denial for an unauthenticated guild listing.
+If either fails, it stops **without sending the supplied JWT over HTTP or
+WebSocket**. Only after both pass does it check the authenticated mutual
+guild list, accessible voice channels, current player state and queue,
 a valid native WebSocket guild subscription, and invalid-token rejection.
+This is a defense against disclosing a bearer token to a malfunctioning
+or misconfigured endpoint, not proof of staging identity.
 
 Optional additional access-control checks, using temporary test account
 tokens in the environment:
