@@ -37,9 +37,12 @@ import { BuyCommand } from './commands/economy/buy.command';
 import { TriviaCommand } from './commands/economy/trivia.command';
 import { RpsCommand } from './commands/economy/rps.command';
 import { WelcomeListener } from './listeners/welcome.listener';
+import { TicketModule } from '../domain/tickets/ticket.module';
+import { TicketCommands } from './commands/tickets/ticket.command';
+import { TicketChannelEvents } from './commands/tickets/ticket-channel.events';
 
 @Module({
-  imports: [EconomyModule, SettingsModule, ModerationModule],
+  imports: [EconomyModule, SettingsModule, ModerationModule, TicketModule],
   providers: [
     BotGateway,
     AutoModMessageListener,
@@ -75,6 +78,8 @@ import { WelcomeListener } from './listeners/welcome.listener';
     ModerationCommands,
     VoiceModerationCommands,
     WelcomeListener,
+    TicketCommands,
+    TicketChannelEvents,
   ],
 })
 export class BotModule {}
