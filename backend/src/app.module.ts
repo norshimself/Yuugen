@@ -14,6 +14,7 @@ import { EconomyModule } from './domain/economy/economy.module';
 import { EconomyApiModule } from './api/economy/economy.module';
 import { GamesApiModule } from './api/games/games.module';
 import { SettingsModule } from './api/settings/settings.module';
+import { PrivacyModule } from './domain/privacy/privacy.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { SettingsModule } from './api/settings/settings.module';
     EconomyApiModule,
     GamesApiModule,
     SettingsModule,
+    PrivacyModule,
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
