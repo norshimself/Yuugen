@@ -4,7 +4,7 @@
  * Evidence metadata is not a signature: staff must independently review it.
  */
 import { createHash } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { readFile, realpath, stat, lstat } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -58,13 +58,20 @@ function safeArtifactPath(value) {
       value.includes('\\')) return false;
   return true;
 }
-async function verifyArtifact(base, descriptor) {
+async function verifyArtifact(base, descriptor, usedFiles) {
   if (!safeArtifactPath(descriptor.artifact)) return 'unsafe_artifact_path';
   if (typeof descriptor.sha256 !== 'string' || !DIGEST.test(descriptor.sha256)) {
     return 'missing_artifact_digest';
   }
   try {
     const root = await realpath(base);
+    // Disallow links in every path segment, including links that resolve
+    // inside the evidence directory. Reviewers must provide distinct files.
+    const segments = descriptor.artifact.split('/');
+    for (let index = 0; index < segments.length; index += 1) {
+      const part = join(root, ...segments.slice(0, index + 1));
+      if ((await lstat(part)).isSymbolicLink()) return 'unsafe_artifact_path';
+    }
     const target = await realpath(join(root, descriptor.artifact));
     const inside = relative(root, target);
     if (!inside || inside.startsWith('..' + sep) || inside === '..' ||
@@ -73,9 +80,14 @@ async function verifyArtifact(base, descriptor) {
     if (!info.isFile() || info.size < 1 || info.size > MAX_EVIDENCE_BYTES) {
       return 'invalid_artifact_file';
     }
+    const fileIdentity = String(info.dev) + ':' + String(info.ino);
+    if (usedFiles.has(fileIdentity)) return 'reused_evidence_file';
     const digest = createHash('sha256').update(await readFile(target)).digest('hex');
-    return digest.toLowerCase() === descriptor.sha256.toLowerCase()
-      ? null : 'artifact_digest_mismatch';
+    if (digest.toLowerCase() !== descriptor.sha256.toLowerCase()) {
+      return 'artifact_digest_mismatch';
+    }
+    usedFiles.add(fileIdentity);
+    return null;
   } catch { return 'artifact_not_readable'; }
 }
 
@@ -113,6 +125,10 @@ export async function evaluateReleaseEvidence(manifest, {
     }
     checks.set(item.id, item);
   }
+  // A single passing logfile cannot substantiate multiple independent
+  // checks or approvals. Compare filesystem identity, not just path text,
+  // to catch hard links to the same underlying bytes.
+  const usedFiles = new Set();
   const results = [];
   for (const id of REQUIRED_CHECKS) {
     const item = checks.get(id);
@@ -120,7 +136,7 @@ export async function evaluateReleaseEvidence(manifest, {
     if (!item) reason = 'check_missing';
     else if (item.status !== 'pass') reason = item.status;
     else if (!fresh(item.performedAt, now)) reason = 'stale_or_missing_timestamp';
-    else reason = await verifyArtifact(baseDirectory, item);
+    else reason = await verifyArtifact(baseDirectory, item, usedFiles);
     results.push({ id, passed: reason === null, reason });
   }
   const roles = new Set(REQUIRED_APPROVALS);
@@ -141,7 +157,7 @@ export async function evaluateReleaseEvidence(manifest, {
     let reason = null;
     if (!item) reason = 'approval_missing';
     else if (!fresh(item.performedAt, now)) reason = 'stale_or_missing_timestamp';
-    else reason = await verifyArtifact(baseDirectory, item);
+    else reason = await verifyArtifact(baseDirectory, item, usedFiles);
     results.push({ id: 'approval_' + role, passed: reason === null, reason });
   }
   return {
